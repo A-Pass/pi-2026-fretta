@@ -1,3 +1,22 @@
+drop table if exists public.avaliacoes,
+public.clientes,
+public.enderecos,
+public.frete_fotos,
+public.fretes,
+public.mensagens,
+public.motoristas,
+public.propostas,
+public.usuarios,
+public.veiculos CASCADE;
+
+DROP type if exists public._porte_enum,
+ public._status_frete_enum,
+ public._status_proposta_enum,
+ public.porte_enum,
+ public.status_frete_enum,
+ public.status_proposta_enum;
+
+
 -- ============================================================================
 -- SCHEMA: Aplicativo de Fretes (Clientes x Fretistas/Motoristas)
 -- Banco: PostgreSQL 13+
@@ -53,7 +72,7 @@ CREATE TABLE usuarios (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nome            VARCHAR(150) NOT NULL,
     email           VARCHAR(150) NOT NULL UNIQUE,
-    senha_hash      VARCHAR(255) NOT NULL,
+    senha      		VARCHAR(255) NOT NULL,
     telefone        VARCHAR(20),
     documento       VARCHAR(20)  NOT NULL UNIQUE, -- CPF ou CNPJ
     foto_perfil_url TEXT,
