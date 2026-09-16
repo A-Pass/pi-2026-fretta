@@ -1,0 +1,17 @@
+services:
+  app:
+    image: dev-node
+    ports:
+      - 3000:3000
+    volumes:
+      - ./app:/workspace
+    command: ["entrypoint.sh"]
+
+    entrypoint: ["/bin/sh"]
+
+  # database:
+  #   image: postgres
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_PASSWORD: "postgres"

@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgres"
+  url      = env("DATABASE_URL")
+}
+
+model usuario {
+  id            BigInt   @id @default(autoincrement())
+  email         String   @unique @db.VarChar(254)
+  senha         String   @db.VarChar(80)
+  pessoa_id     BigInt
+  criado_em     DateTime @db.Timestamptz(6)
+  atualizado_em DateTime @db.Timestamptz(6)
+  pessoa        pessoa   @relation(fields: [pessoa_id], references: [id], onDelete: Cascade)
+}
+
+model SequelizeMeta {
+  name String @id @db.VarChar(255)
+}
+
+model Usuarios {
+  id            Int       @id @default(autoincrement())
+  email         String?   @db.VarChar(255)
+  senha         String?   @db.VarChar(255)
+  criado_em     DateTime? @db.Timestamptz(6)
+  atualizado_em DateTime? @db.Timestamptz(6)
+  createdAt     DateTime  @db.Timestamptz(6)
+  updatedAt     DateTime  @db.Timestamptz(6)
+}
+
+model avaliacoes {
+  contratacao_proposta_servico_cliente_id      BigInt
+  contratacao_proposta_servico_profissional_id BigInt
+  do_cliente_para_profissional                 Boolean
+  nota                                         Int         @db.SmallInt
+  comentario                                   String?     @db.VarChar(250)
+  enviado_em                                   DateTime?   @default(now()) @db.Timestamptz(6)
+  contratacao                                  contratacao @relation(fields: [contratacao_proposta_servico_cliente_id, contratacao_proposta_servico_profissional_id], references: [proposta_servico_cliente_id, proposta_servico_profissional_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_avaliacoes_contratacao")
+
+  @@id([contratacao_proposta_servico_cliente_id, contratacao_proposta_servico_profissional_id, do_cliente_para_profissional])
+}
+
+model bairro {
+  id         BigInt       @id @default(autoincrement())
+  nome       String       @db.VarChar(64)
+  cidade_id  BigInt
+  cidade     cidade       @relation(fields: [cidade_id], references: [id], onDelete: Cascade)
+  logradouro logradouro[]
+}
+
+model chat_servico {
+  proposta_servico_cliente_id      BigInt
+  proposta_servico_profissional_id BigInt
+  enviado_em                       DateTime                    @default(now()) @db.Timestamptz(6)
+  remetente                        enum_chat_servico_remetente
+  mensagem                         String                      @db.VarChar(500)
+  proposta                         proposta                    @relation(fields: [proposta_servico_cliente_id, proposta_servico_profissional_id], references: [servico_cliente_id, profissional_pessoa_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_chat_proposta")
+
+  @@id([proposta_servico_cliente_id, proposta_servico_profissional_id, enviado_em])
+}
+
+model cidade {
+  id     BigInt   @id @default(autoincrement())
+  nome   String   @db.VarChar(64)
+  uf_sigla     String   @db.Char(2)
+  bairro bairro[]
+}
+
+model contratacao {
+  proposta_servico_cliente_id      BigInt
+  proposta_servico_profissional_id BigInt
+  preco_negociado                  Decimal                  @db.Decimal(7, 2)
+  data_hora_agendamento            DateTime                 @db.Timestamptz(6)
+  status                           enum_contratacao_status? @default(SOLICITADO)
+  criado_em                        DateTime?                @default(now()) @db.Timestamptz(6)
+  atualizado_em                    DateTime?                @default(now()) @db.Timestamptz(6)
+  avaliacoes                       avaliacoes[]
+  proposta                         proposta                 @relation(fields: [proposta_servico_cliente_id, proposta_servico_profissional_id], references: [servico_cliente_id, profissional_pessoa_id], onDelete: Cascade, map: "fk_contratacao_proposta")
+
+  @@id([proposta_servico_cliente_id, proposta_servico_profissional_id])
+}
+
+model endereco {
+  id              BigInt            @id @default(autoincrement())
+  numero          String            @db.VarChar(10)
+  complemento     String?           @db.VarChar(128)
+  logradouro_id   BigInt
+  logradouro      logradouro        @relation(fields: [logradouro_id], references: [id], onDelete: Cascade)
+  pessoa_endereco pessoa_endereco[]
+}
+
+model logradouro {
+  id        BigInt     @id @default(autoincrement())
+  nome      String     @db.VarChar(128)
+  cep       String     @db.Char(8)
+  bairro_id BigInt
+  endereco  endereco[]
+  bairro    bairro     @relation(fields: [bairro_id], references: [id], onDelete: Cascade)
+}
+
+model notificacao {
+  id             BigInt    @id @default(autoincrement())
+  pessoa_id      BigInt
+  titulo         String    @db.VarChar(50)
+  descricao      String    @db.VarChar(255)
+  visualizado_em DateTime? @db.Timestamptz(6)
+  enviado_em     DateTime? @default(now()) @db.Timestamptz(6)
+  pessoa         pessoa    @relation(fields: [pessoa_id], references: [id], onDelete: Cascade)
+}
+
+model pessoa {
+  id              BigInt            @id @default(autoincrement())
+  primeiro_nome   String            @db.VarChar(64)
+  ultimo_nome     String            @db.VarChar(64)
+  cpf             String            @unique @db.Char(11)
+  nascimento      DateTime          @db.Date
+  celular         String            @db.VarChar(14)
+  foto_perfil     String?           @db.VarChar(255)
+  criado_em       DateTime          @default(now()) @db.Timestamptz(6)
+  atualizado_em   DateTime          @default(now()) @db.Timestamptz(6)
+  notificacao     notificacao[]
+  pessoa_endereco pessoa_endereco[]
+  pessoa_juridica pessoa_juridica?
+  profissional    profissional?
+  servico_cliente servico_cliente[]
+  usuario         usuario[]
+}
+
+model pessoa_endereco {
+  pessoa_id   BigInt
+  endereco_id BigInt
+  ordem       Int      @default(1) @db.SmallInt
+  endereco    endereco @relation(fields: [endereco_id], references: [id], onDelete: Cascade)
+  pessoa      pessoa   @relation(fields: [pessoa_id], references: [id], onDelete: Cascade)
+
+  @@id([pessoa_id, endereco_id])
+}
+
+model pessoa_juridica {
+  pessoa_id    BigInt @id
+  razao_social String @db.VarChar(128)
+  cnpj         String @unique @db.Char(14)
+  pessoa       pessoa @relation(fields: [pessoa_id], references: [id], onDelete: Cascade)
+}
+
+model profissional {
+  pessoa_id                   BigInt                        @id
+  titulo                      String                        @db.VarChar(50)
+  pessoa                      pessoa                        @relation(fields: [pessoa_id], references: [id], onDelete: Cascade)
+  proposta                    proposta[]
+  servico_cliente_direcionado servico_cliente_direcionado[]
+  servico_profissional        servico_profissional[]
+}
+
+model proposta {
+  servico_cliente_id     BigInt
+  profissional_pessoa_id BigInt
+  valor_proposta         Decimal         @db.Decimal(7, 2)
+  texto_proposta         String          @db.VarChar(500)
+  criado_em              DateTime?       @default(now()) @db.Timestamptz(6)
+  chat_servico           chat_servico[]
+  contratacao            contratacao?
+  profissional           profissional    @relation(fields: [profissional_pessoa_id], references: [pessoa_id], onDelete: NoAction, onUpdate: NoAction)
+  servico_cliente        servico_cliente @relation(fields: [servico_cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([servico_cliente_id, profissional_pessoa_id])
+}
+
+model servico_cliente {
+  id                          BigInt                        @id @default(autoincrement())
+  pessoa_id                   BigInt
+  titulo                      String                        @db.VarChar(50)
+  descricao                   String                        @db.VarChar(500)
+  valor_oferecido             Decimal?                      @db.Decimal(7, 2)
+  status                      enum_servico_cliente_status?  @default(ABERTO)
+  criado_em                   DateTime                      @default(now()) @db.Timestamptz(6)
+  proposta                    proposta[]
+  pessoa                      pessoa                        @relation(fields: [pessoa_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  servico_cliente_direcionado servico_cliente_direcionado[]
+  servico_cliente_foto        servico_cliente_foto[]
+}
+
+model servico_cliente_direcionado {
+  servico_cliente_id     BigInt
+  profissional_pessoa_id BigInt
+  profissional           profissional    @relation(fields: [profissional_pessoa_id], references: [pessoa_id], onDelete: Cascade)
+  servico_cliente        servico_cliente @relation(fields: [servico_cliente_id], references: [id], onDelete: Cascade)
+
+  @@id([servico_cliente_id, profissional_pessoa_id])
+}
+
+model servico_cliente_foto {
+  servico_cliente_id BigInt
+  md5                String          @db.Char(32)
+  uri_img            String          @db.VarChar(255)
+  ordem              Int             @db.SmallInt
+  servico_cliente    servico_cliente @relation(fields: [servico_cliente_id], references: [id], onDelete: Cascade)
+
+  @@id([servico_cliente_id, md5])
+}
+
+model servico_profissional {
+  id                     BigInt       @id @default(autoincrement())
+  profissional_pessoa_id BigInt
+  titulo                 String       @db.VarChar(50)
+  descricao              String       @db.VarChar(500)
+  preco_base             Decimal      @db.Decimal(7, 2)
+  excluido_em            DateTime?    @db.Timestamptz(6)
+  criado_em              DateTime     @default(now()) @db.Timestamptz(6)
+  atualizado_em          DateTime     @default(now()) @db.Timestamptz(6)
+  profissional           profissional @relation(fields: [profissional_pessoa_id], references: [pessoa_id], onDelete: Cascade)
+}
+
+enum enum_chat_servico_remetente {
+  PROFISSIONAL
+  CLIENTE
+}
+
+enum enum_contratacao_status {
+  SOLICITADO
+  CONFIRMADO
+  FINALIZADO
+  CANCELADO
+}
+
+enum enum_servico_cliente_status {
+  ABERTO
+  NEGOCIANDO
+  CONTRATADO
+  CANCELADO
+}

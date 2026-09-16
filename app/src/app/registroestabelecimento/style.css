@@ -1,0 +1,21 @@
+#registroEstabelecimento {
+    margin: 0;
+    padding: 16px;
+    width: 100%;
+    height: 100vh;
+    overflow-x: hidden;
+    font-family: Arial, sans-serif;
+}
+
+.opcoes a {
+    margin-right: 0;
+    margin-left: auto;
+}
+
+.opcoes button:hover {
+    background-color: #0056b3;
+}
+
+.obs {
+    text-align: center;
+}

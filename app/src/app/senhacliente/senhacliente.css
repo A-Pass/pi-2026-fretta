@@ -1,0 +1,42 @@
+.body {
+    height: fit-content;
+    width: content;
+    display: flex;
+    justify-content: center;  
+    align-items: center;  
+    background-color: rgba(224, 226, 232, 1); 
+}
+.Main {
+    width: 300px;
+    height: 300px;
+    transform: translate(0%,75%);
+    text-align: center;
+    background-color: #f8f8f8; 
+}
+.alteracoes {
+    text-align: center;
+    margin-bottom: 20px;
+}
+.texto {
+    font-family: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
+    font-size: 18px;
+}
+.senhaatual{
+    width: 250px;
+    height: 40px;
+    background-color: rgba(224, 226, 232, 1);
+}
+.novasenha{
+    width: 250px;
+    height: 40px;
+    background-color: rgba(224, 226, 232, 1);
+}
+.repetirsenha{
+    width: 250px;
+    height: 40px;
+    background-color: rgba(224, 226, 232, 1);
+}
+.botões{
+    padding-top: 20px;
+
+}

@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+  output = "../src/generated/prisma/"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  pessoa Pessoa?
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+enum SiglaUF {
+  AC
+  AL
+  AP
+  AM
+  BA
+  CE
+  DF
+  ES
+  GO
+  MA
+  MT
+  MS
+  MG
+  PA
+  PB
+  PR
+  PE
+  PI
+  RJ
+  RN
+  RS
+  RO
+  RR
+  SC
+  SP
+  SE
+  TO
+
+  @@map("sigla_uf")
+}
+
+enum Regiao {
+  NORTE
+  NORDESTE
+  SUDESTE
+  SUL
+  CENTRO_OESTE
+
+  @@map("regiao")
+}
+
+model UnidadeFederativa {
+  sigla  SiglaUF @id
+  nome   String  @unique
+  regiao Regiao
+
+  cidades Cidade[]
+
+  @@map("unidade_federativa")
+}
+
+model Cidade {
+  id       Int     @id @default(autoincrement())
+  uf_sigla SiglaUF
+  nome     String  @db.VarChar(128)
+  cep      String? @db.VarChar(9) @unique
+  padrao   Boolean @default(false)
+
+  uf UnidadeFederativa @relation(fields: [uf_sigla], references: [sigla])
+
+  @@unique([uf_sigla, nome])
+
+  bairros Bairro[]
+
+  @@map("cidade")
+}
+
+model Bairro {
+  id        BigInt @id @default(autoincrement())
+  nome      String @db.VarChar(64)
+  cidade_id Int
+  cidade    Cidade @relation(fields: [cidade_id], references: [id], onDelete: Cascade)
+
+  @@unique([cidade_id, nome])
+  
+  logradouro Logradouro[]
+
+
+  @@map("bairro")
+}
+
+model Logradouro {
+  id        BigInt  @id @default(autoincrement())
+  nome      String  @db.VarChar(128)
+  cep       String  @db.Char(8) @unique
+  bairro_id BigInt  
+  tipo      String?
+
+  @@unique([bairro_id, nome])
+  
+  bairro Bairro @relation(fields: [bairro_id], references: [id], onDelete: Cascade)
+
+  enderecos Endereco[]
+
+  @@map("logradouro")
+}
+
+model Pessoa {
+  id            String   @id
+  cpf           String   @unique @db.Char(11)
+  nascimento    DateTime @db.Date
+  celular       String   @db.VarChar(14)
+  criado_em     DateTime @default(now()) @db.Timestamptz(6)
+  atualizado_em DateTime @default(now()) @db.Timestamptz(6)
+
+  //notificacao     notificacao[]
+
+  enderecos Endereco[]
+  profissional Profissional?
+
+  //pessoa_juridica pessoa_juridica?
+  servico_cliente servico_cliente[]
+
+  usuario User @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@map("pessoa")
+}
+
+model Endereco {
+  logradouro_id BigInt
+  logradouro    Logradouro @relation(fields: [logradouro_id], references: [id], onDelete: Cascade)
+
+  pessoa_id String
+  pessoa    Pessoa @relation(fields: [pessoa_id], references: [id], onDelete: Cascade)
+
+  numero      String  @db.VarChar(10)
+  complemento String? @db.VarChar(128)
+  referencia  String?
+
+  @@id([pessoa_id, logradouro_id, numero])
+  @@map("endereco")
+}
+
+model Profissional {
+  pessoa_id                   String                        @id
+  titulo                      String                        @db.VarChar(50)
+  
+  pessoa                      Pessoa                        @relation(fields: [pessoa_id], references: [id], onDelete: Cascade)
+  
+  // proposta                    proposta[]
+  // servico_cliente_direcionado servico_cliente_direcionado[]
+  // servico_profissional        servico_profissional[]
+
+  @@map("profissional")
+}
+
+enum enum_servico_cliente_status {
+  ABERTO
+  NEGOCIANDO
+  CONTRATADO
+  CANCELADO
+}
+
+model servico_cliente {
+  id                          BigInt                        @id @default(autoincrement())
+  pessoa_id                   String
+  titulo                      String                        @db.VarChar(50)
+  descricao                   String                        @db.VarChar(500)
+  data_hora_agendamento       DateTime       
+  valor_oferecido             Decimal?                      @db.Decimal(7, 2)
+  status                      enum_servico_cliente_status?  @default(ABERTO)
+  criado_em                   DateTime                      @default(now()) @db.Timestamptz(6)
+  
+  //proposta                    proposta[]
+  pessoa                      Pessoa                        @relation(fields: [pessoa_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fotos                       servico_cliente_foto[]
+
+  //servico_cliente_direcionado servico_cliente_direcionado[]
+}
+
+model servico_cliente_foto {
+  servico_cliente_id BigInt
+  md5                String          @db.Char(32)
+  uri_img            String          @db.VarChar(255)
+  ordem              Int             @db.SmallInt
+  servico_cliente    servico_cliente @relation(fields: [servico_cliente_id], references: [id], onDelete: Cascade)
+
+  @@id([servico_cliente_id, md5])
+
+  @@unique([servico_cliente_id, md5])
+}

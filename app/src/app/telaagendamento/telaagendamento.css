@@ -1,0 +1,61 @@
+body#registroEstabelecimento {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100vh;
+    overflow-x: hidden;
+    font-family: Arial, sans-serif;
+}
+#top-bar1 {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.boxdate{    
+    width: auto;
+    padding: 20px;
+    background-color: #ffffff;
+    border-bottom: 2px solid #c4bdbd;
+}
+
+.date{
+    width: 98%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+.schedule-container {
+    height: 700px; /* Ajuste a altura conforme necessário */
+    overflow-y: auto;
+    border: 1px solid #ccc;
+}
+
+.schedule {
+    width: 300px;
+    margin: 0 auto;
+    border: 1px solid #ccc;
+}
+
+.day-slot {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+}
+
+.day {
+    font-weight: bold;
+}
+
+.activity {
+    color: #007bff;
+}
+
+.lunch {
+    background-color: #f8d7da;
+    color: #721c24;
+}

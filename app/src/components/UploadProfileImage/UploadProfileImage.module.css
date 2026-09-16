@@ -1,0 +1,30 @@
+:root {
+    --img-dimen: 250px;
+}
+
+.uploadProfileImage {
+    position: relative;
+}
+
+.uploadProfileImage .uploadAction {
+    position: absolute;
+    right: 5%;
+    bottom: 5%;
+    padding: 8px;
+    background-color:ghostwhite;
+    border: double 1px blueviolet;
+    border-radius: 50%;
+    box-shadow: 4px 4px 4px gainsboro;
+}
+
+.uploadProfileImage .uploadAction:hover {
+    background-color: aliceblue;
+}
+
+.img {
+    width: var(--img-dimen);
+    height: var(--img-dimen);
+    border-radius: 50%;
+    object-position: center;
+    object-fit: cover;
+}

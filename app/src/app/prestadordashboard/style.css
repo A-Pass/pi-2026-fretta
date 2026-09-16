@@ -1,0 +1,5 @@
+/* Ajustes mínimos específicos do dashboard */
+html,
+body {
+  overscroll-behavior: none;
+}

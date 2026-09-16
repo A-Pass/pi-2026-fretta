@@ -1,0 +1,25 @@
+.Main {
+    text-align: center;
+    position: fixed;
+    }
+    .rodapé {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(247, 249, 255, 1);
+        color: white;
+        text-align: center;
+        padding: 10px;
+    }
+    .fotoPerfil{
+            position: relative;
+            text-align: center;
+            left: 46%;
+            transform: translate(-50%, 0%); 
+        }
+    .mudarFoto{
+        position: relative;
+        transform: translate(-40%, -0%); 
+    }
+    
