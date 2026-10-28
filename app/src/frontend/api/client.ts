@@ -1,4 +1,5 @@
 import type { FrettaApi, Store } from "@/contracts";
+import { withDemoRequests } from "../mocks/demoRequests";
 import { seed } from "../mocks/seed";
 const KEY = "fretta-demo-v1";
 export const api: FrettaApi = {
@@ -9,7 +10,7 @@ export const api: FrettaApi = {
       return r.json();
     }
     const raw = localStorage.getItem(KEY);
-    if (!raw) return structuredClone(seed);
+    if (!raw) return withDemoRequests(structuredClone(seed));
     try {
       const s = JSON.parse(raw);
       if (
@@ -18,7 +19,7 @@ export const api: FrettaApi = {
         !Array.isArray(s.messages)
       )
         throw Error();
-      return s as Store;
+      return withDemoRequests(s as Store);
     } catch {
       throw new Error(
         "Dados da demonstração inválidos. Use Restaurar demonstração.",

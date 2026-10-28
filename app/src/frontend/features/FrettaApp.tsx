@@ -1,4 +1,12 @@
 "use client";
+import { SuccessDialog } from "../components/SuccessDialog";
+import { RequestWizard } from "./RequestWizard";
+import { AddressBookView } from "./addresses/AddressBookView";
+import { createRequest as buildRequest } from "./addresses/createRequest";
+import { DriverHomeView } from "./driver/DriverHomeView";
+import { DriverServicesView } from "./driver/DriverServicesView";
+import { defaultArea, ownProposal } from "./driver/rules";
+import { LoginView } from "./LoginView";
 import { WelcomeView } from "./WelcomeView";
 import { ProfileView } from "./ProfileView";
 import { ChatView } from "./ChatView";
@@ -22,7 +30,13 @@ import {
   Search,
   X,
 } from "lucide-react";
-import type { Role, Store, Freight, Proposal } from "@/contracts";
+import type {
+  Role,
+  Store,
+  Freight,
+  Proposal,
+  FreightRequestDraft,
+} from "@/contracts";
 import { api, resetDemo } from "../api/client";
 import { acceptProposal, money } from "./freights/rules";
 import { statusLabels as labels, StatusBadge } from "../components/StatusBadge";
@@ -31,18 +45,19 @@ export function FrettaApp() {
   const [store, setStore] = useState<Store | null>(null),
     [role, setRole] = useState<Role>("cliente"),
     [entered, setEntered] = useState(false),
+    [loginRequested, setLoginRequested] = useState(false),
     [tab, setTab] = useState("inicio"),
     [selected, setSelected] = useState<string | null>(null),
     [modal, setModal] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
+    [success, setSuccess] = useState<"proposal" | "request" | null>(null),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("TODOS"),
     [chatId, setChatId] = useState(""),
     [subscription, setSubscription] = useState(true),
     [name, setName] = useState("Clayton"),
-    [photos, setPhotos] = useState<string[]>([]),
-    [busy, setBusy] = useState(false);
+    [profilePhoto, setProfilePhoto] = useState("");
   useEffect(() => {
     api
       .load()
@@ -65,48 +80,25 @@ export function FrettaApp() {
   }
   const f = store?.freights.find((f) => f.id === selected);
   const proposals =
-    store?.proposals.filter((p) => p.freightId === selected) || [];
+    store?.proposals.filter(
+      (p) =>
+        p.freightId === selected &&
+        (role === "cliente" || ownProposal(p, name)),
+    ) || [];
   const accepted = proposals.find((p) => p.status === "ACEITA");
-  async function create(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!store) return;
-    setBusy(true);
-    const d = new FormData(e.currentTarget);
-    const kind = d.get("kind") as Freight["schedule"]["kind"];
-    const start = String(d.get("start") || ""),
-      end = String(d.get("end") || "");
-    if (
-      kind !== "combinar" &&
-      (!start || (kind === "intervalo" && (!end || end < start)))
-    ) {
-      setError("Informe datas válidas para o período.");
-      setBusy(false);
-      return;
-    }
-    const next: Freight = {
-      id: crypto.randomUUID(),
-      title: String(d.get("title")).trim(),
-      description: String(d.get("description")).trim(),
-      origin: String(d.get("origin")).trim(),
-      destination: String(d.get("destination")).trim(),
-      vehicle: String(d.get("vehicle")),
-      schedule: {
-        kind,
-        ...(kind !== "combinar" ? { start } : {}),
-        ...(kind === "intervalo" ? { end } : {}),
-      },
-      status: "ABERTO",
-      photos,
-      reviews: {},
-    };
-    if (await save({ ...store, freights: [next, ...store.freights] })) {
+  async function createRequest(draft: FreightRequestDraft): Promise<boolean> {
+    if (!store) return false;
+    const next = buildRequest(store, draft);
+    const id = next.freights[0].id;
+    const ok = await save(next);
+    if (ok) {
       setModal("");
-      setPhotos([]);
-      setSelected(next.id);
+      setSelected(id);
       setTab("fretes");
-      flash("Solicitação criada na demonstração.");
+      setNotice("");
+      setSuccess("request");
     }
-    setBusy(false);
+    return ok;
   }
   async function propose(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -124,7 +116,9 @@ export function FrettaApp() {
     if (
       store.proposals.some(
         (p) =>
-          p.freightId === f.id && p.driver === name && p.status === "PENDENTE",
+          p.freightId === f.id &&
+          ownProposal(p, name) &&
+          p.status === "PENDENTE",
       )
     ) {
       setError("Você já enviou uma proposta para este frete.");
@@ -134,6 +128,7 @@ export function FrettaApp() {
       id: crypto.randomUUID(),
       freightId: f.id,
       driver: name,
+      driverId: "demo-driver",
       rating: 0,
       vehicle: "Veículo de demonstração",
       priceCents: price,
@@ -143,7 +138,8 @@ export function FrettaApp() {
     };
     if (await save({ ...store, proposals: [...store.proposals, p] })) {
       setModal("");
-      flash("Proposta enviada na demonstração.");
+      setNotice("");
+      setSuccess("proposal");
     }
   }
   async function send(e: FormEvent<HTMLFormElement>) {
@@ -180,16 +176,29 @@ export function FrettaApp() {
         : f.schedule.start;
   function nav(id: string) {
     setTab(id);
+    setChatId("");
     setSelected(null);
     setQuery("");
     setFilter("TODOS");
   }
+  if (!entered && loginRequested)
+    return (
+      <LoginView
+        role={role}
+        onBack={() => setLoginRequested(false)}
+        onContinue={() => {
+          nav("inicio");
+          setName("Clayton");
+          setEntered(true);
+        }}
+      />
+    );
   if (!entered)
     return (
       <WelcomeView
         role={role}
         setRole={setRole}
-        onEnter={() => setEntered(true)}
+        onEnter={() => setLoginRequested(true)}
       />
     );
   if (!store)
@@ -227,7 +236,7 @@ export function FrettaApp() {
             ["inicio", "Início", Home],
             [
               "fretes",
-              role === "cliente" ? "Meus fretes" : "Serviços",
+              role === "cliente" ? "Meus fretes" : "Meus serviços",
               Package,
             ],
             ["chat", "Conversas", MessageCircle],
@@ -236,7 +245,11 @@ export function FrettaApp() {
             const I = Icon as typeof Home;
             return (
               <button
-                className={tab === id ? "active" : ""}
+                className={
+                  tab === id || (id === "perfil" && tab === "enderecos")
+                    ? "active"
+                    : ""
+                }
                 key={String(id)}
                 onClick={() => nav(String(id))}
               >
@@ -247,7 +260,16 @@ export function FrettaApp() {
           })}
         </nav>
         <div className="aside-bottom">
-          <span className="avatar">{name.slice(0, 2).toUpperCase()}</span>
+          {profilePhoto ? (
+            <img
+              className="avatar"
+              src={profilePhoto}
+              alt={`Foto de ${name}`}
+              style={{ objectFit: "cover" }}
+            />
+          ) : (
+            <span className="avatar">{name.slice(0, 2).toUpperCase()}</span>
+          )}
           <b>{name}</b>
           <small>
             {role === "cliente" ? "Perfil de cliente" : "Perfil de motorista"}
@@ -265,7 +287,10 @@ export function FrettaApp() {
       <div className="content">
         <header>
           <span>
-            <MapPin size={16} /> Eunápolis, Bahia
+            <MapPin size={16} />{" "}
+            {role === "motorista"
+              ? (store.operatingArea || defaultArea).label
+              : "Eunápolis, Bahia"}
           </span>
           <div>
             <span className="demo">DEMONSTRAÇÃO</span>
@@ -275,9 +300,6 @@ export function FrettaApp() {
             >
               <Bell size={20} />
             </button>
-            <span className="avatar small">
-              {name.slice(0, 2).toUpperCase()}
-            </span>
           </div>
         </header>
         <main>
@@ -313,15 +335,27 @@ export function FrettaApp() {
               setError={setError}
               schedule={schedule}
             />
+          ) : tab === "enderecos" ? (
+            <AddressBookView
+              addresses={store.addresses || []}
+              onSave={(addresses) => save({ ...store, addresses })}
+              onBack={() => setTab("perfil")}
+            />
           ) : tab === "perfil" ? (
             <ProfileView
               name={name}
               setName={setName}
+              onAddresses={() => setTab("enderecos")}
+              photo={profilePhoto}
+              setPhoto={setProfilePhoto}
               role={role}
               subscription={subscription}
               setSubscription={setSubscription}
               flash={flash}
-              setEntered={setEntered}
+              setEntered={(value) => {
+                setEntered(value);
+                if (!value) setLoginRequested(false);
+              }}
             />
           ) : tab === "chat" ? (
             <ChatView
@@ -330,6 +364,24 @@ export function FrettaApp() {
               chatId={chatId}
               setChatId={setChatId}
               send={send}
+            />
+          ) : role === "motorista" && tab === "inicio" ? (
+            <DriverHomeView
+              store={store}
+              name={name}
+              subscription={subscription}
+              save={save}
+              onSelect={setSelected}
+              onProfile={() => nav("perfil")}
+              schedule={schedule}
+            />
+          ) : role === "motorista" && tab === "fretes" ? (
+            <DriverServicesView
+              store={store}
+              name={name}
+              onSelect={setSelected}
+              onExplore={() => nav("inicio")}
+              schedule={schedule}
             />
           ) : (
             <FreightListView
@@ -341,7 +393,6 @@ export function FrettaApp() {
               filter={filter}
               query={query}
               setModal={setModal}
-              setPhotos={setPhotos}
               nav={nav}
               setQuery={setQuery}
               setFilter={setFilter}
@@ -355,7 +406,14 @@ export function FrettaApp() {
           FRETTA © 2026 · Conectando pessoas, movimentando histórias.
         </footer>
       </div>
-      {modal && (
+      {modal === "pedido" && (
+        <RequestWizard
+          addresses={store.addresses || []}
+          onClose={() => setModal("")}
+          onSubmit={createRequest}
+        />
+      )}
+      {modal && modal !== "pedido" && (
         <div className="overlay" onClick={() => setModal("")}>
           <section
             className="dialog"
@@ -385,129 +443,7 @@ export function FrettaApp() {
                 {error}
               </p>
             )}
-            {modal === "pedido" ? (
-              <form onSubmit={create}>
-                <p className="muted">
-                  Descreva os itens e informe as regiões. Não inclua endereço
-                  residencial exato nesta demonstração.
-                </p>
-                <label>
-                  Título
-                  <input
-                    name="title"
-                    required
-                    maxLength={150}
-                    placeholder="Ex.: Mudança de apartamento"
-                  />
-                </label>
-                <label>
-                  O que precisa transportar?
-                  <textarea
-                    name="description"
-                    required
-                    maxLength={2000}
-                    placeholder="Itens, escadas, elevador e ajuda para carregar"
-                  />
-                </label>
-                <div className="form-grid">
-                  <label>
-                    Região de retirada
-                    <input
-                      name="origin"
-                      required
-                      placeholder="Bairro e cidade"
-                    />
-                  </label>
-                  <label>
-                    Região de entrega
-                    <input
-                      name="destination"
-                      required
-                      placeholder="Bairro e cidade"
-                    />
-                  </label>
-                </div>
-                <label>
-                  Veículo necessário
-                  <select name="vehicle">
-                    <option>Utilitário</option>
-                    <option>Caminhão pequeno</option>
-                    <option>Caminhão médio</option>
-                    <option>Caminhão grande</option>
-                  </select>
-                </label>
-                <label>
-                  Quando?
-                  <select name="kind">
-                    <option value="combinar">A combinar</option>
-                    <option value="fixa">Data fixa</option>
-                    <option value="intervalo">Intervalo de datas</option>
-                  </select>
-                </label>
-                <div className="form-grid">
-                  <label>
-                    Data fixa ou início
-                    <input
-                      type="date"
-                      name="start"
-                      min={new Date().toLocaleDateString("en-CA")}
-                    />
-                  </label>
-                  <label>
-                    Fim do intervalo
-                    <input type="date" name="end" />
-                  </label>
-                </div>
-                <label>
-                  Fotos dos itens · até 4 fotos de 1 MB
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    onChange={async (e) => {
-                      const files = Array.from(e.target.files || []);
-                      if (
-                        files.length > 4 ||
-                        files.some(
-                          (f) =>
-                            f.size > 1000000 ||
-                            !["image/jpeg", "image/png", "image/webp"].includes(
-                              f.type,
-                            ),
-                        )
-                      ) {
-                        setError(
-                          "Selecione até 4 imagens JPG, PNG ou WebP, com até 1 MB cada.",
-                        );
-                        return;
-                      }
-                      setError("");
-                      setPhotos(
-                        await Promise.all(
-                          files.map(
-                            (f) =>
-                              new Promise<string>((resolve, reject) => {
-                                const reader = new FileReader();
-                                reader.onload = () =>
-                                  resolve(String(reader.result));
-                                reader.onerror = reject;
-                                reader.readAsDataURL(f);
-                              }),
-                          ),
-                        ),
-                      );
-                    }}
-                  />
-                </label>
-                <small>
-                  {photos.length} fotos selecionadas · armazenadas somente neste
-                  navegador
-                </small>
-                <button className="primary" disabled={busy}>
-                  {busy ? "Salvando…" : "Publicar solicitação"}
-                </button>
-              </form>
-            ) : modal === "proposta" ? (
+            {modal === "proposta" ? (
               <form onSubmit={propose}>
                 <label>
                   Seu valor em reais
@@ -576,6 +512,18 @@ export function FrettaApp() {
           </section>
         </div>
       )}
+      <SuccessDialog
+        open={success !== null}
+        title={
+          success === "request" ? "Solicitação publicada!" : "Proposta enviada!"
+        }
+        description={
+          success === "request"
+            ? "Sua solicitação foi criada na demonstração. Agora você pode acompanhar as propostas recebidas."
+            : "Sua proposta foi registrada na demonstração. Acompanhe a resposta em Meus serviços."
+        }
+        onClose={() => setSuccess(null)}
+      />
     </div>
   );
 }

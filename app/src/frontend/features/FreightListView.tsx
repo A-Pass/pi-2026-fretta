@@ -30,7 +30,6 @@ type Props = {
   filter: string;
   query: string;
   setModal: (s: string) => void;
-  setPhotos: (p: string[]) => void;
   nav: (s: string) => void;
   setQuery: (s: string) => void;
   setFilter: (s: string) => void;
@@ -47,7 +46,6 @@ export function FreightListView({
   filter,
   query,
   setModal,
-  setPhotos,
   nav,
   setQuery,
   setFilter,
@@ -77,11 +75,10 @@ export function FreightListView({
               : "Conecte seu trabalho a quem precisa chegar mais longe."}
           </p>
         </div>
-        {role === "cliente" && (
+        {role === "cliente" && tab === "inicio" && (
           <button
             className="primary"
             onClick={() => {
-              setPhotos([]);
               setModal("pedido");
             }}
           >

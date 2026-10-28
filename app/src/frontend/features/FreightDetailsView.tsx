@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { FormEvent } from "react";
 import {
   Truck,
@@ -51,6 +53,9 @@ export function FreightDetailsView({
   setError,
   schedule,
 }: Props) {
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const isOpportunity = role === "motorista" && f.status === "ABERTO";
+
   return (
     <>
       <button className="back" onClick={() => setSelected(null)}>
@@ -63,7 +68,11 @@ export function FreightDetailsView({
         </div>
         <StatusBadge status={f.status} />
       </div>
-      <div className="detail-grid">
+      <div
+        className={
+          isOpportunity ? "detail-grid opportunity-detail" : "detail-grid"
+        }
+      >
         <section className="panel">
           <h2>O que vamos transportar?</h2>
           <p>{f.description}</p>
@@ -109,25 +118,7 @@ export function FreightDetailsView({
             </div>
           )}
           {role === "cliente" && f.status === "ABERTO" && (
-            <button
-              className="danger"
-              onClick={async () => {
-                if (
-                  confirm(
-                    "Cancelar esta solicitação e encerrar suas propostas?",
-                  )
-                )
-                  await save({
-                    ...store,
-                    freights: store.freights.map((x) =>
-                      x.id === f.id ? { ...x, status: "CANCELADO" } : x,
-                    ),
-                    proposals: store.proposals.map((x) =>
-                      x.freightId === f.id ? { ...x, status: "ENCERRADA" } : x,
-                    ),
-                  });
-              }}
-            >
+            <button className="danger" onClick={() => setCancelOpen(true)}>
               Cancelar solicitação
             </button>
           )}
@@ -195,97 +186,116 @@ export function FreightDetailsView({
             </div>
           )}
         </section>
-        <section className="panel">
-          <h2>
-            {role === "cliente"
-              ? `Propostas recebidas (${proposals.length})`
-              : "Sua próxima oportunidade"}
-          </h2>
-          {role === "motorista" && f.status === "ABERTO" ? (
-            <>
-              <p>
-                Defina seu valor, disponibilidade e as condições para o
-                transporte.
-              </p>
-              <button
-                className="primary"
-                disabled={!subscription}
-                onClick={() => setModal("proposta")}
-              >
-                Enviar proposta <ArrowRight size={18} />
-              </button>
-              {!subscription && (
-                <p role="status">
-                  Ative a assinatura simulada no perfil para continuar.
-                </p>
-              )}
-            </>
-          ) : proposals.length ? (
-            proposals.map((p) => (
-              <article className="proposal" key={p.id}>
-                <div className="section-head">
-                  <b>{p.driver}</b>
-                  <span>
-                    <Star size={14} /> {p.rating || "Novo"}
+        {!isOpportunity && (
+          <section className="panel">
+            <h2>
+              {role === "cliente"
+                ? `Propostas recebidas (${proposals.length})`
+                : "Sua proposta"}
+            </h2>
+            {proposals.length ? (
+              proposals.map((p) => (
+                <article className="proposal" key={p.id}>
+                  <div className="section-head">
+                    <b>{p.driver}</b>
+                    <span>
+                      <Star size={14} /> {p.rating || "Novo"}
+                    </span>
+                  </div>
+                  <small>{p.vehicle}</small>
+                  <h2>{money(p.priceCents)}</h2>
+                  <p>{new Date(p.availableAt).toLocaleString("pt-BR")}</p>
+                  <p>{p.message}</p>
+                  <span className="badge">
+                    {p.status === "ACEITA"
+                      ? "Escolhida"
+                      : p.status === "ENCERRADA"
+                        ? "Encerrada"
+                        : "Em análise"}
                   </span>
-                </div>
-                <small>{p.vehicle}</small>
-                <h2>{money(p.priceCents)}</h2>
-                <p>{new Date(p.availableAt).toLocaleString("pt-BR")}</p>
-                <p>{p.message}</p>
-                <span className="badge">
-                  {p.status === "ACEITA"
-                    ? "Escolhida"
-                    : p.status === "ENCERRADA"
-                      ? "Encerrada"
-                      : "Em análise"}
-                </span>
-                <div className="actions">
-                  {p.status === "PENDENTE" &&
-                    f.status === "ABERTO" &&
-                    role === "cliente" && (
-                      <button
-                        className="primary"
-                        onClick={async () => {
-                          if (
-                            confirm(
-                              `Confirmar ${p.driver} por ${money(p.priceCents)}?`,
-                            )
-                          ) {
-                            try {
-                              await save(acceptProposal(store, p.id));
-                            } catch (e) {
-                              setError((e as Error).message);
+                  <div className="actions">
+                    {p.status === "PENDENTE" &&
+                      f.status === "ABERTO" &&
+                      role === "cliente" && (
+                        <button
+                          className="primary"
+                          onClick={async () => {
+                            if (
+                              confirm(
+                                `Confirmar ${p.driver} por ${money(p.priceCents)}?`,
+                              )
+                            ) {
+                              try {
+                                await save(acceptProposal(store, p.id));
+                              } catch (e) {
+                                setError((e as Error).message);
+                              }
                             }
-                          }
+                          }}
+                        >
+                          Aceitar proposta
+                        </button>
+                      )}
+                    {p.status !== "ENCERRADA" && (
+                      <button
+                        className="secondary"
+                        onClick={() => {
+                          setChatId(p.id);
+                          setSelected(null);
+                          setTab("chat");
                         }}
                       >
-                        Aceitar proposta
+                        Conversar
                       </button>
                     )}
-                  {p.status !== "ENCERRADA" && (
-                    <button
-                      className="secondary"
-                      onClick={() => {
-                        setChatId(p.id);
-                        setSelected(null);
-                        setTab("chat");
-                      }}
-                    >
-                      Conversar
-                    </button>
-                  )}
-                </div>
-              </article>
-            ))
-          ) : (
-            <p className="empty">
-              As propostas aparecerão aqui. Você será avisado quando chegar uma
-              novidade.
-            </p>
-          )}
-        </section>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="empty">
+                As propostas aparecerão aqui. Você será avisado quando chegar
+                uma novidade.
+              </p>
+            )}
+          </section>
+        )}
       </div>
+      {isOpportunity && (
+        <div className="opportunity-action">
+          <button
+            className="primary"
+            disabled={!subscription}
+            title={
+              !subscription
+                ? "Ative sua assinatura no perfil para enviar propostas"
+                : undefined
+            }
+            onClick={() => setModal("proposta")}
+          >
+            Enviar proposta <ArrowRight size={18} />
+          </button>
+        </div>
+      )}
+      <ConfirmDialog
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        title="Cancelar esta solicitação?"
+        description="Seu frete será cancelado e as propostas recebidas serão encerradas. Você pode manter a solicitação se ainda quiser receber propostas."
+        confirmLabel="Sim, cancelar solicitação"
+        onConfirm={async () => {
+          const ok = await save({
+            ...store,
+            freights: store.freights.map((x) =>
+              x.id === f.id ? { ...x, status: "CANCELADO" } : x,
+            ),
+            proposals: store.proposals.map((x) =>
+              x.freightId === f.id ? { ...x, status: "ENCERRADA" } : x,
+            ),
+          });
+          if (ok) setCancelOpen(false);
+          return ok;
+        }}
+      />
     </>
   );
 }
