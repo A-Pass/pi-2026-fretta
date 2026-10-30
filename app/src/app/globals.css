@@ -253,6 +253,13 @@ header > div {
   border-radius: 5px;
   color: #997e50;
 }
+header > .header-brand {
+  color: var(--orange);
+  font-family: Manrope, Arial, sans-serif;
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
 main {
   max-width: 1250px;
   margin: auto;
@@ -305,6 +312,10 @@ main {
   color: #ca7651;
   margin: 10px 30px;
   transform: rotate(-8deg);
+}
+.home-request-action {
+  display: flex;
+  justify-content: center;
 }
 .stats {
   display: grid;
@@ -1051,6 +1062,82 @@ main {
   color: var(--muted);
   margin: 4px 0 0;
 }
+.chat-offer {
+  width: min(100%, 560px);
+  padding: 22px;
+  margin: 0 0 18px;
+  background: #fff;
+  border: 1px solid #efd4c2;
+  border-radius: 6px 20px 20px;
+  box-shadow: 0 4px 16px #29282008;
+  overflow-wrap: anywhere;
+}
+.chat-offer.mine {
+  margin-left: auto;
+  border-radius: 20px 6px 20px 20px;
+}
+.chat-offer > small {
+  color: var(--muted);
+}
+.chat-offer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.chat-offer-heading h2 {
+  margin: 0;
+  font-size: 26px;
+  color: var(--orange);
+}
+.chat-offer dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 16px 0;
+}
+.chat-offer dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.chat-offer dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.chat-offer-comment {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.chat-offer time {
+  color: var(--muted);
+  font-size: 11px;
+}
+.chat-offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+.chat-negotiation-action {
+  padding: 8px max(24px, calc((100vw - 900px) / 2));
+  background: white;
+}
+.proposal-form-dialog form {
+  display: grid;
+  gap: 14px;
+}
+.proposal-form-dialog label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.proposal-form-dialog textarea {
+  min-height: 100px;
+}
 .conversation-messages {
   flex: 1;
   min-height: 0;
@@ -1163,6 +1250,13 @@ main {
 }
 .profile-return {
   margin-top: 25px;
+}
+.profile-logout {
+  color: #b5382e;
+  border-color: #edcbc7;
+}
+.profile-logout:hover {
+  background: #fff1ef;
 }
 .profile-editor .actions {
   justify-content: flex-end;

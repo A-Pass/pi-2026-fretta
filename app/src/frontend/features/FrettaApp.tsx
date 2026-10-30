@@ -286,12 +286,13 @@ export function FrettaApp() {
       </aside>
       <div className="content">
         <header>
-          <span>
-            <MapPin size={16} />{" "}
-            {role === "motorista"
-              ? (store.operatingArea || defaultArea).label
-              : "Eunápolis, Bahia"}
-          </span>
+          {role === "cliente" ? (
+            <span className="header-brand">FRETTA</span>
+          ) : (
+            <span>
+              <MapPin size={16} /> {(store.operatingArea || defaultArea).label}
+            </span>
+          )}
           <div>
             <span className="demo">DEMONSTRAÇÃO</span>
             <button
@@ -359,11 +360,13 @@ export function FrettaApp() {
             />
           ) : tab === "chat" ? (
             <ChatView
+              name={name}
               store={store}
               role={role}
               chatId={chatId}
               setChatId={setChatId}
               send={send}
+              save={save}
             />
           ) : role === "motorista" && tab === "inicio" ? (
             <DriverHomeView

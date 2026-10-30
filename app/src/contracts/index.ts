@@ -20,6 +20,7 @@ export interface Freight {
   reviews: Partial<Record<Role, number>>;
 }
 export interface Proposal {
+  offers?: ProposalOffer[];
   driverId?: string;
   id: string;
   freightId: string;
@@ -30,6 +31,15 @@ export interface Proposal {
   availableAt: string;
   message: string;
   status: "PENDENTE" | "ACEITA" | "ENCERRADA";
+}
+export interface ProposalOffer {
+  id: string;
+  vehicle: string;
+  priceCents: number;
+  availableAt: string;
+  message: string;
+  createdAt?: string;
+  status: "PENDENTE" | "ACEITA" | "RECUSADA" | "SUBSTITUIDA" | "ENCERRADA";
 }
 export interface Message {
   id: string;

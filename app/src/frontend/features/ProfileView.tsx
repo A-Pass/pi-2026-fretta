@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Camera, Pencil, User, X } from "lucide-react";
+import { ArrowLeft, Camera, LogOut, Pencil, User, X } from "lucide-react";
 import type { Role } from "@/contracts";
 import { resetDemo } from "../api/client";
 type Props = {
@@ -191,10 +191,10 @@ export function ProfileView({
           </div>
         )}
         <button
-          className="secondary profile-return"
+          className="secondary profile-return profile-logout"
           onClick={() => setEntered(false)}
         >
-          Voltar à seleção de perfil
+          <LogOut size={18} /> Sair da conta
         </button>
         <button
           className="danger"

@@ -54,6 +54,7 @@ export function FreightDetailsView({
   schedule,
 }: Props) {
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [proposalToAccept, setProposalToAccept] = useState<Proposal | null>(null);
   const isOpportunity = role === "motorista" && f.status === "ABERTO";
 
   return (
@@ -219,19 +220,7 @@ export function FreightDetailsView({
                       role === "cliente" && (
                         <button
                           className="primary"
-                          onClick={async () => {
-                            if (
-                              confirm(
-                                `Confirmar ${p.driver} por ${money(p.priceCents)}?`,
-                              )
-                            ) {
-                              try {
-                                await save(acceptProposal(store, p.id));
-                              } catch (e) {
-                                setError((e as Error).message);
-                              }
-                            }
-                          }}
+                          onClick={() => setProposalToAccept(p)}
                         >
                           Aceitar proposta
                         </button>
@@ -276,6 +265,22 @@ export function FreightDetailsView({
           </button>
         </div>
       )}
+      <ConfirmDialog
+        open={proposalToAccept !== null}
+        onClose={() => setProposalToAccept(null)}
+        title={`Aceitar essa proposta de ${proposalToAccept?.driver ?? ""}?`}
+        description={`O frete será agendado por ${proposalToAccept ? money(proposalToAccept.priceCents) : ""} e as outras propostas serão encerradas.`}
+        confirmLabel="Sim, aceitar proposta"
+        cancelLabel="Voltar"
+        pendingLabel="Aceitando…"
+        destructive={false}
+        onConfirm={async () => {
+          if (!proposalToAccept) return false;
+          const ok = await save(acceptProposal(store, proposalToAccept.id));
+          if (ok) setProposalToAccept(null);
+          return ok;
+        }}
+      />
       <ConfirmDialog
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}

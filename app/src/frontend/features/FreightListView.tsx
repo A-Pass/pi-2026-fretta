@@ -75,16 +75,6 @@ export function FreightListView({
               : "Conecte seu trabalho a quem precisa chegar mais longe."}
           </p>
         </div>
-        {role === "cliente" && tab === "inicio" && (
-          <button
-            className="primary"
-            onClick={() => {
-              setModal("pedido");
-            }}
-          >
-            <Plus size={18} /> Solicitar frete
-          </button>
-        )}
       </div>
       {tab === "inicio" && (
         <section className="hero">
@@ -109,19 +99,21 @@ export function FreightListView({
                 ? "Conte o que precisa transportar e compare propostas de motoristas."
                 : "Explore as solicitações da região e envie sua proposta."}
             </p>
-            <button
-              onClick={() =>
-                role === "cliente" ? setModal("pedido") : nav("fretes")
-              }
-            >
-              {role === "cliente"
-                ? "Criar minha solicitação"
-                : "Explorar oportunidades"}{" "}
-              <ArrowRight size={18} />
-            </button>
+            {role === "motorista" && (
+              <button onClick={() => nav("fretes")}>
+                Explorar oportunidades <ArrowRight size={18} />
+              </button>
+            )}
           </div>
           <Truck className="hero-truck" strokeWidth={1} />
         </section>
+      )}
+      {role === "cliente" && tab === "inicio" && (
+        <div className="home-request-action">
+          <button className="primary" onClick={() => setModal("pedido")}>
+            <Plus size={18} /> Solicitar frete
+          </button>
+        </div>
       )}
       <div className="stats">
         {[

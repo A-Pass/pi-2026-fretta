@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CircleAlert, X } from "lucide-react";
 type Props = {
   open: boolean;
@@ -7,6 +7,8 @@ type Props = {
   description: string;
   confirmLabel: string;
   cancelLabel?: string;
+  pendingLabel?: string;
+  destructive?: boolean;
   onConfirm: () => Promise<boolean>;
 };
 export function ConfirmDialog({
@@ -16,9 +18,13 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   cancelLabel = "Manter solicitação",
+  pendingLabel = "Processando…",
+  destructive = true,
   onConfirm,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
   const [pending, setPending] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
@@ -31,8 +37,8 @@ export function ConfirmDialog({
     <dialog
       ref={dialog}
       className="confirm-dialog"
-      aria-labelledby="confirm-title"
-      aria-describedby="confirm-description"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
       onCancel={(e) => {
         e.preventDefault();
         if (!pending) onClose();
@@ -50,8 +56,8 @@ export function ConfirmDialog({
           <X />
         </button>
       </div>
-      <h2 id="confirm-title">{title}</h2>
-      <p id="confirm-description" className="muted">
+      <h2 id={titleId}>{title}</h2>
+      <p id={descriptionId} className="muted">
         {description}
       </p>
       {error && (
@@ -69,7 +75,7 @@ export function ConfirmDialog({
           {cancelLabel}
         </button>
         <button
-          className="primary cancel-confirm"
+          className={destructive ? "primary cancel-confirm" : "primary"}
           disabled={pending}
           onClick={async () => {
             setPending(true);
@@ -83,7 +89,7 @@ export function ConfirmDialog({
             }
           }}
         >
-          {pending ? "Cancelando…" : confirmLabel}
+          {pending ? pendingLabel : confirmLabel}
         </button>
       </div>
     </dialog>

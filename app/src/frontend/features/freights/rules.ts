@@ -1,4 +1,5 @@
 import type { Store } from "@/contracts";
+import { proposalOffers } from "./negotiation";
 export function acceptProposal(store: Store, id: string): Store {
   const p = store.proposals.find((p) => p.id === id);
   const f = store.freights.find((f) => f.id === p?.freightId);
@@ -11,7 +12,15 @@ export function acceptProposal(store: Store, id: string): Store {
     ),
     proposals: store.proposals.map((x) =>
       x.freightId === f.id
-        ? { ...x, status: x.id === id ? "ACEITA" : "ENCERRADA" }
+        ? {
+            ...x,
+            status: x.id === id ? "ACEITA" : "ENCERRADA",
+            offers: proposalOffers(x).map((o) =>
+              o.status === "PENDENTE"
+                ? { ...o, status: x.id === id ? "ACEITA" : "ENCERRADA" }
+                : o,
+            ),
+          }
         : x,
     ),
   };
