@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   MapPin,
@@ -37,6 +37,11 @@ export function DriverHomeView({
     [query, setQuery] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [visible, setVisible] = useState(12);
+  useEffect(
+    () => setVisible(12),
+    [query, area.center.lat, area.center.lng, area.radiusKm],
+  );
   const matches = opportunities(store, area).filter(({ freight: f }) =>
     `${f.title} ${f.origin} ${f.destination}`
       .toLocaleLowerCase()
@@ -221,7 +226,7 @@ export function DriverHomeView({
         </section>
       ) : (
         <div className="cards">
-          {matches.map(({ freight: f, distance }) => (
+          {matches.slice(0, visible).map(({ freight: f, distance }) => (
             <article className="freight-card" key={f.id}>
               <div className="section-head">
                 <span className="type-icon">
@@ -286,6 +291,16 @@ export function DriverHomeView({
               )}
             </EmptyState>
           )}
+        </div>
+      )}
+      {visible < matches.length && (
+        <div className="load-more">
+          <button
+            className="secondary"
+            onClick={() => setVisible(visible + 12)}
+          >
+            Mostrar mais oportunidades
+          </button>
         </div>
       )}
     </>

@@ -1,4 +1,10 @@
 import type { Store } from "@/contracts";
+const future = (hour: number) => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 3);
+  d.setUTCHours(hour + 3, 0, 0, 0);
+  return d.toISOString();
+};
 export const seed: Store = {
   freights: [
     {
@@ -35,7 +41,7 @@ export const seed: Store = {
       rating: 4.9,
       vehicle: "Caminhão pequeno · carroceria fechada",
       priceCents: 24000,
-      availableAt: "2026-11-02T09:00",
+      availableAt: future(9),
       message:
         "Posso ajudar no carregamento. Tenho mantas para proteger os móveis.",
       status: "PENDENTE",
@@ -47,7 +53,7 @@ export const seed: Store = {
       rating: 4.8,
       vehicle: "Caminhão pequeno",
       priceCents: 28000,
-      availableAt: "2026-11-02T14:00",
+      availableAt: future(14),
       message: "Atendo com um ajudante e transporto os itens em uma viagem.",
       status: "PENDENTE",
     },

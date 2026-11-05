@@ -1,57 +1,76 @@
 import { useState } from "react";
 import { ArrowLeft, Camera, LogOut, Pencil, User, X } from "lucide-react";
-import type { Role } from "@/contracts";
+import type { Role, DriverRegistration } from "@/contracts";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { resetDemo } from "../api/client";
 type Props = {
   onAddresses: () => void;
+  onRegistration: () => void;
+  registration?: DriverRegistration;
+  photoRequired: boolean;
   name: string;
-  setName: (s: string) => void;
+  onSaveProfile: (profile: { name: string; photo: string }) => Promise<boolean>;
+  editing: boolean;
+  onEdit: () => void;
+  onVehicles: () => void;
+  onSubscription: () => void;
   photo: string;
-  setPhoto: (s: string) => void;
   role: Role;
   subscription: boolean;
-  setSubscription: (b: boolean) => void;
-  flash: (s: string) => void;
   setEntered: (b: boolean) => void;
 };
 export function ProfileView({
   onAddresses,
+  onRegistration,
+  registration,
+  photoRequired,
   name,
-  setName,
+  onSaveProfile,
+  editing,
+  onEdit,
+  onVehicles,
+  onSubscription,
   photo,
-  setPhoto,
   role,
   subscription,
-  setSubscription,
-  flash,
   setEntered,
 }: Props) {
-  const [editing, setEditing] = useState(false),
-    [draftName, setDraftName] = useState(name),
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draftName, setDraftName] = useState(name),
     [draftPhoto, setDraftPhoto] = useState(photo),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(false);
   if (editing)
     return (
       <>
-        <button className="back" onClick={() => setEditing(false)}>
+        <button className="back" onClick={onEdit}>
           <ArrowLeft size={18} /> Voltar ao meu perfil
         </button>
         <span className="eyebrow">DO SEU JEITO</span>
         <h1>Editar perfil</h1>
         <section className="panel profile profile-editor">
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               const n = draftName.trim();
               if (!n) {
                 setError("Informe seu nome de exibição.");
                 return;
               }
-              setName(n);
-              setPhoto(draftPhoto);
-              setEditing(false);
-              flash("Perfil atualizado nesta sessão.");
+              setSaving(true);
+              try {
+                if (await onSaveProfile({ name: n, photo: draftPhoto }))
+                  onEdit();
+                else
+                  setError(
+                    "Não foi possível salvar o perfil. Tente novamente.",
+                  );
+              } catch {
+                setError("Não foi possível salvar o perfil. Tente novamente.");
+              } finally {
+                setSaving(false);
+              }
             }}
           >
             <div className="profile-photo-preview">
@@ -72,7 +91,7 @@ export function ProfileView({
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                disabled={loading}
+                disabled={loading || saving}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   e.target.value = "";
@@ -102,7 +121,7 @@ export function ProfileView({
               />
             </label>
             <p className="muted photo-help">JPG, PNG ou WebP · até 2 MB</p>
-            {draftPhoto && (
+            {draftPhoto && !photoRequired && (
               <button
                 className="remove-photo"
                 type="button"
@@ -110,6 +129,12 @@ export function ProfileView({
               >
                 <X size={14} /> Remover foto
               </button>
+            )}
+            {photoRequired && (
+              <p className="muted">
+                A foto é obrigatória para o cadastro do motorista. Ao trocar a
+                imagem, o cadastro volta para análise.
+              </p>
             )}
             <label>
               Nome de exibição
@@ -129,13 +154,18 @@ export function ProfileView({
             <div className="actions">
               <button
                 type="button"
+                disabled={saving}
                 className="secondary"
-                onClick={() => setEditing(false)}
+                onClick={onEdit}
               >
                 Descartar alterações
               </button>
-              <button className="primary" disabled={loading}>
-                {loading ? "Carregando foto…" : "Salvar alterações"}
+              <button className="primary" disabled={loading || saving}>
+                {saving
+                  ? "Salvando…"
+                  : loading
+                    ? "Carregando foto…"
+                    : "Salvar alterações"}
               </button>
             </div>
           </form>
@@ -162,7 +192,7 @@ export function ProfileView({
             setDraftName(name);
             setDraftPhoto(photo);
             setError("");
-            setEditing(true);
+            onEdit();
           }}
         >
           <Pencil size={17} /> Editar perfil
@@ -172,22 +202,25 @@ export function ProfileView({
           <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
         </button>
         {role === "motorista" && (
-          <div className="subscription">
-            <h3>Assinatura do motorista</h3>
-            <p>R$ 49,90/mês · cobrança real pendente de integração.</p>
-            <button
-              className="secondary"
-              onClick={() => setSubscription(!subscription)}
-            >
-              {subscription
-                ? "Simular assinatura vencida"
-                : "Simular assinatura ativa"}
+          <div className="profile-driver-links">
+            <button className="secondary" onClick={onRegistration}>
+              Cadastro do motorista ·{" "}
+              {registration?.status === "APROVADO"
+                ? "Aprovado na demonstração"
+                : registration?.status === "EM_ANALISE"
+                  ? "Em análise"
+                  : registration?.status === "AJUSTES_SOLICITADOS"
+                    ? "Ajustes solicitados"
+                    : "Completar cadastro"}
             </button>
-            <p>
-              {subscription
-                ? "Ativa na demonstração"
-                : "Vencida na demonstração"}
-            </p>
+            <button className="secondary" onClick={onVehicles}>
+              Meus veículos{" "}
+              <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
+            </button>
+            <button className="secondary" onClick={onSubscription}>
+              Minha assinatura · {subscription ? "Ativa" : "Inativa"}{" "}
+              <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
+            </button>
           </div>
         )}
         <button
@@ -196,16 +229,22 @@ export function ProfileView({
         >
           <LogOut size={18} /> Sair da conta
         </button>
-        <button
-          className="danger"
-          onClick={() => {
-            if (confirm("Apagar os dados locais e restaurar os exemplos?"))
-              resetDemo();
-          }}
-        >
+        <button className="danger" onClick={() => setRestoreOpen(true)}>
           Restaurar demonstração
         </button>
       </section>
+      <ConfirmDialog
+        open={restoreOpen}
+        onClose={() => setRestoreOpen(false)}
+        title="Restaurar demonstração?"
+        description="Solicitações, conversas, veículos, endereços e alterações de perfil salvos neste navegador serão apagados e substituídos pelos exemplos iniciais."
+        confirmLabel="Restaurar demonstração"
+        cancelLabel="Manter meus dados"
+        onConfirm={async () => {
+          resetDemo();
+          return true;
+        }}
+      />
     </>
   );
 }

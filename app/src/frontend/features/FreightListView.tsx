@@ -1,23 +1,6 @@
-import type { FormEvent } from "react";
-import {
-  Truck,
-  Home,
-  Package,
-  MessageCircle,
-  User,
-  ArrowRight,
-  ArrowLeft,
-  MapPin,
-  Plus,
-  Star,
-  Bell,
-  Check,
-  Search,
-  X,
-} from "lucide-react";
-import type { Role, Store, Freight, Proposal } from "@/contracts";
-import { resetDemo } from "../api/client";
-import { acceptProposal, money } from "./freights/rules";
+import { useEffect, useState } from "react";
+import { Truck, Package, ArrowRight, MapPin, Plus, Search } from "lucide-react";
+import type { Role, Store, Freight } from "@/contracts";
 import { statusLabels as labels, StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 
@@ -53,6 +36,8 @@ export function FreightListView({
   subscription,
   schedule,
 }: Props) {
+  const [visible, setVisible] = useState(12);
+  useEffect(() => setVisible(12), [query, filter, tab]);
   return (
     <>
       <div className="section-head">
@@ -172,7 +157,7 @@ export function FreightListView({
         </section>
       ) : (
         <div className="cards">
-          {list.map((f) => (
+          {list.slice(0, visible).map((f) => (
             <article className="freight-card" key={f.id}>
               <div className="section-head">
                 <span className="type-icon">
@@ -209,6 +194,16 @@ export function FreightListView({
               Tente outra busca ou crie sua primeira solicitação.
             </EmptyState>
           )}
+        </div>
+      )}
+      {visible < list.length && (
+        <div className="load-more">
+          <button
+            className="secondary"
+            onClick={() => setVisible(visible + 12)}
+          >
+            Mostrar mais fretes ({list.length - visible})
+          </button>
         </div>
       )}
     </>

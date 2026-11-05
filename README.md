@@ -39,9 +39,19 @@ git worktree add ../fretta-versao-anterior backup/homeclean-before-fretta-2026-1
 
 Para executar main: faça commit de seu trabalho e use `git switch main`. Não use reset destrutivo.
 
+## Estado do front-end
+
+A demonstração tem veículos, perfil persistente, negociação com histórico de ofertas no chat, notificações locais, acordo após aceite e avaliação com comentário. As telas usam URLs com parâmetros (`?perfil=motorista&tela=veiculos`, `?perfil=cliente&tela=fretes&frete=...` e `?perfil=cliente&tela=chat&conversa=...`). Voltar/Avançar e recarregar preservam o contexto; a sessão demonstrativa é mantida somente nesta aba até sair. Meus veículos e Minha assinatura ficam no perfil do motorista.
+
+No primeiro uso do perfil motorista, um cadastro guiado solicita dados, foto de perfil, CNH e veículo. O envio fica em análise; a aprovação só pode ser simulada nos controles identificados como demonstração. Use dados fictícios: números completos e imagem da CNH não são persistidos no protótipo. Serviços/conversas anteriores continuam acessíveis enquanto há pendência, mas novas propostas exigem aprovação simulada e assinatura ativa.
+
+Confira a entrega e as pendências em [docs/frontend-checklist.md](docs/frontend-checklist.md).
+
 ## Limites conhecidos
 
-Esta é uma primeira entrega demonstrável do front-end. Autenticação, cadastro completo, edição de veículos, autorização de endereços privados, upload remoto, notificações remotas e gateway dependem dos módulos do servidor. API provisória retorna 501. Há manifest inicial, mas instalação PWA, ícones raster, HTTPS e compatibilidade mobile ainda exigem homologação. Não há service worker/offline. Navegação utiliza estado local, sem URLs individuais. Diálogos precisam de revisão de foco e acessibilidade. As telas estão separadas em módulos próprios; a orquestração demonstrativa fica em FrettaApp. Não usar a demonstração como produto com contas reais.
+Contas, autenticação Google, autorização, upload remoto, comunicação entre dispositivos e cobrança continuam pendentes dos módulos do servidor. A API provisória retorna 501; não há fallback silencioso para mocks. Os dados locais não oferecem privacidade entre contas. A interface só exibe endereços após aceite aos participantes simulados, mas a autorização real deve ocorrer no backend.
+
+PWA: manifest e ícones preparados; em produção (`npm run build` e `npm start`) o service worker fornece apenas um aviso offline. APIs, dados privados e mapas não são cacheados. O sistema não funciona integralmente offline. A homologação em Android/iPhone físicos e em HTTPS publicado permanece pendente. Use `http://localhost:3000` em desenvolvimento; outros hosts podem ser bloqueados pela proteção de origem do Next.js.
 
 ## Solicitações e endereços
 

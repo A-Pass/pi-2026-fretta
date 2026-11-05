@@ -23,6 +23,7 @@ export function ConfirmDialog({
   onConfirm,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const descriptionId = useId();
   const [pending, setPending] = useState(false),
@@ -31,6 +32,7 @@ export function ConfirmDialog({
     if (open) {
       setError("");
       dialog.current?.showModal();
+      cancelButton.current?.focus();
     } else dialog.current?.close();
   }, [open]);
   return (
@@ -68,6 +70,7 @@ export function ConfirmDialog({
       <div className="confirm-actions">
         <button
           className="secondary"
+          ref={cancelButton}
           autoFocus
           disabled={pending}
           onClick={onClose}
@@ -82,8 +85,12 @@ export function ConfirmDialog({
             try {
               if (!(await onConfirm()))
                 setError("Não foi possível concluir. Tente novamente.");
-            } catch {
-              setError("Não foi possível concluir. Tente novamente.");
+            } catch (e) {
+              setError(
+                e instanceof Error
+                  ? e.message
+                  : "Não foi possível concluir. Tente novamente.",
+              );
             } finally {
               setPending(false);
             }

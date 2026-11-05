@@ -39,3 +39,31 @@ O Início do motorista tem uma área de operação configurável: base escolhida
 Meus serviços do motorista contém apenas suas próprias propostas e fretes associados, com filtros de propostas, agendados/em transporte e histórico. Histórico e serviços já contratados não são filtrados pelo raio atual nem bloqueados pela assinatura vencida. Identidade estável demo-driver preserva a associação de novas propostas mesmo se o nome de exibição mudar; a integração real deve usar o ID autenticado.
 
 O cálculo e a persistência são locais nesta demonstração. Em produção, o filtro geográfico e as permissões serão executados pelo servidor sem enviar coordenadas residenciais privadas ao motorista antes da contratação.
+
+## Revisão do front-end de 05/11/2026
+
+Uma negociação possui uma conversa estável e várias ofertas imutáveis. No protótipo, Proposal representa a negociação e offers contém as ofertas. Cada oferta tem identificador, cópia do veículo, preço, disponibilidade, comentário, data de envio e situação: PENDENTE, ACEITA, RECUSADA, SUBSTITUIDA ou ENCERRADA. Enviar uma nova oferta substitui a anterior pendente, preservando mensagens e ofertas antigas. Recusar não cancela o frete nem bloqueia a conversa; o motorista pode negociar novamente enquanto o frete estiver aberto e sua assinatura permitir novas propostas.
+
+Somente a oferta pendente mais recente pode ser aceita. A confirmação identifica a oferta para evitar aceitar inadvertidamente outra versão. O aceite cria um snapshot do acordo (valor, veículo, motorista, horário, comentário e instante de aceite), agenda o frete e encerra concorrentes. A atomicidade, idempotência e autorização reais continuam no backend.
+
+Veículos pertencem ao motorista. A interface aceita categoria, modelo, placa brasileira, capacidade opcional e características opcionais. Uma placa não pode se repetir no cadastro local. As propostas copiam categoria/modelo e não exibem a placa publicamente; editar ou excluir um veículo preserva as cópias anteriores. Campos e validação definitiva serão acordados com a frente de identidade.
+
+Avaliações são únicas por frete e participante, com nota inteira de 1 a 5 e comentário opcional de até 1000 caracteres, após conclusão. Médias e participação real são validadas pelo servidor.
+
+Notificações demonstrativas registram eventos de proposta/oferta, mensagem, aceite, recusa/encerramento, início e conclusão; possuem perfil destinatário, destino e leitura persistida. Não são push nem notificações entre contas reais. Nome/foto do perfil e estado de assinatura são persistidos no armazenamento local. A sessão demonstrativa em sessionStorage não é autenticação.
+
+O PWA possui ícones PNG/Apple/maskable e um service worker exclusivamente de aviso offline em produção. Não cachear tiles, APIs ou dados privados. Homologação em aparelhos reais e publicação HTTPS são pendências.
+
+## Cadastro guiado do motorista — primeiro acesso
+
+Após o login demonstrativo no perfil motorista, a ausência de driverRegistration inicia o tour/cadastro. Também ocorre ao habilitar esse perfil pela primeira vez a partir do cliente. O motorista pode continuar como cliente ou acessar serviços/conversas existentes. Dados antigos da demonstração são preservados; não são considerados automaticamente aprovados.
+
+Etapas: identificação → foto de perfil → CNH → veículo → revisão. Pessoa física informa nome completo e CPF; pessoa jurídica também informa CNPJ e razão social, mantendo a identificação da pessoa que dirige. CPF e CNPJ têm validação de dígitos verificadores, incluindo o CNPJ alfanumérico. A CNH tem conferência de preenchimento (11 dígitos), categoria selecionada e data válida/não vencida. Não há consulta oficial, validação de autenticidade da CNH, OCR, biometria, prova de vida ou avaliação automática de compatibilidade entre categoria e veículo.
+
+Foto de perfil e imagem da CNH são obrigatórias: JPG/PNG/WebP de até 5 MB, com mínimo de 200 × 200 pixels. A interface verifica tipo, assinatura básica do arquivo e decodificação, limita imagens a 25 megapixels e gera uma prévia local. Isso não prova que a imagem contém um rosto ou um documento autêntico. O veículo pode ser cadastrado ou reutilizado, evitando duplicação.
+
+Envio cria EM_ANALISE, sem aprovação automática. AJUSTES_SOLICITADOS apresenta motivo e permite reenviar. Reenvio e troca da foto de perfil retornam para EM_ANALISE. APROVADO só é definido por controle explicitamente identificado como simulação na demonstração. Esses controles nunca devem existir para o motorista no produto real. Somente cadastro aprovado com CNH não vencida, foto e veículo permite novas propostas/renegociações; assinatura ativa continua sendo outra condição. Serviços contratados e conversas existentes continuam acessíveis.
+
+Não coletar documentos reais no protótipo: o formulário mostra aviso e oferece exemplo fictício. CPF/CNPJ/CNH completos e a imagem da CNH ficam somente na memória do formulário; não são gravados no localStorage, não são enviados a serviços externos e são descartados ao finalizar/sair/recarregar. Somente resumo mascarado, nome, categoria/validade, situação e foto de perfil permanecem no armazenamento demonstrativo. O formulário incompleto precisa ser preenchido novamente após sair/recarregar. Na versão real, uploads e números terão de passar por endpoints privados autorizados, com análise definida pelo grupo.
+
+Referências de validação de formato: [Receita Federal/Serpro — DV de CNPJ alfanumérico](https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/documentos-tecnicos/cnpj/manual-dv-cnpj.pdf) e [UFMG — DV do CPF](https://homepages.dcc.ufmg.br/~rodolfo/aedsi-2-09/regrasDigitosVerificadoresCPF.html). Conferir dígitos não confirma titularidade ou situação cadastral.

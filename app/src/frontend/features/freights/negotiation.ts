@@ -80,6 +80,7 @@ export function reviseOffer(
         ? {
             ...x,
             vehicle: offer.vehicle,
+            vehicleId: offer.vehicleId,
             priceCents: offer.priceCents,
             availableAt: offer.availableAt,
             message: offer.message,
@@ -94,4 +95,15 @@ export function reviseOffer(
         : x,
     ),
   };
+}
+
+export function proposalStatusLabel(p: Proposal): string {
+  const latest = proposalOffers(p).at(-1);
+  return latest?.status === "RECUSADA"
+    ? "Proposta recusada"
+    : p.status === "ACEITA"
+      ? "Proposta aceita"
+      : p.status === "ENCERRADA"
+        ? "Proposta encerrada"
+        : "Aguardando aceite";
 }

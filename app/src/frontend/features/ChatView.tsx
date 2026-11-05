@@ -7,8 +7,11 @@ import {
   declineOffer,
   reviseOffer,
 } from "./freights/negotiation";
+import { driverCanPropose } from "./onboarding/rules";
 import { ownProposal } from "./driver/rules";
 import { ProposalFormDialog } from "../components/ProposalFormDialog";
+import { dateTime, time } from "../lib/dates";
+import { EmptyState } from "../components/EmptyState";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 type Props = {
   store: Store;
@@ -16,7 +19,9 @@ type Props = {
   name: string;
   chatId: string;
   setChatId: (s: string) => void;
-  send: (e: FormEvent<HTMLFormElement>) => Promise<void>;
+  send: (text: string) => Promise<boolean>;
+  subscription: boolean;
+  onManageVehicles: () => void;
   save: (store: Store) => Promise<boolean>;
 };
 export function ChatView({
@@ -27,14 +32,42 @@ export function ChatView({
   send,
   save,
   name,
+  subscription,
+  onManageVehicles,
 }: Props) {
-  const conversation = store.proposals.find((p) => p.id === chatId);
+  const conversation = store.proposals.find(
+    (p) => p.id === chatId && (role === "cliente" || ownProposal(p, name)),
+  );
   const freight = store.freights.find((f) => f.id === conversation?.freightId);
   const [decision, setDecision] = useState<{
     offer: ProposalOffer;
     action: "accept" | "decline";
   } | null>(null);
   const [newOfferOpen, setNewOfferOpen] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [sending, setSending] = useState(false),
+    [sendError, setSendError] = useState("");
+  const contact =
+    role === "cliente"
+      ? conversation?.driver || "Motorista"
+      : freight?.clientName || "Cliente de demonstração";
+  async function submitMessage(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (sending || !draftText.trim()) return;
+    setSending(true);
+    setSendError("");
+    try {
+      if (await send(draftText.trim())) setDraftText("");
+      else
+        setSendError(
+          "Não foi possível enviar. Sua mensagem foi mantida para tentar novamente.",
+        );
+    } catch {
+      setSendError("Não foi possível enviar. Tente novamente.");
+    } finally {
+      setSending(false);
+    }
+  }
   const offers = conversation ? proposalOffers(conversation) : [];
   const messages = store.messages.filter((m) => m.proposalId === chatId);
   const timeline = [
@@ -54,11 +87,15 @@ export function ChatView({
     role === "motorista" &&
     conversation &&
     ownProposal(conversation, name) &&
-    canNegotiate;
+    canNegotiate &&
+    subscription &&
+    driverCanPropose(store);
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setDecision(null);
     setNewOfferOpen(false);
+    setDraftText("");
+    setSendError("");
   }, [chatId]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "nearest" });
@@ -67,7 +104,7 @@ export function ChatView({
     return (
       <section
         className="conversation-screen"
-        aria-label={`Conversa com ${conversation.driver}`}
+        aria-label={`Conversa com ${contact}`}
       >
         <header className="conversation-header">
           <button
@@ -77,9 +114,9 @@ export function ChatView({
           >
             <ArrowLeft />
           </button>
-          <span className="avatar">{conversation.driver.slice(0, 2)}</span>
+          <span className="avatar">{contact.slice(0, 2)}</span>
           <div>
-            <h1>{conversation.driver}</h1>
+            <h1>{contact}</h1>
             <p>
               {
                 store.freights.find((f) => f.id === conversation.freightId)
@@ -125,12 +162,7 @@ export function ChatView({
                       </div>
                       <div>
                         <dt>Disponibilidade</dt>
-                        <dd>
-                          {new Date(offer.availableAt).toLocaleString("pt-BR", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })}
-                        </dd>
+                        <dd>{dateTime(offer.availableAt)}</dd>
                       </div>
                     </dl>
                     {freight && (
@@ -142,9 +174,7 @@ export function ChatView({
                       {offer.message || "Sem comentário adicional."}
                     </p>
                     {offer.createdAt && (
-                      <time>
-                        {new Date(offer.createdAt).toLocaleString("pt-BR")}
-                      </time>
+                      <time>{dateTime(offer.createdAt)}</time>
                     )}
                     {role === "cliente" && active && (
                       <div className="chat-offer-actions">
@@ -179,12 +209,7 @@ export function ChatView({
                     {m.role === "cliente" ? "Cliente" : "Motorista"}
                   </small>
                   <p>{m.text}</p>
-                  <time>
-                    {new Date(m.createdAt).toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </time>
+                  <time>{time(m.createdAt)}</time>
                 </div>
               );
             })}
@@ -198,16 +223,34 @@ export function ChatView({
             </button>
           </div>
         )}
-        <form className="conversation-composer" onSubmit={send}>
+        {sendError && (
+          <p className="chat-send-error" role="alert">
+            {sendError}
+          </p>
+        )}
+        <form className="conversation-composer" onSubmit={submitMessage}>
           <input
+            value={draftText}
+            onChange={(e) => setDraftText(e.target.value)}
+            disabled={sending}
             name="text"
             aria-label="Mensagem"
             placeholder="Escreva sua mensagem…"
             required
             maxLength={2000}
           />
-          <button className="primary" aria-label="Enviar mensagem">
-            <ArrowRight />
+          <button
+            className="primary"
+            disabled={sending || !draftText.trim()}
+            aria-label={
+              sending
+                ? "Enviando mensagem"
+                : sendError
+                  ? "Tentar enviar novamente"
+                  : "Enviar mensagem"
+            }
+          >
+            {sending ? "…" : <ArrowRight />}
           </button>
         </form>
         <ConfirmDialog
@@ -235,7 +278,7 @@ export function ChatView({
               return false;
             const next =
               decision.action === "accept"
-                ? acceptProposal(store, conversation.id)
+                ? acceptProposal(store, conversation.id, decision.offer.id)
                 : declineOffer(store, conversation.id, decision.offer.id);
             const ok = await save(next);
             if (ok) setDecision(null);
@@ -245,13 +288,30 @@ export function ChatView({
         {newOfferOpen && canRevise && (
           <ProposalFormDialog
             proposal={conversation}
+            vehicles={store.vehicles || []}
+            onManageVehicles={onManageVehicles}
             onClose={() => setNewOfferOpen(false)}
             onSubmit={async (offer) =>
-              save(reviseOffer(store, conversation.id, offer))
+              driverCanPropose(store)
+                ? save(reviseOffer(store, conversation.id, offer))
+                : Promise.reject(
+                    new Error(
+                      "Conclua a análise do seu cadastro antes de enviar novas propostas.",
+                    ),
+                  )
             }
           />
         )}
       </section>
+    );
+  if (chatId)
+    return (
+      <EmptyState title="Conversa não encontrada">
+        Ela não está disponível para este perfil.
+        <button className="primary" onClick={() => setChatId("")}>
+          Voltar às conversas
+        </button>
+      </EmptyState>
     );
   const conversations = store.proposals.filter(
     (p) => role === "cliente" || ownProposal(p, name),
@@ -265,11 +325,16 @@ export function ChatView({
           const last = store.messages
             .filter((m) => m.proposalId === p.id)
             .at(-1);
+          const contactName =
+            role === "cliente"
+              ? p.driver
+              : store.freights.find((f) => f.id === p.freightId)?.clientName ||
+                "Cliente de demonstração";
           return (
             <button key={p.id} onClick={() => setChatId(p.id)}>
-              <span className="avatar">{p.driver.slice(0, 2)}</span>
+              <span className="avatar">{contactName.slice(0, 2)}</span>
               <span className="conversation-summary">
-                <b>{p.driver}</b>
+                <b>{contactName}</b>
                 <small>
                   {store.freights.find((f) => f.id === p.freightId)?.title}
                 </small>

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { ArrowRight, MapPin } from "lucide-react";
 import type { Store, Freight } from "@/contracts";
 import { ownProposal } from "./rules";
+import { dateTime } from "../../lib/dates";
+import { proposalStatusLabel } from "../freights/negotiation";
 import { money } from "../freights/rules";
 import { StatusBadge } from "../../components/StatusBadge";
 import { EmptyState } from "../../components/EmptyState";
@@ -74,13 +76,7 @@ export function DriverServicesView({
           <article className="freight-card" key={p.id}>
             <div className="section-head">
               <StatusBadge status={f.status} />
-              <span className="badge">
-                {p.status === "PENDENTE"
-                  ? "Proposta em análise"
-                  : p.status === "ACEITA"
-                    ? "Sua proposta foi aceita"
-                    : "Proposta encerrada"}
-              </span>
+              <span className="badge">{proposalStatusLabel(p)}</span>
             </div>
             <h3>{f.title}</h3>
             <div className="route">
@@ -98,10 +94,7 @@ export function DriverServicesView({
                 Sua proposta: <b>{money(p.priceCents)}</b>
               </span>
               <span>
-                ◷{" "}
-                {p.availableAt
-                  ? new Date(p.availableAt).toLocaleString("pt-BR")
-                  : schedule(f)}
+                ◷ {p.availableAt ? dateTime(p.availableAt) : schedule(f)}
               </span>
             </div>
             <button className="card-link" onClick={() => onSelect(f.id)}>

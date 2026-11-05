@@ -1,5 +1,27 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
+import {
+  Truck,
+  Home,
+  Package,
+  MessageCircle,
+  User,
+  MapPin,
+  Bell,
+  X,
+} from "lucide-react";
+import type {
+  AppNotification,
+  FreightRequestDraft,
+  Proposal,
+  ProposalOffer,
+  Store,
+} from "@/contracts";
+import { api, resetDemo } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SuccessDialog } from "../components/SuccessDialog";
+import { ProposalFormDialog } from "../components/ProposalFormDialog";
+import { EmptyState } from "../components/EmptyState";
 import { RequestWizard } from "./RequestWizard";
 import { AddressBookView } from "./addresses/AddressBookView";
 import { createRequest as buildRequest } from "./addresses/createRequest";
@@ -12,71 +34,107 @@ import { ProfileView } from "./ProfileView";
 import { ChatView } from "./ChatView";
 import { FreightDetailsView } from "./FreightDetailsView";
 import { FreightListView } from "./FreightListView";
+import { VehicleBookView } from "./vehicles/VehicleBookView";
+import { NotificationsView } from "./notifications/NotificationsView";
+import { withNotifications, unreadNotifications } from "./notifications/rules";
+import { SubscriptionView } from "./subscription/SubscriptionView";
+import { useDemoNavigation } from "./navigation/useDemoNavigation";
+import { reviseOffer } from "./freights/negotiation";
+import { scheduleLabel } from "../lib/dates";
+import { DriverOnboardingView } from "./onboarding/DriverOnboardingView";
+import { DriverRegistrationStatusView } from "./onboarding/DriverRegistrationStatusView";
+import { driverCanPropose, submitDriverRegistration } from "./onboarding/rules";
+import { InstallApp } from "../components/InstallApp";
 
-import { useEffect, useState, type FormEvent } from "react";
-import {
-  Truck,
-  Home,
-  Package,
-  MessageCircle,
-  User,
-  ArrowRight,
-  ArrowLeft,
-  MapPin,
-  Plus,
-  Star,
-  Bell,
-  Check,
-  Search,
-  X,
-} from "lucide-react";
-import type {
-  Role,
-  Store,
-  Freight,
-  Proposal,
-  FreightRequestDraft,
-} from "@/contracts";
-import { api, resetDemo } from "../api/client";
-import { acceptProposal, money } from "./freights/rules";
-import { statusLabels as labels, StatusBadge } from "../components/StatusBadge";
-import { EmptyState } from "../components/EmptyState";
 export function FrettaApp() {
+  const navigation = useDemoNavigation();
+  const {
+    role,
+    tab,
+    selected,
+    chatId,
+    entered,
+    ready,
+    loginRequested,
+    setRole,
+    setSelected,
+    setChatId,
+  } = navigation;
   const [store, setStore] = useState<Store | null>(null),
-    [role, setRole] = useState<Role>("cliente"),
-    [entered, setEntered] = useState(false),
-    [loginRequested, setLoginRequested] = useState(false),
-    [tab, setTab] = useState("inicio"),
-    [selected, setSelected] = useState<string | null>(null),
-    [modal, setModal] = useState(""),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
-    [success, setSuccess] = useState<"proposal" | "request" | null>(null),
-    [query, setQuery] = useState(""),
-    [filter, setFilter] = useState("TODOS"),
-    [chatId, setChatId] = useState(""),
-    [subscription, setSubscription] = useState(true),
-    [name, setName] = useState("Clayton"),
-    [profilePhoto, setProfilePhoto] = useState("");
+    [notice, setNotice] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [updatingDriver, setUpdatingDriver] = useState(false);
+  const [modal, setModal] = useState(""),
+    [success, setSuccess] = useState<"proposal" | "request" | null>(null);
+  const [query, setQuery] = useState(""),
+    [filter, setFilter] = useState("TODOS");
+  const latest = useRef<Store | null>(null),
+    saving = useRef(false),
+    main = useRef<HTMLElement>(null);
+  const name = store?.profile?.name || "Clayton",
+    profilePhoto = store?.profile?.photo || "",
+    subscription = store?.subscriptionActive ?? true;
   useEffect(() => {
-    api
-      .load()
-      .then(setStore)
-      .catch((e) => setError(e.message));
+    let active = true;
+    const load = () =>
+      api
+        .load()
+        .then((s) => {
+          if (active) {
+            latest.current = s;
+            setStore(s);
+            setLoadError("");
+          }
+        })
+        .catch((e) => {
+          if (active) {
+            if (!latest.current) setLoadError(e.message);
+            else setError(e.message);
+          }
+        });
+    void load();
+    const sync = (e: StorageEvent) => {
+      if (e.key === "fretta-demo-v1" && !saving.current) void load();
+    };
+    window.addEventListener("storage", sync);
+    return () => {
+      active = false;
+      window.removeEventListener("storage", sync);
+    };
   }, []);
-  async function save(next: Store) {
+  useEffect(() => {
+    setModal("");
+    setUpdatingDriver(false);
+    setError("");
+    if (entered && !chatId) main.current?.focus({ preventScroll: true });
+  }, [role, tab, selected, chatId, entered]);
+  async function save(next: Store): Promise<boolean> {
+    if (saving.current) return false;
+    saving.current = true;
     try {
-      await api.save(next);
-      setStore(next);
+      const enriched = withNotifications(latest.current || next, next);
+      await api.save(enriched);
+      latest.current = enriched;
+      setStore(enriched);
       setError("");
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha ao salvar");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível salvar. Tente novamente.",
+      );
       return false;
+    } finally {
+      saving.current = false;
     }
   }
-  function flash(s: string) {
-    setNotice(s);
+  function nav(id: string) {
+    navigation.nav(id);
+    setQuery("");
+    setFilter("TODOS");
   }
   const f = store?.freights.find((f) => f.id === selected);
   const proposals =
@@ -85,111 +143,100 @@ export function FrettaApp() {
         p.freightId === selected &&
         (role === "cliente" || ownProposal(p, name)),
     ) || [];
-  const accepted = proposals.find((p) => p.status === "ACEITA");
-  async function createRequest(draft: FreightRequestDraft): Promise<boolean> {
+  const accepted = proposals.find(
+    (p) => p.id === f?.acceptedProposalId && p.status === "ACEITA",
+  );
+  const own = store?.proposals.find(
+    (p) => p.freightId === selected && ownProposal(p, name),
+  );
+  async function createRequest(draft: FreightRequestDraft) {
     if (!store) return false;
     const next = buildRequest(store, draft);
-    const id = next.freights[0].id;
+    if (!(await save(next))) return false;
+    setSelected(next.freights[0].id);
+    setModal("");
+    setSuccess("request");
+    return true;
+  }
+  async function propose(offer: ProposalOffer) {
+    if (
+      !store ||
+      !f ||
+      role !== "motorista" ||
+      !subscription ||
+      !driverCanPropose(store) ||
+      f.status !== "ABERTO"
+    )
+      throw new Error("Não é possível enviar uma proposta agora.");
+    const existing = store.proposals.find(
+      (p) => p.freightId === f.id && ownProposal(p, name),
+    );
+    let next: Store;
+    if (existing) next = reviseOffer(store, existing.id, offer);
+    else {
+      const p: Proposal = {
+        ...offer,
+        id: crypto.randomUUID(),
+        freightId: f.id,
+        driver: name,
+        driverId: "demo-driver",
+        rating: 0,
+        status: "PENDENTE",
+        offers: [offer],
+      };
+      next = { ...store, proposals: [...store.proposals, p] };
+    }
     const ok = await save(next);
     if (ok) {
       setModal("");
-      setSelected(id);
-      setTab("fretes");
-      setNotice("");
-      setSuccess("request");
+      setSuccess("proposal");
     }
     return ok;
   }
-  async function propose(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!store || !f) return;
-    const d = new FormData(e.currentTarget);
-    const price = Math.round(Number(d.get("price")) * 100);
-    if (new Date(String(d.get("date"))).getTime() < Date.now()) {
-      setError("Escolha uma disponibilidade futura.");
-      return;
-    }
-    if (!Number.isSafeInteger(price) || price <= 0) {
-      setError("Informe um valor positivo.");
-      return;
-    }
+  async function send(text: string) {
+    if (!store) return false;
+    const p = store.proposals.find((p) => p.id === chatId);
     if (
-      store.proposals.some(
-        (p) =>
-          p.freightId === f.id &&
-          ownProposal(p, name) &&
-          p.status === "PENDENTE",
-      )
-    ) {
-      setError("Você já enviou uma proposta para este frete.");
-      return;
-    }
-    const p: Proposal = {
-      id: crypto.randomUUID(),
-      freightId: f.id,
-      driver: name,
-      driverId: "demo-driver",
-      rating: 0,
-      vehicle: "Veículo de demonstração",
-      priceCents: price,
-      availableAt: String(d.get("date")),
-      message: String(d.get("message")),
-      status: "PENDENTE",
-    };
-    if (await save({ ...store, proposals: [...store.proposals, p] })) {
-      setModal("");
-      setNotice("");
-      setSuccess("proposal");
-    }
-  }
-  async function send(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!store) return;
-    const form = e.currentTarget,
-      d = new FormData(form),
-      text = String(d.get("text")).trim(),
-      p = store.proposals.find((p) => p.id === chatId);
-    if (!text || !p) return;
-    if (
-      await save({
-        ...store,
-        messages: [
-          ...store.messages,
-          {
-            id: crypto.randomUUID(),
-            freightId: p.freightId,
-            proposalId: p.id,
-            role,
-            text,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      })
+      !p ||
+      !text.trim() ||
+      text.length > 2000 ||
+      (role === "motorista" && !ownProposal(p, name))
     )
-      form.reset();
+      return false;
+    return save({
+      ...store,
+      messages: [
+        ...store.messages,
+        {
+          id: crypto.randomUUID(),
+          freightId: p.freightId,
+          proposalId: p.id,
+          role,
+          text: text.trim(),
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
   }
-  const schedule = (f: Freight) =>
-    f.schedule.kind === "combinar"
-      ? "Data a combinar"
-      : f.schedule.kind === "intervalo"
-        ? `${f.schedule.start} a ${f.schedule.end}`
-        : f.schedule.start;
-  function nav(id: string) {
-    setTab(id);
-    setChatId("");
-    setSelected(null);
-    setQuery("");
-    setFilter("TODOS");
+  function openNotification(n: AppNotification) {
+    if (n.proposalId) setChatId(n.proposalId);
+    else setSelected(n.freightId);
   }
+  if (!ready)
+    return (
+      <main className="loading" role="status">
+        Preparando seu caminho…
+      </main>
+    );
   if (!entered && loginRequested)
     return (
       <LoginView
         role={role}
-        onBack={() => setLoginRequested(false)}
+        onBack={() => navigation.setLoginRequested(false)}
         onContinue={() => {
-          nav("inicio");
-          setName("Clayton");
-          setEntered(true);
+          navigation.login();
+          if (role === "motorista" && !store?.driverRegistration)
+            navigation.nav("cadastro-motorista");
         }}
       />
     );
@@ -198,7 +245,7 @@ export function FrettaApp() {
       <WelcomeView
         role={role}
         setRole={setRole}
-        onEnter={() => setLoginRequested(true)}
+        onEnter={() => navigation.setLoginRequested(true)}
       />
     );
   if (!store)
@@ -206,32 +253,92 @@ export function FrettaApp() {
       <main className="loading">
         <Truck />
         <h1>
-          {error ? "Não foi possível carregar" : "Preparando seu caminho…"}
+          {loadError ? "Não foi possível carregar" : "Preparando seu caminho…"}
         </h1>
-        {error && (
+        {loadError && (
           <>
-            <p role="alert">{error}</p>
-            <button onClick={resetDemo}>Restaurar demonstração</button>
+            <p role="alert">{loadError}</p>
+            <button className="secondary" onClick={() => location.reload()}>
+              Tentar novamente
+            </button>
+            <button className="danger" onClick={() => setRestoreOpen(true)}>
+              Restaurar demonstração
+            </button>
+            <button className="secondary" onClick={() => navigation.logout()}>
+              Voltar ao início
+            </button>
           </>
         )}
+        <ConfirmDialog
+          open={restoreOpen}
+          onClose={() => setRestoreOpen(false)}
+          title="Restaurar demonstração?"
+          description="Os dados locais deste navegador serão apagados e substituídos pelos exemplos iniciais."
+          confirmLabel="Restaurar demonstração"
+          cancelLabel="Manter meus dados"
+          onConfirm={async () => {
+            resetDemo();
+            return true;
+          }}
+        />
       </main>
     );
-  let list = store.freights.filter(
+  if (
+    role === "motorista" &&
+    (tab === "cadastro-motorista" ||
+      (!driverCanPropose(store) && tab === "inicio"))
+  ) {
+    if (!store.driverRegistration || updatingDriver)
+      return (
+        <DriverOnboardingView
+          store={store}
+          onClient={() => setRole("cliente")}
+          onLogout={navigation.logout}
+          onServices={() => nav("fretes")}
+          onSubmit={async (draft) => {
+            const ok = await save(submitDriverRegistration(store, draft));
+            if (ok) {
+              setUpdatingDriver(false);
+              nav("cadastro-motorista");
+            }
+            return ok;
+          }}
+        />
+      );
+    return (
+      <DriverRegistrationStatusView
+        store={store}
+        save={save}
+        onUpdate={() => setUpdatingDriver(true)}
+        onHome={() => nav("inicio")}
+        onProfile={() => nav("editar-perfil")}
+        onVehicles={() => nav("veiculos")}
+        onServices={() => nav("fretes")}
+        onConversations={() => nav("chat")}
+        onClient={() => setRole("cliente")}
+        onLogout={navigation.logout}
+      />
+    );
+  }
+  const list = store.freights.filter(
     (x) =>
-      (role === "cliente" || x.status === "ABERTO" || tab === "fretes") &&
       `${x.title} ${x.origin} ${x.destination}`
         .toLowerCase()
         .includes(query.toLowerCase()) &&
       (filter === "TODOS" || x.status === filter),
   );
+  const unread = unreadNotifications(store, role).length;
   return (
     <div className="shell">
+      <a className="skip-link" href="#main-content">
+        Pular para o conteúdo
+      </a>
       <aside>
         <button className="brand" onClick={() => nav("inicio")}>
           <Truck /> FRETTA<span>•</span>
         </button>
         <p className="sidebar-label">SEU PRÓXIMO CAMINHO</p>
-        <nav>
+        <nav aria-label="Navegação principal">
           {[
             ["inicio", "Início", Home],
             [
@@ -243,13 +350,19 @@ export function FrettaApp() {
             ["perfil", "Meu perfil", User],
           ].map(([id, label, Icon]) => {
             const I = Icon as typeof Home;
+            const active =
+              tab === id ||
+              (id === "perfil" &&
+                [
+                  "editar-perfil",
+                  "enderecos",
+                  "veiculos",
+                  "assinatura",
+                ].includes(tab));
             return (
               <button
-                className={
-                  tab === id || (id === "perfil" && tab === "enderecos")
-                    ? "active"
-                    : ""
-                }
+                className={active ? "active" : ""}
+                aria-current={active ? "page" : undefined}
                 key={String(id)}
                 onClick={() => nav(String(id))}
               >
@@ -275,10 +388,9 @@ export function FrettaApp() {
             {role === "cliente" ? "Perfil de cliente" : "Perfil de motorista"}
           </small>
           <button
-            onClick={() => {
-              setRole(role === "cliente" ? "motorista" : "cliente");
-              nav("inicio");
-            }}
+            onClick={() =>
+              setRole(role === "cliente" ? "motorista" : "cliente")
+            }
           >
             Alternar perfil
           </button>
@@ -289,21 +401,52 @@ export function FrettaApp() {
           {role === "cliente" ? (
             <span className="header-brand">FRETTA</span>
           ) : (
-            <span>
-              <MapPin size={16} /> {(store.operatingArea || defaultArea).label}
-            </span>
+            <button
+              className="header-location"
+              onClick={() => nav("inicio")}
+              aria-label="Configurar área de operação"
+            >
+              <MapPin size={16} />
+              {(store.operatingArea || defaultArea).label}
+            </button>
           )}
           <div>
             <span className="demo">DEMONSTRAÇÃO</span>
             <button
-              aria-label="Notificações"
-              onClick={() => setModal("notificacoes")}
+              className="notification-bell"
+              aria-label={`Notificações${unread ? `, ${unread} ${unread === 1 ? "não lida" : "não lidas"}` : ""}`}
+              onClick={() => nav("notificacoes")}
             >
               <Bell size={20} />
+              {unread > 0 && (
+                <span className="notification-count" aria-hidden="true">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
             </button>
           </div>
         </header>
-        <main>
+        <main ref={main} id="main-content" tabIndex={-1}>
+          {role === "motorista" && !driverCanPropose(store) && (
+            <section
+              className="driver-registration-banner"
+              aria-label="Pendência de cadastro"
+            >
+              <div>
+                <b>Seu cadastro de motorista precisa de atenção</b>
+                <p>
+                  Conclua o cadastro e acompanhe a análise para enviar novas
+                  propostas. Seus serviços e conversas continuam disponíveis.
+                </p>
+              </div>
+              <button
+                className="secondary"
+                onClick={() => nav("cadastro-motorista")}
+              >
+                Ver cadastro
+              </button>
+            </section>
+          )}
           {error && (
             <div className="alert" role="alert">
               {error}
@@ -320,46 +463,126 @@ export function FrettaApp() {
               </button>
             </div>
           )}
-          {f ? (
+          {selected && !f ? (
+            <EmptyState title="Solicitação não encontrada">
+              Ela pode ter sido removida da demonstração.
+              <button className="primary" onClick={() => nav("fretes")}>
+                Ver meus fretes
+              </button>
+            </EmptyState>
+          ) : f ? (
             <FreightDetailsView
+              key={`${f.id}:${role}`}
               f={f}
               role={role}
+              name={name}
               store={store}
               proposals={proposals}
               accepted={accepted}
               subscription={subscription}
+              canPropose={driverCanPropose(store)}
+              onRegistration={() => nav("cadastro-motorista")}
               setModal={setModal}
               setSelected={setSelected}
-              setChatId={setChatId}
-              setTab={setTab}
+              onChat={setChatId}
               save={save}
-              setError={setError}
-              schedule={schedule}
+              schedule={(f) => scheduleLabel(f.schedule)}
             />
           ) : tab === "enderecos" ? (
             <AddressBookView
               addresses={store.addresses || []}
               onSave={(addresses) => save({ ...store, addresses })}
-              onBack={() => setTab("perfil")}
+              onBack={() => nav("perfil")}
             />
-          ) : tab === "perfil" ? (
-            <ProfileView
-              name={name}
-              setName={setName}
-              onAddresses={() => setTab("enderecos")}
-              photo={profilePhoto}
-              setPhoto={setProfilePhoto}
+          ) : tab === "veiculos" && role === "motorista" ? (
+            <VehicleBookView
+              vehicles={store.vehicles || []}
+              onSave={(vehicles) => save({ ...store, vehicles })}
+              onBack={() => nav("perfil")}
+            />
+          ) : tab === "assinatura" && role === "motorista" ? (
+            <SubscriptionView
+              active={subscription}
+              onChange={(subscriptionActive) =>
+                save({ ...store, subscriptionActive })
+              }
+              onBack={() => nav("perfil")}
+            />
+          ) : ["perfil", "editar-perfil", "veiculos", "assinatura"].includes(
+              tab,
+            ) ? (
+            <>
+              <ProfileView
+                key={tab}
+                name={name}
+                photo={profilePhoto}
+                photoRequired={!!store.driverRegistration}
+                registration={store.driverRegistration}
+                onRegistration={() => nav("cadastro-motorista")}
+                editing={tab === "editar-perfil"}
+                onEdit={() =>
+                  nav(tab === "editar-perfil" ? "perfil" : "editar-perfil")
+                }
+                onSaveProfile={async (profile) => {
+                  if (store.driverRegistration && !profile.photo)
+                    throw new Error(
+                      "A foto é obrigatória para o cadastro do motorista.",
+                    );
+                  const photoChanged =
+                    !!store.driverRegistration &&
+                    profile.photo !== profilePhoto;
+                  const ok = await save({
+                    ...store,
+                    profile,
+                    ...(photoChanged
+                      ? {
+                          driverRegistration: {
+                            ...store.driverRegistration!,
+                            status: "EM_ANALISE",
+                            reviewedAt: undefined,
+                            feedback: undefined,
+                          },
+                        }
+                      : {}),
+                  });
+                  if (ok)
+                    setNotice(
+                      photoChanged
+                        ? "Foto atualizada. Seu cadastro voltou para análise de demonstração."
+                        : "Perfil atualizado.",
+                    );
+                  return ok;
+                }}
+                onAddresses={() => nav("enderecos")}
+                onVehicles={() => nav("veiculos")}
+                onSubscription={() => nav("assinatura")}
+                role={role}
+                subscription={subscription}
+                setEntered={() => {
+                  navigation.logout();
+                  setModal("");
+                }}
+              />
+              <button
+                className="secondary mobile-switch-profile"
+                onClick={() =>
+                  setRole(role === "cliente" ? "motorista" : "cliente")
+                }
+              >
+                Alternar para perfil de{" "}
+                {role === "cliente" ? "motorista" : "cliente"}
+              </button>
+            </>
+          ) : tab === "notificacoes" ? (
+            <NotificationsView
+              store={store}
               role={role}
-              subscription={subscription}
-              setSubscription={setSubscription}
-              flash={flash}
-              setEntered={(value) => {
-                setEntered(value);
-                if (!value) setLoginRequested(false);
-              }}
+              save={save}
+              onOpen={openNotification}
             />
           ) : tab === "chat" ? (
             <ChatView
+              key={`${role}:${chatId}`}
               name={name}
               store={store}
               role={role}
@@ -367,6 +590,8 @@ export function FrettaApp() {
               setChatId={setChatId}
               send={send}
               save={save}
+              subscription={subscription}
+              onManageVehicles={() => nav("veiculos")}
             />
           ) : role === "motorista" && tab === "inicio" ? (
             <DriverHomeView
@@ -375,8 +600,8 @@ export function FrettaApp() {
               subscription={subscription}
               save={save}
               onSelect={setSelected}
-              onProfile={() => nav("perfil")}
-              schedule={schedule}
+              onProfile={() => nav("assinatura")}
+              schedule={(f) => scheduleLabel(f.schedule)}
             />
           ) : role === "motorista" && tab === "fretes" ? (
             <DriverServicesView
@@ -384,7 +609,7 @@ export function FrettaApp() {
               name={name}
               onSelect={setSelected}
               onExplore={() => nav("inicio")}
-              schedule={schedule}
+              schedule={(f) => scheduleLabel(f.schedule)}
             />
           ) : (
             <FreightListView
@@ -401,9 +626,10 @@ export function FrettaApp() {
               setFilter={setFilter}
               setSelected={setSelected}
               subscription={subscription}
-              schedule={schedule}
+              schedule={(f) => scheduleLabel(f.schedule)}
             />
           )}
+          <InstallApp showControls={tab === "perfil" && !selected} />
         </main>
         <footer>
           FRETTA © 2026 · Conectando pessoas, movimentando histórias.
@@ -416,104 +642,17 @@ export function FrettaApp() {
           onSubmit={createRequest}
         />
       )}
-      {modal && modal !== "pedido" && (
-        <div className="overlay" onClick={() => setModal("")}>
-          <section
-            className="dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="section-head">
-              <h2 id="modal-title">
-                {modal === "pedido"
-                  ? "Vamos planejar seu frete"
-                  : modal === "proposta"
-                    ? "Sua proposta"
-                    : "Notificações"}
-              </h2>
-              <button
-                autoFocus
-                aria-label="Fechar"
-                onClick={() => setModal("")}
-              >
-                <X />
-              </button>
-            </div>
-            {error && (
-              <p role="alert" className="alert">
-                {error}
-              </p>
-            )}
-            {modal === "proposta" ? (
-              <form onSubmit={propose}>
-                <label>
-                  Seu valor em reais
-                  <input
-                    name="price"
-                    type="number"
-                    min="0.01"
-                    max="1000000"
-                    step="0.01"
-                    required
-                    placeholder="0,00"
-                  />
-                </label>
-                <p className="muted">
-                  Defina livremente quanto deseja cobrar pelo serviço.
-                </p>
-                <label>
-                  Data e horário disponíveis
-                  <input
-                    name="date"
-                    type="datetime-local"
-                    required
-                    min={new Date().toISOString().slice(0, 16)}
-                  />
-                </label>
-                <label>
-                  Mensagem para o cliente
-                  <textarea
-                    name="message"
-                    maxLength={2000}
-                    placeholder="Conte como pode ajudar"
-                  />
-                </label>
-                <button className="primary">Enviar proposta</button>
-              </form>
-            ) : (
-              <>
-                <p className="muted">
-                  Atualizações calculadas a partir dos dados locais.
-                </p>
-                {store.freights
-                  .filter((f) => f.status === "ABERTO")
-                  .map((f) => (
-                    <div className="proposal" key={f.id}>
-                      <b>{f.title}</b>
-                      <p>
-                        {
-                          store.proposals.filter((p) => p.freightId === f.id)
-                            .length
-                        }{" "}
-                        propostas recebidas
-                      </p>
-                      <button
-                        className="card-link"
-                        onClick={() => {
-                          setSelected(f.id);
-                          setModal("");
-                        }}
-                      >
-                        Ver solicitação <ArrowRight size={16} />
-                      </button>
-                    </div>
-                  ))}
-              </>
-            )}
-          </section>
-        </div>
+      {modal === "proposta" && (
+        <ProposalFormDialog
+          proposal={own}
+          vehicles={store.vehicles || []}
+          onManageVehicles={() => {
+            setModal("");
+            nav("veiculos");
+          }}
+          onClose={() => setModal("")}
+          onSubmit={propose}
+        />
       )}
       <SuccessDialog
         open={success !== null}
@@ -522,8 +661,8 @@ export function FrettaApp() {
         }
         description={
           success === "request"
-            ? "Sua solicitação foi criada na demonstração. Agora você pode acompanhar as propostas recebidas."
-            : "Sua proposta foi registrada na demonstração. Acompanhe a resposta em Meus serviços."
+            ? "Agora você pode acompanhar as propostas recebidas."
+            : "Acompanhe a resposta em Meus serviços ou continue a conversa pelo chat."
         }
         onClose={() => setSuccess(null)}
       />

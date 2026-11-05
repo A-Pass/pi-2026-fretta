@@ -8,6 +8,7 @@ export type Schedule = {
 };
 export interface Freight {
   id: string;
+  clientName?: string;
   title: string;
   description: string;
   origin: string;
@@ -18,8 +19,30 @@ export interface Freight {
   photos: string[];
   acceptedProposalId?: string;
   reviews: Partial<Record<Role, number>>;
+  reviewComments?: Partial<Record<Role, string>>;
+  agreement?: Agreement;
+}
+export interface Vehicle {
+  id: string;
+  category: string;
+  model: string;
+  plate: string;
+  capacityKg?: number;
+  description: string;
+}
+export interface Agreement {
+  proposalId: string;
+  offerId: string;
+  driver: string;
+  driverId?: string;
+  priceCents: number;
+  vehicle: string;
+  availableAt: string;
+  message: string;
+  acceptedAt: string;
 }
 export interface Proposal {
+  vehicleId?: string;
   offers?: ProposalOffer[];
   driverId?: string;
   id: string;
@@ -33,6 +56,7 @@ export interface Proposal {
   status: "PENDENTE" | "ACEITA" | "ENCERRADA";
 }
 export interface ProposalOffer {
+  vehicleId?: string;
   id: string;
   vehicle: string;
   priceCents: number;
@@ -49,7 +73,36 @@ export interface Message {
   text: string;
   createdAt: string;
 }
+export interface AppNotification {
+  id: string;
+  role: Role;
+  title: string;
+  body: string;
+  createdAt: string;
+  read: boolean;
+  freightId: string;
+  proposalId?: string;
+}
+export interface DriverRegistration {
+  mode: "demo";
+  status: "EM_ANALISE" | "AJUSTES_SOLICITADOS" | "APROVADO";
+  fullName: string;
+  personType: "pf" | "pj";
+  cpfMasked: string;
+  cnpjMasked?: string;
+  companyName?: string;
+  license: { numberMasked: string; category: string; expiresOn: string };
+  documentsSubmitted: boolean;
+  submittedAt: string;
+  reviewedAt?: string;
+  feedback?: string;
+}
 export interface Store {
+  driverRegistration?: DriverRegistration;
+  vehicles?: Vehicle[];
+  profile?: { name: string; photo: string };
+  subscriptionActive?: boolean;
+  notifications?: AppNotification[];
   operatingArea?: OperatingArea;
   addresses?: SavedAddress[];
   freightAddresses?: Record<string, { pickup: Address; delivery: Address }>;

@@ -8,9 +8,12 @@ type Props = {
 };
 export function SuccessDialog({ open, title, description, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const confirmButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (open) dialog.current?.showModal();
-    else dialog.current?.close();
+    if (open) {
+      dialog.current?.showModal();
+      confirmButton.current?.focus();
+    } else dialog.current?.close();
   }, [open]);
   return (
     <dialog
@@ -36,7 +39,12 @@ export function SuccessDialog({ open, title, description, onClose }: Props) {
       <span className="success-eyebrow">TUDO CERTO!</span>
       <h2 id="success-title">{title}</h2>
       <p id="success-description">{description}</p>
-      <button autoFocus className="success-button" onClick={onClose}>
+      <button
+        ref={confirmButton}
+        autoFocus
+        className="success-button"
+        onClick={onClose}
+      >
         Entendi
       </button>
     </dialog>
