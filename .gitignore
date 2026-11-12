@@ -4,3 +4,9 @@ out/
 .env*
 !.env.example
 *.tsbuildinfo
+
+# Prisma Client gerado automaticamente
+/app/src/generated/prisma/
+
+# Arquivo auxiliar do Better Auth
+/app/prisma/auth-generated.prisma

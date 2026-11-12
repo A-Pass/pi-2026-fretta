@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String     @id
+  name          String
+  email         String
+  emailVerified Boolean    @default(false)
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  cliente       Cliente?
+  motorista     Motorista?
+  pessoa        Pessoa?
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Cliente {
+  userId    String   @id
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum StatusCadastroMotorista {
+  EM_ANALISE
+  AJUSTES_SOLICITADOS
+  APROVADO
+}
+
+model Motorista {
+  userId       String   @id
+  disponivel   Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  veiculos Veiculo[]
+  cadastro CadastroMotorista?
+}
+
+model Pessoa {
+  userId       String    @id
+  nomeCompleto String
+  cpf          String?   @unique
+  celular      String?
+  nascimento   DateTime? @db.Date
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Veiculo {
+  id           String  @id @default(uuid())
+  motoristaId  String
+  categoria    String
+  modelo       String
+  placa        String  @unique
+  capacidadeKg Float?
+  descricao    String  @default("")
+  ativo        Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  motorista Motorista           @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
+  cadastros CadastroMotorista[]
+
+  @@unique([id, motoristaId])
+  @@index([motoristaId])
+}
+
+enum TipoPessoa {
+  PF
+  PJ
+}
+
+model CadastroMotorista {
+  id             String                  @id @default(uuid())
+  motoristaId    String                  @unique
+  tipoPessoa     TipoPessoa
+  cnpj           String?                 @unique
+  razaoSocial    String?
+  cnhNumero      String
+  cnhCategoria   String
+  cnhValidade    DateTime                @db.Date
+  fotoPerfilId   String
+  documentoCnhId String
+  veiculoId      String
+  status         StatusCadastroMotorista @default(EM_ANALISE)
+  motivoAjuste   String?
+  enviadoEm      DateTime                @default(now())
+  analisadoEm    DateTime?
+  atualizadoEm   DateTime                @updatedAt
+
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
+  veiculo   Veiculo   @relation(fields: [veiculoId, motoristaId], references: [id, motoristaId], onDelete: Restrict)
+}
