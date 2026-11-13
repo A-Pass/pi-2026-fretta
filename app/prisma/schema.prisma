@@ -8,18 +8,19 @@ datasource db {
 }
 
 model User {
-  id            String     @id
+  id            String       @id
   name          String
   email         String
-  emailVerified Boolean    @default(false)
+  emailVerified Boolean      @default(false)
   image         String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
   sessions      Session[]
   accounts      Account[]
   cliente       Cliente?
   motorista     Motorista?
   pessoa        Pessoa?
+  papel         PapelSistema @default(USUARIO)
 
   @@unique([email])
   @@map("user")
@@ -154,4 +155,9 @@ model CadastroMotorista {
 
   motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
   veiculo   Veiculo   @relation(fields: [veiculoId, motoristaId], references: [id, motoristaId], onDelete: Restrict)
+}
+
+enum PapelSistema {
+  USUARIO
+  ADMIN
 }

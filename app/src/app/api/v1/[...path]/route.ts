@@ -1,6 +1,59 @@
 import { prisma } from "@/server/db/prisma";
 import { auth } from "@/server/auth/auth";
 import type { NextRequest } from "next/server";
+import {
+  validarCadastroMotorista,
+  type CadastroMotoristaInput,
+} from "@/server/modules/identity/validators/driver-registration";
+
+import { verificarVeiculoMotorista } from "@/server/modules/identity/services/driver-registration";
+import { verificarAdministrador } from "@/server/auth/permissions";
+import { podeAlterarStatusCadastro } from "@/server/modules/identity/services/registration-status";
+
+
+function extrairDadosCadastro(
+  body: unknown,
+): CadastroMotoristaInput | null {
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    Array.isArray(body)
+  ) {
+    return null;
+  }
+
+  const dados = body as Record<string, unknown>;
+
+  if (
+    typeof dados.tipoPessoa !== "string" ||
+    typeof dados.nomeCompleto !== "string" ||
+    typeof dados.cpf !== "string" ||
+    typeof dados.cnhNumero !== "string" ||
+    typeof dados.cnhCategoria !== "string" ||
+    typeof dados.cnhValidade !== "string" ||
+    typeof dados.veiculoId !== "string" ||
+    (dados.cnpj !== undefined &&
+      typeof dados.cnpj !== "string") ||
+    (dados.razaoSocial !== undefined &&
+      typeof dados.razaoSocial !== "string")
+  ) {
+    return null;
+  }
+
+  return {
+    tipoPessoa: dados.tipoPessoa as "PF" | "PJ",
+    nomeCompleto: dados.nomeCompleto,
+    cpf: dados.cpf,
+    cnpj: dados.cnpj as string | undefined,
+    razaoSocial: dados.razaoSocial as string | undefined,
+    cnhNumero: dados.cnhNumero,
+    cnhCategoria: dados.cnhCategoria,
+    cnhValidade: dados.cnhValidade,
+    veiculoId: dados.veiculoId,
+  };
+}
+
+
 
 // ==========================================
 // GET - CONSULTAS
@@ -188,6 +241,40 @@ if (path === "/api/v1/vehicles") {
   });
 }
 
+
+if (path === "/api/v1/admin/me") {
+  const session = await auth.api.getSession({
+    headers: request.headers,
+  });
+
+  if (!session) {
+    return Response.json(
+      {
+        code: "UNAUTHORIZED",
+        message: "Você precisa estar autenticado.",
+      },
+      { status: 401 },
+    );
+  }
+
+  const administrador = await verificarAdministrador(
+    session.user.id,
+  );
+
+  if (!administrador) {
+    return Response.json(
+      {
+        code: "FORBIDDEN",
+        message: "Acesso permitido apenas para administradores.",
+      },
+      { status: 403 },
+    );
+  }
+
+  return Response.json({
+    administrador: true,
+  });
+}
 
   // Outras rotas GET ainda não implementadas
   return Response.json(
@@ -426,6 +513,127 @@ if (path === "/api/v1/vehicles") {
 }
 
 
+if (path === "/api/v1/driver/registration") {
+  // 1. Verificar a autenticação
+  const session = await auth.api.getSession({
+    headers: request.headers,
+  });
+
+  if (!session) {
+    return Response.json(
+      {
+        code: "UNAUTHORIZED",
+        message: "Você precisa estar autenticado.",
+      },
+      { status: 401 },
+    );
+  }
+
+  // 2. Verificar o perfil de motorista
+  const motorista = await prisma.motorista.findUnique({
+    where: {
+      userId: session.user.id,
+    },
+    include: {
+      cadastro: {
+        select: {
+          status: true,
+        },
+      },
+    },
+  });
+
+  if (!motorista) {
+    return Response.json(
+      {
+        code: "FORBIDDEN",
+        message: "É necessário possuir um perfil de motorista.",
+      },
+      { status: 403 },
+    );
+  }
+
+  // 3. Impedir novo envio de cadastro aprovado
+  if (motorista.cadastro?.status === "APROVADO") {
+    return Response.json(
+      {
+        code: "REGISTRATION_ALREADY_APPROVED",
+        message: "O cadastro do motorista já está aprovado.",
+      },
+      { status: 409 },
+    );
+  }
+
+  // 4. Ler o JSON enviado
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json(
+      {
+        code: "INVALID_JSON",
+        message: "O corpo da requisição deve conter um JSON válido.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // 5. Verificar os tipos dos campos
+  const dados = extrairDadosCadastro(body);
+
+  if (!dados) {
+    return Response.json(
+      {
+        code: "INVALID_INPUT",
+        message: "Os dados do cadastro são inválidos ou incompletos.",
+      },
+      { status: 422 },
+    );
+  }
+
+  // 6. Validar CPF, CNPJ e CNH
+  const erros = validarCadastroMotorista(dados);
+
+  if (erros.length > 0) {
+    return Response.json(
+      {
+        code: "VALIDATION_ERROR",
+        message: erros.join(" "),
+      },
+      { status: 422 },
+    );
+  }
+
+  // 7. Verificar se o veículo pertence ao motorista
+  const veiculoValido = await verificarVeiculoMotorista(
+    session.user.id,
+    dados.veiculoId,
+  );
+
+  if (!veiculoValido) {
+    return Response.json(
+      {
+        code: "INVALID_VEHICLE",
+        message: "Veículo não encontrado ou não autorizado.",
+      },
+      { status: 422 },
+    );
+  }
+
+  // 8. Aguardar integração com armazenamento privado
+  return Response.json(
+    {
+      code: "DOCUMENT_UPLOAD_NOT_CONFIGURED",
+      message:
+        "Dados validados. O envio do cadastro depende da integração com o armazenamento privado de documentos.",
+    },
+    { status: 501 },
+  );
+}
+
+
+
   // Outras rotas POST ainda não implementadas
   return Response.json(
     {
@@ -440,7 +648,172 @@ if (path === "/api/v1/vehicles") {
 // PATCH E DELETE - AINDA NÃO IMPLEMENTADOS
 // ==========================================
 
-export async function PATCH() {
+
+export async function PATCH(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  if (path === "/api/v1/admin/driver/registration") {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (!session) {
+      return Response.json(
+        {
+          code: "UNAUTHORIZED",
+          message: "Você precisa estar autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
+    const administrador = await verificarAdministrador(
+      session.user.id,
+    );
+
+    if (!administrador) {
+      return Response.json(
+        {
+          code: "FORBIDDEN",
+          message: "Acesso permitido apenas para administradores.",
+        },
+        { status: 403 },
+      );
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json(
+        {
+          code: "INVALID_JSON",
+          message: "Informe um JSON válido.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body)
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Dados inválidos.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const dados = body as Record<string, unknown>;
+
+    const motoristaId = dados.motoristaId;
+    const novoStatus = dados.status;
+    const motivoAjuste = dados.motivoAjuste;
+
+    if (
+      typeof motoristaId !== "string" ||
+      !motoristaId.trim() ||
+      (novoStatus !== "APROVADO" &&
+        novoStatus !== "AJUSTES_SOLICITADOS") ||
+      (motivoAjuste !== undefined &&
+        typeof motivoAjuste !== "string")
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Motorista ou status inválido.",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (
+      novoStatus === "AJUSTES_SOLICITADOS" &&
+      (typeof motivoAjuste !== "string" ||
+        !motivoAjuste.trim())
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Informe o motivo dos ajustes.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const cadastro = await prisma.cadastroMotorista.findUnique({
+      where: {
+        motoristaId,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!cadastro) {
+      return Response.json(
+        {
+          code: "REGISTRATION_NOT_FOUND",
+          message: "Cadastro de motorista não encontrado.",
+        },
+        { status: 404 },
+      );
+    }
+
+    if (
+      !podeAlterarStatusCadastro(
+        cadastro.status,
+        novoStatus,
+        "ADMIN",
+      )
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_STATUS_TRANSITION",
+          message: "Transição de status não permitida.",
+        },
+        { status: 409 },
+      );
+    }
+
+    // Atualização condicional para evitar aprovações concorrentes
+    const resultado = await prisma.cadastroMotorista.updateMany({
+      where: {
+        id: cadastro.id,
+        status: cadastro.status,
+      },
+      data: {
+        status: novoStatus,
+        motivoAjuste:
+          novoStatus === "AJUSTES_SOLICITADOS"
+            ? motivoAjuste!.trim()
+            : null,
+        analisadoEm: new Date(),
+      },
+    });
+
+    if (resultado.count !== 1) {
+      return Response.json(
+        {
+          code: "REGISTRATION_CONFLICT",
+          message: "O cadastro foi alterado por outra operação.",
+        },
+        { status: 409 },
+      );
+    }
+
+    return Response.json({
+      message: "Situação cadastral atualizada com sucesso.",
+      status: novoStatus,
+    });
+  }
+
   return Response.json(
     {
       code: "NOT_IMPLEMENTED",
@@ -449,6 +822,7 @@ export async function PATCH() {
     { status: 501 },
   );
 }
+
 
 export async function DELETE() {
   return Response.json(

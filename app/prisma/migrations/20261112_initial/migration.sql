@@ -190,3 +190,4 @@ ALTER TABLE "CadastroMotorista" ADD CONSTRAINT "CadastroMotorista_motoristaId_fk
 
 -- AddForeignKey
 ALTER TABLE "CadastroMotorista" ADD CONSTRAINT "CadastroMotorista_veiculoId_motoristaId_fkey" FOREIGN KEY ("veiculoId", "motoristaId") REFERENCES "Veiculo"("id", "motoristaId") ON DELETE RESTRICT ON UPDATE CASCADE;
+
