@@ -9,7 +9,7 @@ import {
 import { verificarVeiculoMotorista } from "@/server/modules/identity/services/driver-registration";
 import { verificarAdministrador } from "@/server/auth/permissions";
 import { podeAlterarStatusCadastro } from "@/server/modules/identity/services/registration-status";
-
+import { Prisma } from "@/generated/prisma/client";
 
 function extrairDadosCadastro(
   body: unknown,
@@ -652,6 +652,250 @@ if (path === "/api/v1/driver/registration") {
 export async function PATCH(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
+    const vehicleMatch = path.match(
+    /^\/api\/v1\/vehicles\/([^/]+)$/,
+  );
+
+  if (vehicleMatch) {
+    const vehicleId = vehicleMatch[1];
+
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (!session) {
+      return Response.json(
+        {
+          code: "UNAUTHORIZED",
+          message: "Você precisa estar autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
+    const veiculo = await prisma.veiculo.findFirst({
+  where: {
+    id: vehicleId,
+    motoristaId: session.user.id,
+    ativo: true,
+  },
+});
+
+    if (!veiculo) {
+      return Response.json(
+        {
+          code: "VEHICLE_NOT_FOUND",
+          message: "Veículo não encontrado.",
+        },
+        { status: 404 },
+      );
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json(
+        {
+          code: "INVALID_JSON",
+          message: "Informe um JSON válido.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body)
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Dados do veículo inválidos.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const dados = body as Record<string, unknown>;
+
+    const alteracoes: {
+      categoria?: string;
+      modelo?: string;
+      placa?: string;
+      capacidadeKg?: number | null;
+      descricao?: string;
+    } = {};
+
+    const camposPermitidos = [
+      "category",
+      "model",
+      "plate",
+      "capacityKg",
+      "description",
+    ];
+
+    if (
+      Object.keys(dados).some(
+        (campo) => !camposPermitidos.includes(campo),
+      )
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "O corpo contém campos não permitidos.",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (dados.category !== undefined) {
+      if (
+        typeof dados.category !== "string" ||
+        !dados.category.trim()
+      ) {
+        return Response.json(
+          { code: "INVALID_INPUT", message: "Categoria inválida." },
+          { status: 422 },
+        );
+      }
+
+      alteracoes.categoria = dados.category.trim();
+    }
+
+    if (dados.model !== undefined) {
+      if (
+        typeof dados.model !== "string" ||
+        !dados.model.trim()
+      ) {
+        return Response.json(
+          { code: "INVALID_INPUT", message: "Modelo inválido." },
+          { status: 422 },
+        );
+      }
+
+      alteracoes.modelo = dados.model.trim();
+    }
+
+    if (dados.plate !== undefined) {
+      if (
+        typeof dados.plate !== "string" ||
+        !/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(
+          dados.plate.trim().toUpperCase(),
+        )
+      ) {
+        return Response.json(
+          { code: "INVALID_INPUT", message: "Placa inválida." },
+          { status: 422 },
+        );
+      }
+
+      alteracoes.placa = dados.plate.trim().toUpperCase();
+    }
+
+    if (dados.capacityKg !== undefined) {
+      if (
+        dados.capacityKg !== null &&
+        (typeof dados.capacityKg !== "number" ||
+          !Number.isFinite(dados.capacityKg) ||
+          dados.capacityKg <= 0)
+      ) {
+        return Response.json(
+          { code: "INVALID_INPUT", message: "Capacidade inválida." },
+          { status: 422 },
+        );
+      }
+
+      alteracoes.capacidadeKg = dados.capacityKg;
+    }
+
+    if (dados.description !== undefined) {
+      if (typeof dados.description !== "string") {
+        return Response.json(
+          { code: "INVALID_INPUT", message: "Descrição inválida." },
+          { status: 422 },
+        );
+      }
+
+      alteracoes.descricao = dados.description.trim();
+    }
+
+    if (Object.keys(alteracoes).length === 0) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Informe pelo menos um campo para atualizar.",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (alteracoes.placa && alteracoes.placa !== veiculo.placa) {
+      const placaExistente = await prisma.veiculo.findUnique({
+        where: { placa: alteracoes.placa },
+        select: { id: true },
+      });
+
+      if (placaExistente) {
+        return Response.json(
+          {
+            code: "VEHICLE_ALREADY_EXISTS",
+            message: "Já existe um veículo com essa placa.",
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    try {
+      const atualizado = await prisma.veiculo.update({
+        where: {
+          id: veiculo.id,
+          motoristaId: session.user.id,
+          ativo: true,
+        },
+        data: alteracoes,
+      });
+
+      return Response.json({
+        id: atualizado.id,
+        category: atualizado.categoria,
+        model: atualizado.modelo,
+        plate: atualizado.placa,
+        capacityKg: atualizado.capacidadeKg,
+        description: atualizado.descricao,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === "P2002") {
+          return Response.json(
+            {
+              code: "VEHICLE_ALREADY_EXISTS",
+              message: "Já existe um veículo com essa placa.",
+            },
+            { status: 409 },
+          );
+        }
+
+        if (error.code === "P2025") {
+          return Response.json(
+            {
+              code: "VEHICLE_NOT_FOUND",
+              message: "Veículo não encontrado ou desativado.",
+            },
+            { status: 404 },
+          );
+        }
+      }
+
+      throw error;
+    }
+
+
+  }
+
   if (path === "/api/v1/admin/driver/registration") {
     const session = await auth.api.getSession({
       headers: request.headers,
@@ -824,7 +1068,84 @@ export async function PATCH(request: NextRequest) {
 }
 
 
-export async function DELETE() {
+
+export async function DELETE(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  const vehicleMatch = path.match(
+    /^\/api\/v1\/vehicles\/([^/]+)$/,
+  );
+
+  if (vehicleMatch) {
+    const vehicleId = vehicleMatch[1];
+
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (!session) {
+      return Response.json(
+        {
+          code: "UNAUTHORIZED",
+          message: "Você precisa estar autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
+
+    const cadastroVinculado =
+      await prisma.cadastroMotorista.findFirst({
+        where: {
+          motoristaId: session.user.id,
+          veiculoId: vehicleId,
+          status: {
+            in: ["EM_ANALISE", "APROVADO"],
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+    if (cadastroVinculado) {
+      return Response.json(
+        {
+          code: "VEHICLE_IN_USE",
+          message:
+            "Este veículo está vinculado a um cadastro de motorista em análise ou aprovado.",
+        },
+        { status: 409 },
+      );
+    }
+
+
+    const resultado = await prisma.veiculo.updateMany({
+      where: {
+        id: vehicleId,
+        motoristaId: session.user.id,
+        ativo: true,
+      },
+      data: {
+        ativo: false,
+      },
+    });
+
+    if (resultado.count === 0) {
+      return Response.json(
+        {
+          code: "VEHICLE_NOT_FOUND",
+          message: "Veículo não encontrado ou já desativado.",
+        },
+        { status: 404 },
+      );
+    }
+
+    return Response.json({
+      message: "Veículo desativado com sucesso.",
+    });
+  }
+
   return Response.json(
     {
       code: "NOT_IMPLEMENTED",
