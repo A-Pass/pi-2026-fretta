@@ -8,19 +8,34 @@ datasource db {
 }
 
 model User {
-  id            String       @id
+  id            String   @id
   name          String
   email         String
-  emailVerified Boolean      @default(false)
+  emailVerified Boolean  @default(false)
   image         String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  cliente       Cliente?
-  motorista     Motorista?
-  pessoa        Pessoa?
-  papel         PapelSistema @default(USUARIO)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  papel PapelSistema @default(USUARIO)
+
+  // Autenticação
+  sessions Session[]
+  accounts Account[]
+
+  // Perfis
+  cliente   Cliente?
+  motorista Motorista?
+  pessoa    Pessoa?
+
+  // Negociação
+  ofertasCriadas Oferta[]
+
+  // Comunicação
+  mensagensEnviadas Mensagem[]
+
+  // Avaliações
+  avaliacoesFeitas    Avaliacao[] @relation("AvaliacaoAutor")
+  avaliacoesRecebidas Avaliacao[] @relation("AvaliacaoAvaliado")
 
   @@unique([email])
   @@map("user")
@@ -78,7 +93,9 @@ model Cliente {
   userId    String   @id
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enderecos Endereco[]
+  fretes    Frete[]
 }
 
 enum StatusCadastroMotorista {
@@ -88,10 +105,12 @@ enum StatusCadastroMotorista {
 }
 
 model Motorista {
-  userId       String   @id
-  disponivel   Boolean  @default(true)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  userId       String              @id
+  disponivel   Boolean             @default(true)
+  criadoEm     DateTime            @default(now())
+  atualizadoEm DateTime            @updatedAt
+  propostas    Proposta[]
+  assinaturas  VinculoAssinatura[]
 
   user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   veiculos Veiculo[]
@@ -111,14 +130,15 @@ model Pessoa {
 }
 
 model Veiculo {
-  id           String  @id @default(uuid())
+  id           String   @id @default(uuid())
   motoristaId  String
   categoria    String
   modelo       String
-  placa        String  @unique
+  placa        String   @unique
   capacidadeKg Float?
-  descricao    String  @default("")
-  ativo        Boolean @default(true)
+  descricao    String   @default("")
+  ativo        Boolean  @default(true)
+  ofertas      Oferta[]
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -160,4 +180,223 @@ model CadastroMotorista {
 enum PapelSistema {
   USUARIO
   ADMIN
+}
+
+model Endereco {
+  id          String  @id @default(uuid())
+  clienteId   String
+  nome        String
+  cep         String?
+  logradouro  String
+  numero      String
+  complemento String?
+  bairro      String
+  cidade      String
+  uf          String
+  referencia  String?
+  latitude    Decimal @db.Decimal(10, 7)
+  longitude   Decimal @db.Decimal(10, 7)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  cliente       Cliente @relation(fields: [clienteId], references: [userId], onDelete: Cascade)
+  fretesOrigem  Frete[] @relation("FreteOrigem")
+  fretesDestino Frete[] @relation("FreteDestino")
+
+  @@index([clienteId])
+}
+
+enum StatusFrete {
+  ABERTO
+  AGENDADO
+  EM_TRANSPORTE
+  CONCLUIDO
+  CANCELADO
+}
+
+enum TipoAgendamento {
+  FIXA
+  INTERVALO
+  COMBINAR
+}
+
+model Frete {
+  id               String      @id @default(uuid())
+  clienteId        String
+  titulo           String
+  descricao        String?
+  status           StatusFrete @default(ABERTO)
+  propostaAceitaId String?     @unique
+
+  propostaAceita Proposta? @relation("PropostaAceita", fields: [propostaAceitaId, id], references: [id, freteId], onDelete: Restrict)
+
+  // Veículo necessário
+  categoriaVeiculo String
+
+  // Agendamento da retirada
+  tipoAgendamento TipoAgendamento @default(COMBINAR)
+  dataInicio      DateTime?       @db.Date
+  dataFim         DateTime?       @db.Date
+
+  // Referências opcionais aos endereços salvos
+  origemId  String?
+  destinoId String?
+  origem    Endereco? @relation("FreteOrigem", fields: [origemId], references: [id], onDelete: SetNull)
+  destino   Endereco? @relation("FreteDestino", fields: [destinoId], references: [id], onDelete: SetNull)
+
+  // Cópias dos endereços no momento da solicitação
+  origemSnapshot  Json
+  destinoSnapshot Json
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Cliente responsável pelo frete
+  cliente Cliente @relation(fields: [clienteId], references: [userId], onDelete: Restrict)
+
+  // Relacionamentos
+  fotos      FreteFoto[]
+  propostas  Proposta[]
+  avaliacoes Avaliacao[]
+
+  @@unique([propostaAceitaId, id])
+  @@index([clienteId])
+  @@index([status])
+  @@index([origemId])
+  @@index([destinoId])
+}
+
+model FreteFoto {
+  id        String   @id @default(uuid())
+  freteId   String
+  arquivoId String
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
+
+  frete Frete @relation(fields: [freteId], references: [id], onDelete: Cascade)
+
+  @@index([freteId])
+}
+
+enum StatusProposta {
+  PENDENTE
+  ACEITA
+  RECUSADA
+  CANCELADA
+}
+
+model Proposta {
+  id              String         @id @default(uuid())
+  freteId         String
+  motoristaId     String
+  status          StatusProposta @default(PENDENTE)
+  ofertas         Oferta[]
+  conversa        Conversa?
+  freteQueAceitou Frete?         @relation("PropostaAceita")
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  frete     Frete     @relation(fields: [freteId], references: [id], onDelete: Restrict)
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Restrict)
+
+  @@unique([freteId, motoristaId])
+  @@unique([id, freteId])
+  @@index([motoristaId])
+  @@index([status])
+}
+
+enum StatusOferta {
+  PENDENTE
+  ACEITA
+  RECUSADA
+  SUBSTITUIDA
+}
+
+model Oferta {
+  id         String       @id @default(uuid())
+  propostaId String
+  autorId    String
+  valorCents Int
+  veiculoId  String?
+  retiradaEm DateTime?
+  entregaEm  DateTime?
+  comentario String?
+  status     StatusOferta @default(PENDENTE)
+
+  criadoEm DateTime @default(now())
+
+  proposta Proposta @relation(fields: [propostaId], references: [id], onDelete: Restrict)
+  autor    User     @relation(fields: [autorId], references: [id], onDelete: Restrict)
+  veiculo  Veiculo? @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+
+  @@index([propostaId, criadoEm])
+  @@index([autorId])
+  @@index([veiculoId])
+}
+
+model Conversa {
+  id           String   @id @default(uuid())
+  propostaId   String   @unique
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  proposta  Proposta   @relation(fields: [propostaId], references: [id], onDelete: Restrict)
+  mensagens Mensagem[]
+}
+
+model Mensagem {
+  id         String   @id @default(uuid())
+  conversaId String
+  autorId    String
+  texto      String   @db.VarChar(2000)
+  criadoEm   DateTime @default(now())
+
+  conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Restrict)
+  autor    User     @relation(fields: [autorId], references: [id], onDelete: Restrict)
+
+  @@index([conversaId, criadoEm])
+  @@index([autorId])
+}
+
+model Avaliacao {
+  id         String   @id @default(uuid())
+  freteId    String
+  autorId    String
+  avaliadoId String
+  nota       Int
+  comentario String?
+  criadoEm   DateTime @default(now())
+
+  frete    Frete @relation(fields: [freteId], references: [id], onDelete: Restrict)
+  autor    User  @relation("AvaliacaoAutor", fields: [autorId], references: [id], onDelete: Restrict)
+  avaliado User  @relation("AvaliacaoAvaliado", fields: [avaliadoId], references: [id], onDelete: Restrict)
+
+  @@unique([freteId, autorId])
+  @@index([avaliadoId])
+}
+
+enum StatusAssinatura {
+  PENDENTE
+  ATIVA
+  CANCELADA
+  EXPIRADA
+}
+
+model VinculoAssinatura {
+  id          String           @id @default(uuid())
+  motoristaId String
+  status      StatusAssinatura @default(PENDENTE)
+
+  inicioEm DateTime?
+  fimEm    DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Restrict)
+
+  @@index([motoristaId])
+  @@index([status])
 }
