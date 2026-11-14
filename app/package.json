@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts tests/*.test.tsx"
-  },
+    "test": "tsx --test tests/*.test.ts tests/*.test.tsx",
+    "seed": "tsx prisma/seed.ts"
+  }
+,
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.7.21",
     "@prisma/adapter-pg": "^7.10.1",
