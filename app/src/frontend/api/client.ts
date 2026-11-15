@@ -23,7 +23,22 @@ export const api: FrettaApi = {
         !Array.isArray(s.messages)
       )
         throw Error();
-      const normalized = withDemoRequests(s as Store);
+      const corrected: Store = s;
+      const name = (value: string) => value.replace(/\bClayton\b/gi, "Cleiton");
+      if (corrected.profile)
+        corrected.profile.name = name(corrected.profile.name);
+      if (corrected.driverRegistration)
+        corrected.driverRegistration.fullName = name(
+          corrected.driverRegistration.fullName,
+        );
+      corrected.proposals.forEach((p) => {
+        p.driver = name(p.driver);
+      });
+      corrected.freights.forEach((f) => {
+        if (f.clientName) f.clientName = name(f.clientName);
+        if (f.agreement) f.agreement.driver = name(f.agreement.driver);
+      });
+      const normalized = withDemoRequests(corrected);
       return s.notifications
         ? normalized
         : withNotifications(

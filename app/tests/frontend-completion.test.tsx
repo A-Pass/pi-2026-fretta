@@ -147,7 +147,7 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
   );
   const accepted = acceptProposal(s, "p1");
   assert.equal(
-    html(accepted, "cliente", "Clayton").includes("Rua Privada de Teste"),
+    html(accepted, "cliente", "Cleiton").includes("Rua Privada de Teste"),
     true,
   );
   assert.equal(

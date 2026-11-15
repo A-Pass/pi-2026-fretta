@@ -2,7 +2,7 @@
 
 | Frente                    | Entrega e aceite                                                                           |
 | ------------------------- | ------------------------------------------------------------------------------------------ |
-| Clayton — front-end       | Telas, componentes, formulários e integração contratual; verificar mobile e acessibilidade |
+| Cleiton — front-end       | Telas, componentes, formulários e integração contratual; verificar mobile e acessibilidade |
 | Identidade e perfis       | Sessão, cadastro, recuperação, motorista/veículos; testar isolamento de duas contas        |
 | Fretes e negociação       | Pedidos, propostas, aceite e estados; teste concorrente com apenas uma contratação         |
 | Comunicação e integrações | Chat, notificações, arquivos e assinatura; autorização e webhooks idempotentes             |

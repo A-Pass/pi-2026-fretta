@@ -73,7 +73,7 @@ export function FrettaApp() {
   const latest = useRef<Store | null>(null),
     saving = useRef(false),
     main = useRef<HTMLElement>(null);
-  const name = store?.profile?.name || "Clayton",
+  const name = store?.profile?.name || "Cleiton",
     profilePhoto = store?.profile?.photo || "",
     subscription = store?.subscriptionActive ?? true;
   useEffect(() => {

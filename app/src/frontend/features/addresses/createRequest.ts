@@ -13,7 +13,7 @@ export function createRequest(
   const id = makeId();
   const next: Freight = {
     id,
-    clientName: store.profile?.name || "Clayton",
+    clientName: store.profile?.name || "Cleiton",
     title: draft.title.trim(),
     description: draft.description.trim(),
     origin: publicRegion(draft.pickup),
