@@ -91,10 +91,16 @@ export async function GET(request: NextRequest) {
           },
         },
         motorista: {
-          select: {
-            userId: true,
-          },
-        },
+  select: {
+    userId: true,
+    cadastro: {
+      select: {
+        status: true,
+        motivoAjuste: true,
+      },
+    },
+  },
+},
       },
     });
 
@@ -107,6 +113,10 @@ export async function GET(request: NextRequest) {
         { status: 404 },
       );
     }
+    const statusCadastro =
+      user.motorista === null
+        ? null
+        : user.motorista.cadastro?.status ?? "NAO_ENVIADO";
 
     return Response.json({
       id: session.user.id,
@@ -114,11 +124,25 @@ export async function GET(request: NextRequest) {
       email: session.user.email,
       image: session.user.image,
       emailVerified: session.user.emailVerified,
+
       roles: {
         cliente: user.cliente !== null,
         motorista: user.motorista !== null,
       },
+
+      driverRegistration: {
+        status: statusCadastro,
+        cadastroCompleto:
+          user.motorista?.cadastro !== null &&
+          user.motorista?.cadastro !== undefined,
+        precisaCompletarCadastro:
+          user.motorista !== null &&
+          statusCadastro !== "APROVADO",
+        motivoAjuste:
+          user.motorista?.cadastro?.motivoAjuste ?? null,
+      },
     });
+
   }
 
   // 2. Consultar cadastro do motorista
@@ -235,7 +259,7 @@ if (path === "/api/v1/vehicles") {
       category: veiculo.categoria,
       model: veiculo.modelo,
       plate: veiculo.placa,
-      capacityKg: veiculo.capacidadeKg,
+      capacityKg: veiculo.capacidadeKg ?? undefined,
       description: veiculo.descricao,
     })),
   });
@@ -864,7 +888,7 @@ export async function PATCH(request: NextRequest) {
         category: atualizado.categoria,
         model: atualizado.modelo,
         plate: atualizado.placa,
-        capacityKg: atualizado.capacidadeKg,
+        capacityKg: atualizado.capacidadeKg ?? undefined,
         description: atualizado.descricao,
       });
     } catch (error) {
