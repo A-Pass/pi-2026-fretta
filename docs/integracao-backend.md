@@ -56,6 +56,48 @@ Retorna os dados do usuário autenticado, seus perfis habilitados e a situação
 
 **Observação:** ter perfil de motorista não significa que o cadastro documental foi aprovado.
 
+### PATCH /api/v1/me
+
+Atualiza o nome de exibição do usuário autenticado.
+
+**Autenticação:** obrigatória.
+
+**Exemplo de requisição:**
+
+```json
+{
+  "name": "Milena Brasil"
+}
+```
+
+**Exemplo de resposta (HTTP 200):**
+
+```json
+{
+  "id": "ID_DO_USUARIO",
+  "name": "Milena Brasil",
+  "email": "usuario@exemplo.com",
+  "image": null
+}
+```
+
+**Validações:**
+
+- O nome deve conter entre 2 e 100 caracteres.
+- Espaços no início e no fim são removidos.
+- Somente o campo `name` pode ser atualizado.
+- Não é permitido modificar `email`, `papel` ou outros campos protegidos.
+
+**Erros:**
+
+- HTTP 400: JSON inválido.
+- HTTP 401: usuário não autenticado.
+- HTTP 422: dados inválidos ou campos não permitidos.
+
+**Integração com o frontend:**
+
+Após salvar o nome, o frontend deve atualizar as informações exibidas no perfil do usuário.
+
 ## 3. Gerenciamento de veículos
 
 As rotas de veículos exigem autenticação e perfil de motorista.
