@@ -668,14 +668,95 @@ if (path === "/api/v1/driver/registration") {
   );
 }
 
-// ==========================================
-// PATCH E DELETE - AINDA NÃO IMPLEMENTADOS
-// ==========================================
-
-
 export async function PATCH(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  if (path === "/api/v1/me") {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
 
+    if (!session) {
+      return Response.json(
+        {
+          code: "UNAUTHORIZED",
+          message: "Você precisa estar autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json(
+        {
+          code: "INVALID_JSON",
+          message: "Informe um JSON válido.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body)
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Informe um objeto JSON válido.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const dados = body as Record<string, unknown>;
+
+    if (
+      Object.keys(dados).length !== 1 ||
+      typeof dados.name !== "string"
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Apenas o campo name pode ser atualizado.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const name = dados.name.trim();
+
+    if (name.length < 2 || name.length > 100) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "O nome deve conter entre 2 e 100 caracteres.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const usuario = await prisma.user.update({
+      where: {
+        id: session.user.id,
+      },
+      data: {
+        name,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+      },
+    });
+
+    return Response.json(usuario);
+  }
     const vehicleMatch = path.match(
     /^\/api\/v1\/vehicles\/([^/]+)$/,
   );
