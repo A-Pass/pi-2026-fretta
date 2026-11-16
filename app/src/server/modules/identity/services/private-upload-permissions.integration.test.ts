@@ -43,7 +43,18 @@ test("controla o acesso ao upload privado de documentos", async () => {
 
   const email = `upload-${randomUUID()}@fretta.invalid`;
   let usuarioId: string | undefined;
+  const requisicaoSemSessao = new NextRequest(
+  "http://localhost:3002/api/v1/driver/registration/uploads",
+  {
+    method: "POST",
+  },
+);
 
+const respostaSemSessao = await POST(requisicaoSemSessao);
+const dadosSemSessao = await respostaSemSessao.json();
+
+assert.equal(respostaSemSessao.status, 401);
+assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
   // Usuário sem sessão
   const semSessao = await verificarPermissaoUpload(new Headers());
 
@@ -85,7 +96,20 @@ test("controla o acesso ao upload privado de documentos", async () => {
     if (!semPerfil.autorizado) {
       assert.equal(semPerfil.status, 403);
     }
+    // Usuário autenticado sem perfil de motorista
+    const requisicaoSemPerfil = new NextRequest(
+    "http://localhost:3002/api/v1/driver/registration/uploads",
+    {
+        method: "POST",
+        headers,
+    },
+    );
 
+    const respostaSemPerfil = await POST(requisicaoSemPerfil);
+    const dadosSemPerfil = await respostaSemPerfil.json();
+
+    assert.equal(respostaSemPerfil.status, 403);
+    assert.equal(dadosSemPerfil.code, "FORBIDDEN");
     // Ativar perfil de motorista
     await prisma.motorista.create({
       data: {
@@ -118,11 +142,50 @@ assert.equal(dadosUpload.code, "UPLOAD_NOT_CONFIGURED");
 
 console.log("Motorista autenticado acessou a rota protegida - OK");
     console.log("Autorização do upload privado - OK");
-  } finally {
-    if (usuarioId) {
-      await prisma.user.deleteMany({
-        where: { id: usuarioId },
-      });
+    // Uma sessão não pode assumir a identidade de outro motorista.
+    const outroEmail = `outro-upload-${randomUUID()}@fretta.invalid`;
+    const outroCadastro = await authTeste.api.signUpEmail({
+    body: {
+        name: "Outro Motorista Fictício",
+        email: outroEmail,
+        password: "SenhaFicticia123!",
+    },
+    asResponse: true,
+    });
+
+    assert.equal(outroCadastro.status, 200);
+
+    const outrosDados = await outroCadastro.json();
+    const outroUsuarioId = outrosDados.user.id;
+
+    try {
+    await prisma.motorista.create({
+        data: {
+        userId: outroUsuarioId,
+        },
+    });
+
+    // Mantemos os headers da primeira conta.
+    const permissaoOriginal = await verificarPermissaoUpload(headers);
+
+    assert.equal(permissaoOriginal.autorizado, true);
+
+    if (permissaoOriginal.autorizado) {
+        assert.equal(permissaoOriginal.motoristaId, usuarioId);
+        assert.notEqual(permissaoOriginal.motoristaId, outroUsuarioId);
     }
-  }
-});
+
+    console.log("Isolamento entre motoristas - OK");
+    } finally {
+    await prisma.user.deleteMany({
+        where: { id: outroUsuarioId },
+    });
+    }
+    } finally {
+        if (usuarioId) {
+        await prisma.user.deleteMany({
+            where: { id: usuarioId },
+        });
+        }
+    }
+    });
