@@ -76,15 +76,19 @@ export async function salvarArquivoPrivado({
 
   const arquivo = await open(caminho, "wx", 0o600);
 
-  try {
-    await arquivo.writeFile(imagemNormalizada);
-  } catch (error) {
-    await arquivo.close();
-    await unlink(caminho).catch(() => {});
-    throw error;
-  }
+  let gravacaoConcluida = false;
 
+try {
+  await arquivo.writeFile(imagemNormalizada);
   await arquivo.close();
+
+  gravacaoConcluida = true;
+} finally {
+  if (!gravacaoConcluida) {
+    await arquivo.close().catch(() => {});
+    await unlink(caminho).catch(() => {});
+  }
+}
 
   return {
     id,
