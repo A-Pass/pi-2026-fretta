@@ -130,6 +130,8 @@ export interface PublicProviderProfile {
   }[];
 }
 export interface Store {
+  adminDemoCases?: AdminCase[];
+  adminReviews?: AdminReview[];
   companyProfile?: CompanyProfile;
   driverRegistration?: DriverRegistration;
   vehicles?: Vehicle[];
@@ -186,3 +188,19 @@ export interface OperatingArea {
   radiusKm: number;
   label: string;
 }
+
+export type AdminCase = {
+  id: string;
+  registration: DriverRegistration;
+  photo: string;
+  vehicles: Vehicle[];
+};
+export type AdminReview = {
+  id: string;
+  caseId: string;
+  version: string;
+  actor: string;
+  at: string;
+  decision: "APROVADO" | "AJUSTES_SOLICITADOS";
+  reason: string;
+};

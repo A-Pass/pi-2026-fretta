@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   ArrowRight,
   BadgeCheck,
-  Check,
   Clock3,
-  FileCheck2,
   LogOut,
   RefreshCw,
   ShieldCheck,
@@ -12,9 +10,8 @@ import {
   Truck,
 } from "lucide-react";
 import type { Store } from "@/contracts";
-import { driverCanPropose, licenseDateValid, simulateReview } from "./rules";
+import { driverCanPropose, licenseDateValid } from "./rules";
 import { dateTime } from "../../lib/dates";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
 type Props = {
   store: Store;
   save: (store: Store) => Promise<boolean>;
@@ -44,9 +41,6 @@ export function DriverRegistrationStatusView({
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, [registration.status]);
-  const [simulate, setSimulate] = useState<
-    "APROVADO" | "AJUSTES_SOLICITADOS" | null
-  >(null);
   const approved = driverCanPropose(store);
   const pending = registration.status === "EM_ANALISE";
   const rejected = registration.status === "AJUSTES_SOLICITADOS";
@@ -217,51 +211,18 @@ export function DriverRegistrationStatusView({
             </span>
           </div>
           {process.env.NEXT_PUBLIC_API_MODE !== "real" && pending && (
-            <details className="onboarding-demo-controls">
-              <summary>Controles da demonstração</summary>
+            <div className="onboarding-demo-controls">
               <p>
-                Use para apresentar os possíveis resultados da análise. Estes
-                controles não estarão disponíveis ao motorista na versão real.
+                A análise agora pode ser feita pelo painel administrativo de
+                demonstração, com motivo e histórico da decisão.
               </p>
-              <div className="actions">
-                <button
-                  className="secondary"
-                  onClick={() => setSimulate("APROVADO")}
-                >
-                  <Check size={16} /> Simular aprovação
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => setSimulate("AJUSTES_SOLICITADOS")}
-                >
-                  <FileCheck2 size={16} /> Simular solicitação de ajustes
-                </button>
-              </div>
-            </details>
+              <a className="secondary" href="/admin">
+                Abrir painel administrativo · demonstração
+              </a>
+            </div>
           )}
         </section>
       </main>
-      <ConfirmDialog
-        open={simulate !== null}
-        onClose={() => setSimulate(null)}
-        title={
-          simulate === "APROVADO"
-            ? "Simular cadastro aprovado?"
-            : "Simular solicitação de ajustes?"
-        }
-        description="Esta ação serve apenas para explorar o protótipo. Ela não verifica documentos nem comprova a identidade do motorista."
-        confirmLabel={
-          simulate === "APROVADO" ? "Simular aprovação" : "Simular ajustes"
-        }
-        cancelLabel="Voltar"
-        destructive={false}
-        onConfirm={async () => {
-          if (!simulate) return false;
-          const ok = await save(simulateReview(store, simulate));
-          if (ok) setSimulate(null);
-          return ok;
-        }}
-      />
     </div>
   );
 }

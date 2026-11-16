@@ -56,3 +56,19 @@ Cliente HTTP preparado em `app/src/frontend/api/http.ts` e chamadas principais e
 - Empresa: acordar leitura/edição autenticada de nome comercial, logo, apresentação e cidade; razão social/CNPJ seguem privados no cadastro. O MVP tem um motorista responsável; não concede vínculo a outras contas.
 - Upload responde ID autorizado, não caminho arbitrário enviado pelo usuário. CNH usa endpoint privado separado. Identidade, autoria e permissão sempre derivadas da sessão no servidor.
 - Mensagens incluem `clientMessageId` para permitir deduplicação no servidor. Falhas de mutações não são repetidas automaticamente pelo transporte.
+
+## Painel administrativo — contrato proposto
+
+Rota de interface `/admin`, separada da navegação de cliente/motorista no mesmo projeto. Neste momento funciona somente com casos fictícios no adaptador local. Em modo real, consulta `/admin/me` e permanece bloqueada: não há sessão/autorização administrativa implementada. Não ativar o painel real apenas por e-mail, query string ou localStorage.
+
+Contrato a implementar pela frente de identidade/back-end:
+
+- GET /admin/me: identidade administrativa derivada da sessão do servidor, 401 sem sessão, 403 para conta sem permissão.
+- GET /admin/driver-registrations?status=EM_ANALISE&cursor=...: casos autorizados paginados, com versão de cada envio.
+- GET /admin/driver-registrations/:id: identificação necessária à análise, foto, habilitação e veículos; resposta privada sem cache. DTO privado separado do perfil público.
+- GET /admin/driver-registrations/:id/documents/:documentId: leitura do documento autorizada para administrador; arquivo fora de public/, cabeçalhos privados e sem URL pública permanente. A interface atual exibe um placeholder honesto pois a CNH nunca foi persistida no protótipo.
+- POST /admin/driver-registrations/:id/review: `{decision, reason, expectedVersion}`. Decisões APROVADO/AJUSTES_SOLICITADOS; motivo de ajustes entre 10 e 1000 caracteres. Servidor verifica o cadastro pendente, versão, documentos/validade e permissão; rejeita decisão concorrente com 409. Não aceitar autor/data enviados pelo navegador como verdade.
+- Registrar revisão e alteração de situação na mesma transação, com administrador, data do servidor, versão e motivo; histórico não editável pelo prestador. Notificar o prestador e devolver o resumo atualizado em GET /driver/registration.
+- CSRF/origem para operações com sessão por cookie, limites de uso e trilha de acesso a documentos. Conceder a primeira permissão por migração/seed administrativo controlado, nunca pelo cadastro público. Conta com acesso ao repositório não é automaticamente administradora.
+
+O demo mantém decisões em `adminReviews` e casos fictícios em `adminDemoCases`; o caso `demo-driver` lê e altera `driverRegistration` já existente. Reenvio do motorista mantém o histórico e muda a versão. As proteções locais evitam erros de apresentação, mas não equivalem à autorização ou concorrência transacional de servidor. Os botões antigos de autoaprovação foram retirados da tela do motorista.

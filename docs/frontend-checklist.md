@@ -81,3 +81,13 @@ Implementação na demonstração local. Não representa uma entrega com contas 
 - [x] 31 testes automatizados e compilação de produção aprovados. Conferidos no navegador: descarte/continuação do formulário, seleção do centro do mapa, perfil público → negociação correta, cadastro PJ fictício → análise → aprovação simulada, edição/apresentação da empresa e layout do perfil em 360/1440 pixels.
 
 Veja [a entrega e as dependências](frontend-handoff.md). A conferência visual desta revisão não repetiu todo o ciclo pós-aceite; suas regras continuam cobertas pelos testes e pelo roteiro anterior.
+
+## Painel administrativo de prestadores
+
+- [x] Rota /admin, link demonstrativo em Meu perfil e na situação do cadastro.
+- [x] Busca/filtros, detalhes mascarados, checklist, aprovação e solicitação de correções com confirmação.
+- [x] Histórico das decisões e atualização do cadastro do motorista da demonstração, com verificação de versão e preservação do histórico no reenvio.
+- [x] Retirados os controles de autoaprovação da interface do motorista.
+- [ ] Sessão/permissão administrativa, fila de contas reais, documentos privados e auditoria no servidor. O painel real permanece bloqueado enquanto não houver integração.
+
+Veja [o roteiro e limites do painel](admin-panel.md).

@@ -213,6 +213,11 @@ export function ProfileView({
           Meus Endereços{" "}
           <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
         </button>
+        {process.env.NEXT_PUBLIC_API_MODE !== "real" && (
+          <a className="secondary profile-return" href="/admin">
+            Painel administrativo · demonstração
+          </a>
+        )}
         {role === "motorista" && (
           <div className="profile-driver-links">
             <button className="secondary" onClick={onPublicProfile}>
