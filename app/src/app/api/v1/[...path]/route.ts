@@ -10,6 +10,7 @@ import { verificarVeiculoMotorista } from "@/server/modules/identity/services/dr
 import { verificarAdministrador } from "@/server/auth/permissions";
 import { podeAlterarStatusCadastro } from "@/server/modules/identity/services/registration-status";
 import { Prisma } from "@/generated/prisma/client";
+import { verificarPermissaoUpload } from "@/server/modules/identity/services/private-upload-permissions";
 
 function extrairDadosCadastro(
   body: unknown,
@@ -316,7 +317,29 @@ if (path === "/api/v1/admin/me") {
 
 export async function POST(request: NextRequest) {
   const path = request.nextUrl.pathname;
+    if (path === "/api/v1/driver/registration/uploads") {
+    const permissao = await verificarPermissaoUpload(request.headers);
 
+    if (!permissao.autorizado) {
+      return Response.json(
+        {
+          code: permissao.code,
+          message: permissao.message,
+        },
+        { status: permissao.status },
+      );
+    }
+
+    // A gravação será habilitada após implementar
+    // o vínculo do arquivo ao motorista no PostgreSQL.
+    return Response.json(
+      {
+        code: "UPLOAD_NOT_CONFIGURED",
+        message: "O armazenamento privado ainda está em integração.",
+      },
+      { status: 501 },
+    );
+  }
   // 3. Ativar perfil de cliente
   // POST /api/v1/me/client
 
