@@ -115,6 +115,7 @@ model Motorista {
   user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   veiculos Veiculo[]
   cadastro CadastroMotorista?
+  arquivosPrivados ArquivoPrivado[]
 }
 
 model Pessoa {
@@ -399,4 +400,22 @@ model VinculoAssinatura {
 
   @@index([motoristaId])
   @@index([status])
+}
+enum TipoArquivoPrivado {
+  FOTO_PERFIL
+  CNH
+}
+
+model ArquivoPrivado {
+  id                 String             @id @default(uuid())
+  motoristaId        String
+  tipo               TipoArquivoPrivado
+  chaveArmazenamento String             @unique
+  mimeType           String
+  tamanhoBytes       Int
+  criadoEm           DateTime           @default(now())
+
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
+
+  @@index([motoristaId, tipo])
 }

@@ -11,6 +11,8 @@ import { verificarPermissaoUpload } from "./private-upload-permissions";
 
 import { NextRequest } from "next/server";
 import { POST } from "../../../../app/api/v1/[...path]/route";
+import sharp from "sharp";
+import { removerArquivoPrivado } from "../storage/private-file-storage";
 
 test("controla o acesso ao upload privado de documentos", async () => {
   const databaseUrl = process.env.DATABASE_URL;
@@ -125,20 +127,146 @@ assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
     if (motoristaAutorizado.autorizado) {
       assert.equal(motoristaAutorizado.motoristaId, usuarioId);
     }
+    // Criar uma imagem válida para o teste.
+    const imagem = await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 3,
+        background: "#ffffff",
+      },
+    })
+      .png()
+      .toBuffer();
 
+    const formulario = new FormData();
+
+    formulario.set("tipo", "CNH");
+    formulario.set(
+      "arquivo",
+      new File([new Uint8Array(imagem)], "cnh-teste.png", {
+        type: "image/png",
+      }),
+    );
+
+    // O FormData gera o Content-Type com boundary automaticamente.
     const requisicaoUpload = new NextRequest(
-  "http://localhost:3002/api/v1/driver/registration/uploads",
-  {
-    method: "POST",
-    headers,
-  },
-);
+      "http://localhost:3002/api/v1/driver/registration/uploads",
+      {
+        method: "POST",
+        headers: {
+          cookie,
+        },
+        body: formulario,
+      },
+    );
 
-const respostaUpload = await POST(requisicaoUpload);
-const dadosUpload = await respostaUpload.json();
+    const respostaUpload = await POST(requisicaoUpload);
+    const dadosUpload = await respostaUpload.json();
 
-assert.equal(respostaUpload.status, 501);
-assert.equal(dadosUpload.code, "UPLOAD_NOT_CONFIGURED");
+    assert.equal(respostaUpload.status, 201);
+    assert.equal(dadosUpload.tipo, "CNH");
+    assert.ok(dadosUpload.id);
+
+    const registro = await prisma.arquivoPrivado.findUniqueOrThrow({
+      where: { id: dadosUpload.id },
+    });
+
+    assert.equal(registro.motoristaId, usuarioId);
+    assert.equal(registro.tipo, "CNH");
+
+    // Limpeza do arquivo físico e do registro de teste.
+    await removerArquivoPrivado(registro.chaveArmazenamento);
+    await prisma.arquivoPrivado.delete({
+      where: { id: registro.id },
+    });
+
+    console.log("Upload real de CNH autorizado e persistido - OK");
+
+    // Um arquivo de texto não pode ser enviado como CNH.
+    const formularioInvalido = new FormData();
+
+    formularioInvalido.set("tipo", "CNH");
+    formularioInvalido.set(
+      "arquivo",
+      new File(["conteudo de texto"], "documento.png", {
+        type: "image/png",
+      }),
+    );
+
+    const requisicaoInvalida = new NextRequest(
+      "http://localhost:3002/api/v1/driver/registration/uploads",
+      {
+        method: "POST",
+        headers: {
+          cookie,
+        },
+        body: formularioInvalido,
+      },
+    );
+
+    const respostaInvalida = await POST(requisicaoInvalida);
+    const dadosInvalidos = await respostaInvalida.json();
+
+    assert.equal(respostaInvalida.status, 422);
+    assert.equal(dadosInvalidos.code, "INVALID_FILE_TYPE");
+
+    console.log("Upload de arquivo inválido bloqueado - OK");
+
+    // O upload deve exigir o campo arquivo.
+    const formularioSemArquivo = new FormData();
+    formularioSemArquivo.set("tipo", "CNH");
+
+    const requisicaoSemArquivo = new NextRequest(
+      "http://localhost:3002/api/v1/driver/registration/uploads",
+      {
+        method: "POST",
+        headers: {
+          cookie,
+        },
+        body: formularioSemArquivo,
+      },
+    );
+
+    const respostaSemArquivo = await POST(requisicaoSemArquivo);
+    const dadosSemArquivo = await respostaSemArquivo.json();
+
+    assert.equal(respostaSemArquivo.status, 422);
+    assert.equal(dadosSemArquivo.code, "FILE_REQUIRED");
+
+    console.log("Upload sem arquivo bloqueado - OK");
+
+    // Rejeitar arquivos maiores que 5 MB.
+    const formularioGrande = new FormData();
+
+    formularioGrande.set("tipo", "CNH");
+    formularioGrande.set(
+      "arquivo",
+      new File(
+        [new Uint8Array(5 * 1024 * 1024 + 1)],
+        "arquivo-grande.png",
+        { type: "image/png" },
+      ),
+    );
+
+    const requisicaoGrande = new NextRequest(
+      "http://localhost:3002/api/v1/driver/registration/uploads",
+      {
+        method: "POST",
+        headers: {
+          cookie,
+        },
+        body: formularioGrande,
+      },
+    );
+
+    const respostaGrande = await POST(requisicaoGrande);
+    const dadosGrande = await respostaGrande.json();
+
+    assert.equal(respostaGrande.status, 422);
+    assert.equal(dadosGrande.code, "INVALID_FILE_SIZE");
+
+    console.log("Upload acima de 5 MB bloqueado - OK");
 
 console.log("Motorista autenticado acessou a rota protegida - OK");
     console.log("Autorização do upload privado - OK");

@@ -11,7 +11,7 @@ import { verificarAdministrador } from "@/server/auth/permissions";
 import { podeAlterarStatusCadastro } from "@/server/modules/identity/services/registration-status";
 import { Prisma } from "@/generated/prisma/client";
 import { verificarPermissaoUpload } from "@/server/modules/identity/services/private-upload-permissions";
-
+import { salvarDocumentoMotorista } from "../../../../server/modules/identity/services/private-file-service";
 function extrairDadosCadastro(
   body: unknown,
 ): CadastroMotoristaInput | null {
@@ -317,7 +317,7 @@ if (path === "/api/v1/admin/me") {
 
 export async function POST(request: NextRequest) {
   const path = request.nextUrl.pathname;
-    if (path === "/api/v1/driver/registration/uploads") {
+  if (path === "/api/v1/driver/registration/uploads") {
     const permissao = await verificarPermissaoUpload(request.headers);
 
     if (!permissao.autorizado) {
@@ -330,15 +330,101 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // A gravação será habilitada após implementar
-    // o vínculo do arquivo ao motorista no PostgreSQL.
-    return Response.json(
-      {
-        code: "UPLOAD_NOT_CONFIGURED",
-        message: "O armazenamento privado ainda está em integração.",
-      },
-      { status: 501 },
-    );
+    const contentType = request.headers.get("content-type") ?? "";
+
+    if (!contentType.toLowerCase().startsWith("multipart/form-data;")) {
+      return Response.json(
+        {
+          code: "INVALID_CONTENT_TYPE",
+          message: "Envie o arquivo usando multipart/form-data.",
+        },
+        { status: 415 },
+      );
+    }
+
+    let formData: FormData;
+
+    try {
+      formData = await request.formData();
+    } catch {
+      return Response.json(
+        {
+          code: "INVALID_FORM_DATA",
+          message: "Os dados do formulário são inválidos.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const tipo = formData.get("tipo");
+    const arquivo = formData.get("arquivo");
+
+    if (tipo !== "FOTO_PERFIL" && tipo !== "CNH") {
+      return Response.json(
+        {
+          code: "INVALID_FILE_TYPE",
+          message: "O tipo deve ser FOTO_PERFIL ou CNH.",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (!(arquivo instanceof File)) {
+      return Response.json(
+        {
+          code: "FILE_REQUIRED",
+          message: "Selecione uma imagem para enviar.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const tamanhoMaximo = 5 * 1024 * 1024;
+
+    if (arquivo.size === 0 || arquivo.size > tamanhoMaximo) {
+      return Response.json(
+        {
+          code: "INVALID_FILE_SIZE",
+          message: "O arquivo deve ter no máximo 5 MB e não pode estar vazio.",
+        },
+        { status: 422 },
+      );
+    }
+
+    try {
+      const bytes = Buffer.from(await arquivo.arrayBuffer());
+
+      const documento = await salvarDocumentoMotorista({
+        motoristaId: permissao.motoristaId,
+        tipo,
+        bytes,
+      });
+
+      return Response.json(documento, { status: 201 });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        ["INVALID_FILE_SIZE", "INVALID_FILE_TYPE"].includes(error.message)
+      ) {
+        return Response.json(
+          {
+            code: error.message,
+            message: "O arquivo enviado é inválido.",
+          },
+          { status: 422 },
+        );
+      }
+
+      console.error("Falha ao armazenar documento privado:", error);
+
+      return Response.json(
+        {
+          code: "UPLOAD_FAILED",
+          message: "Não foi possível armazenar o documento.",
+        },
+        { status: 500 },
+      );
+    }
   }
   // 3. Ativar perfil de cliente
   // POST /api/v1/me/client

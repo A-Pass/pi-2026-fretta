@@ -98,3 +98,21 @@ try {
     tamanhoBytes: imagemNormalizada.length,
   };
 }
+export async function removerArquivoPrivado(
+  chaveArmazenamento: string,
+): Promise<void> {
+  // Aceitar somente nomes de arquivos gerados pelo serviço.
+  const nomeValido =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/i;
+
+  if (!nomeValido.test(chaveArmazenamento)) {
+    throw new Error("INVALID_STORAGE_KEY");
+  }
+
+  const caminho = path.join(
+    DIRETORIO_PRIVADO,
+    chaveArmazenamento,
+  );
+
+  await unlink(caminho);
+}
