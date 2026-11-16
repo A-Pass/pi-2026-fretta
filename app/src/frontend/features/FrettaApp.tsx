@@ -44,6 +44,12 @@ import { scheduleLabel } from "../lib/dates";
 import { DriverOnboardingView } from "./onboarding/DriverOnboardingView";
 import { DriverRegistrationStatusView } from "./onboarding/DriverRegistrationStatusView";
 import { driverCanPropose, submitDriverRegistration } from "./onboarding/rules";
+import { ProviderProfileView } from "./providers/ProviderProfileView";
+import { CompanyProfileView } from "./providers/CompanyProfileView";
+import {
+  providerId as proposalProviderId,
+  publicProvider,
+} from "./providers/rules";
 import { InstallApp } from "../components/InstallApp";
 
 export function FrettaApp() {
@@ -53,6 +59,7 @@ export function FrettaApp() {
     tab,
     selected,
     chatId,
+    providerId,
     entered,
     ready,
     loginRequested,
@@ -109,7 +116,7 @@ export function FrettaApp() {
     setUpdatingDriver(false);
     setError("");
     if (entered && !chatId) main.current?.focus({ preventScroll: true });
-  }, [role, tab, selected, chatId, entered]);
+  }, [role, tab, selected, chatId, providerId, entered]);
   async function save(next: Store): Promise<boolean> {
     if (saving.current) return false;
     saving.current = true;
@@ -180,7 +187,13 @@ export function FrettaApp() {
         freightId: f.id,
         driver: name,
         driverId: "demo-driver",
-        rating: 0,
+        rating: publicProvider(store, "demo-driver")?.rating || 0,
+        providerName: publicProvider(store, "demo-driver")?.name || name,
+        providerKind: publicProvider(store, "demo-driver")?.kind || "autonomo",
+        providerLogo:
+          store.driverRegistration?.personType === "pj"
+            ? store.companyProfile?.logo
+            : undefined,
         status: "PENDENTE",
         offers: [offer],
       };
@@ -358,6 +371,7 @@ export function FrettaApp() {
                   "enderecos",
                   "veiculos",
                   "assinatura",
+                  "empresa",
                 ].includes(tab));
             return (
               <button
@@ -463,7 +477,32 @@ export function FrettaApp() {
               </button>
             </div>
           )}
-          {selected && !f ? (
+          {providerId ? (
+            <ProviderProfileView
+              key={providerId}
+              provider={publicProvider(store, providerId)}
+              preview={role === "motorista" && providerId === "demo-driver"}
+              onBack={() => navigation.back("fretes")}
+              onConversation={
+                role === "cliente" &&
+                store.proposals.some(
+                  (p) => proposalProviderId(p) === providerId,
+                )
+                  ? () =>
+                      setChatId(
+                        (store.proposals.find(
+                          (p) =>
+                            p.id === navigation.providerConversationId &&
+                            proposalProviderId(p) === providerId,
+                        ) ||
+                          store.proposals.find(
+                            (p) => proposalProviderId(p) === providerId,
+                          ))!.id,
+                      )
+                  : undefined
+              }
+            />
+          ) : selected && !f ? (
             <EmptyState title="Solicitação não encontrada">
               Ela pode ter sido removida da demonstração.
               <button className="primary" onClick={() => nav("fretes")}>
@@ -485,6 +524,7 @@ export function FrettaApp() {
               setModal={setModal}
               setSelected={setSelected}
               onChat={setChatId}
+              onProvider={navigation.openProvider}
               save={save}
               schedule={(f) => scheduleLabel(f.schedule)}
             />
@@ -493,6 +533,15 @@ export function FrettaApp() {
               addresses={store.addresses || []}
               onSave={(addresses) => save({ ...store, addresses })}
               onBack={() => nav("perfil")}
+            />
+          ) : tab === "empresa" &&
+            role === "motorista" &&
+            store.driverRegistration?.personType === "pj" ? (
+            <CompanyProfileView
+              store={store}
+              save={save}
+              onBack={() => nav("perfil")}
+              onPreview={() => navigation.openProvider("demo-driver")}
             />
           ) : tab === "veiculos" && role === "motorista" ? (
             <VehicleBookView
@@ -508,9 +557,13 @@ export function FrettaApp() {
               }
               onBack={() => nav("perfil")}
             />
-          ) : ["perfil", "editar-perfil", "veiculos", "assinatura"].includes(
-              tab,
-            ) ? (
+          ) : [
+              "perfil",
+              "editar-perfil",
+              "veiculos",
+              "assinatura",
+              "empresa",
+            ].includes(tab) ? (
             <>
               <ProfileView
                 key={tab}
@@ -555,6 +608,8 @@ export function FrettaApp() {
                 }}
                 onAddresses={() => nav("enderecos")}
                 onVehicles={() => nav("veiculos")}
+                onPublicProfile={() => navigation.openProvider("demo-driver")}
+                onCompany={() => nav("empresa")}
                 onSubscription={() => nav("assinatura")}
                 role={role}
                 subscription={subscription}
@@ -592,6 +647,8 @@ export function FrettaApp() {
               save={save}
               subscription={subscription}
               onManageVehicles={() => nav("veiculos")}
+              onProvider={navigation.openProvider}
+              onFreight={setSelected}
             />
           ) : role === "motorista" && tab === "inicio" ? (
             <DriverHomeView

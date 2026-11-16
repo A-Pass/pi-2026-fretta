@@ -45,3 +45,14 @@ Contratos a consolidar com a frente de identidade:
 - POST de proposta/nova oferta deve validar cadastro aprovado, habilitação, veículo e assinatura no momento da operação. Login Google ou preenchimento do formulário não equivalem a aprovação.
 
 A demonstração só persiste o resumo mascarado em driverRegistration. Os arquivos de CNH e os identificadores completos não são persistidos/transmitidos pelo adaptador local. A implementação real depende de armazenamento privado e do processo de verificação escolhido pelo grupo; nenhum provedor de consulta/OCR/biometria foi contratado ou conectado.
+
+## Complementos do front-end de 16/11/2026
+
+Cliente HTTP preparado em `app/src/frontend/api/http.ts` e chamadas principais em `backend.ts`; ainda não conectado ao fluxo real das telas. Confirmar schemas/respostas antes da integração.
+
+- GET /providers/:id: DTO público permitido (`PublicProviderProfile`), sem CPF/CNPJ/CNH/placa/endereços privados; empresa tem logo e motorista responsável com foto separados. Contagens e média são calculadas no servidor, somente de serviços concluídos.
+- POST /freights/:id/reviews: inclui `publishComment` explícito, falso por padrão; avaliações antigas sem esse campo não publicam comentários. Não expor identidade do cliente junto ao comentário público.
+- GET /addresses: coleção privada paginada. Acordar POST/PATCH/DELETE para o CRUD de endereços já existente na demonstração.
+- Empresa: acordar leitura/edição autenticada de nome comercial, logo, apresentação e cidade; razão social/CNPJ seguem privados no cadastro. O MVP tem um motorista responsável; não concede vínculo a outras contas.
+- Upload responde ID autorizado, não caminho arbitrário enviado pelo usuário. CNH usa endpoint privado separado. Identidade, autoria e permissão sempre derivadas da sessão no servidor.
+- Mensagens incluem `clientMessageId` para permitir deduplicação no servidor. Falhas de mutações não são repetidas automaticamente pelo transporte.

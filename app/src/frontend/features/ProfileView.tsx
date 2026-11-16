@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ArrowLeft, Camera, LogOut, Pencil, User, X } from "lucide-react";
 import type { Role, DriverRegistration } from "@/contracts";
+import { prepareOnboardingPhoto } from "./onboarding/images";
+import { useDiscardChanges } from "../components/useDiscardChanges";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { resetDemo } from "../api/client";
 type Props = {
@@ -13,6 +15,8 @@ type Props = {
   editing: boolean;
   onEdit: () => void;
   onVehicles: () => void;
+  onPublicProfile: () => void;
+  onCompany: () => void;
   onSubscription: () => void;
   photo: string;
   role: Role;
@@ -29,6 +33,8 @@ export function ProfileView({
   editing,
   onEdit,
   onVehicles,
+  onPublicProfile,
+  onCompany,
   onSubscription,
   photo,
   role,
@@ -41,10 +47,13 @@ export function ProfileView({
     [draftPhoto, setDraftPhoto] = useState(photo),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(false);
+  const discard = useDiscardChanges(
+    editing && (draftName !== name || draftPhoto !== photo),
+  );
   if (editing)
     return (
       <>
-        <button className="back" onClick={onEdit}>
+        <button className="back" onClick={() => discard.leave(onEdit)}>
           <ArrowLeft size={18} /> Voltar ao meu perfil
         </button>
         <span className="eyebrow">DO SEU JEITO</span>
@@ -92,7 +101,7 @@ export function ProfileView({
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 disabled={loading || saving}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
                   e.target.value = "";
                   if (!file) return;
@@ -107,16 +116,18 @@ export function ProfileView({
                   }
                   setLoading(true);
                   setError("");
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    setDraftPhoto(String(reader.result));
+                  try {
+                    const image = await prepareOnboardingPhoto(file);
+                    setDraftPhoto(image.dataUrl);
+                  } catch (e) {
+                    setError(
+                      e instanceof Error
+                        ? e.message
+                        : "Não foi possível abrir a foto.",
+                    );
+                  } finally {
                     setLoading(false);
-                  };
-                  reader.onerror = () => {
-                    setError("Não foi possível abrir a foto.");
-                    setLoading(false);
-                  };
-                  reader.readAsDataURL(file);
+                  }
                 }}
               />
             </label>
@@ -156,7 +167,7 @@ export function ProfileView({
                 type="button"
                 disabled={saving}
                 className="secondary"
-                onClick={onEdit}
+                onClick={() => discard.leave(onEdit)}
               >
                 Descartar alterações
               </button>
@@ -170,6 +181,7 @@ export function ProfileView({
             </div>
           </form>
         </section>
+        {discard.dialog}
       </>
     );
   return (
@@ -203,6 +215,14 @@ export function ProfileView({
         </button>
         {role === "motorista" && (
           <div className="profile-driver-links">
+            <button className="secondary" onClick={onPublicProfile}>
+              Ver meu perfil público
+            </button>
+            {registration?.personType === "pj" && (
+              <button className="secondary" onClick={onCompany}>
+                Minha empresa · nome e logo
+              </button>
+            )}
             <button className="secondary" onClick={onRegistration}>
               Cadastro do motorista ·{" "}
               {registration?.status === "APROVADO"

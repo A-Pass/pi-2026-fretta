@@ -1,14 +1,13 @@
 import type { FrettaApi, Store } from "@/contracts";
 import { withDemoRequests } from "../mocks/demoRequests";
 import { withNotifications } from "../features/notifications/rules";
+import { createHttpTransport } from "./http";
 import { seed } from "../mocks/seed";
 const KEY = "fretta-demo-v1";
 export const api: FrettaApi = {
   async load() {
     if (process.env.NEXT_PUBLIC_API_MODE === "real") {
-      const r = await fetch("/api/v1/state");
-      if (!r.ok) throw new Error("Servidor ainda não implementado.");
-      return r.json();
+      return createHttpTransport().request<Store>("/state");
     }
     const raw = localStorage.getItem(KEY);
     if (!raw) {

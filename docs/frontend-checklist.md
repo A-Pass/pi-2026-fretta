@@ -1,4 +1,4 @@
-# Checklist do front-end — 05/11/2026
+# Checklist do front-end — 16/11/2026
 
 Implementação na demonstração local. Não representa uma entrega com contas reais.
 
@@ -49,13 +49,15 @@ Implementação na demonstração local. Não representa uma entrega com contas 
 ## Pendente de integração com o grupo
 
 - [ ] Login Google real, sessão de servidor, cadastro complementar e saída real da conta.
-- [ ] Adaptadores por endpoint e listas paginadas por cursor. O endpoint provisório continua retornando 501.
+- [x] Cliente HTTP tipado preparado por endpoint, com cursores, cancelamento, timeout e mensagens seguras de erro.
+- [ ] Conectar as telas aos endpoints reais após confirmar os DTOs com o grupo. O endpoint provisório continua retornando 501.
 - [ ] Autorização por conta, associação cliente/motorista, filtro geográfico e proteção de endereços no servidor. O armazenamento demonstrativo é compartilhado neste navegador.
 - [ ] Chat entre contas/dispositivos, reconexão, recebimento remoto e estados confirmados pelo servidor.
 - [ ] Notificações remotas e push, incluindo permissões e assinatura no servidor.
 - [ ] Upload remoto de fotos e validação de arquivos pelo backend.
 - [ ] Assinatura e gateway reais, datas de vencimento, pagamento e webhooks.
-- [ ] Média real de avaliações e histórico público do prestador, com dados autorizados pelo servidor.
+- [x] Perfil público com veículos, média de avaliações de fretes concluídos e comentários publicados com autorização explícita na demonstração.
+- [ ] Carregar esse perfil com dados autorizados e agregados pelo servidor.
 - [ ] Publicação HTTPS, instalação e teclado virtual testados em aparelhos Android e iPhone reais; validação de leitores de tela.
 
 ## Decisões ainda necessárias
@@ -64,3 +66,18 @@ Implementação na demonstração local. Não representa uma entrega com contas 
 - [x] Cadastro inicial do motorista definido com o usuário: nome/CPF, empresa/CNPJ quando aplicável, foto obrigatória, CNH/imagem, veículo e revisão.
 - [ ] Consolidar os campos do cliente e a verificação real dos documentos com a frente de identidade.
 - [ ] Revisão final dos diagramas acadêmicos e do documento Word com o modelo definitivo da equipe. Esta entrega atualiza os documentos técnicos Markdown.
+
+## Complementos de 16/11/2026
+
+- [x] Perfil público acessível pelas propostas e pelo chat, preservando o contexto da negociação ao conversar e voltar.
+- [x] Empresa com apresentação, nome comercial e logo opcional, separados da foto do motorista responsável. O MVP mantém um responsável e seus veículos; não implementa filiação de outros usuários.
+- [x] Perfil público usa uma lista explícita de campos permitidos: não inclui CPF, CNPJ, CNH, placa ou endereços privados.
+- [x] Comentário da avaliação só aparece publicamente quando o cliente marca a autorização. Comentários antigos ficam privados por padrão.
+- [x] Confirmação para descartar alterações pelos botões de saída dos formulários de solicitação, perfil e empresa. Não é salvamento automático de rascunho e não impede perda ao atualizar/fechar o navegador ou trocar de tela pelo menu.
+- [x] Validação por conteúdo e dimensão das imagens de itens, perfil e logo, além dos limites de tamanho.
+- [x] Busca de conversas; paginação local de conversas, mensagens, serviços, notificações e avaliações públicas; filtro de notificações não lidas.
+- [x] Conversa preserva a posição durante leitura de mensagens antigas e oferece retorno às mensagens novas.
+- [x] Mapa operável pelo teclado, seleção explícita do centro e botão para tentar carregar os tiles novamente.
+- [x] 31 testes automatizados e compilação de produção aprovados. Conferidos no navegador: descarte/continuação do formulário, seleção do centro do mapa, perfil público → negociação correta, cadastro PJ fictício → análise → aprovação simulada, edição/apresentação da empresa e layout do perfil em 360/1440 pixels.
+
+Veja [a entrega e as dependências](frontend-handoff.md). A conferência visual desta revisão não repetiu todo o ciclo pós-aceite; suas regras continuam cobertas pelos testes e pelo roteiro anterior.

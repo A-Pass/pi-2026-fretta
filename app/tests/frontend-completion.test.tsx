@@ -52,6 +52,8 @@ test("URLs preservam perfil, detalhe e conversa sem aceitar telas desconhecidas"
     tab: "chat" as const,
     selected: null,
     chatId: "a&b",
+    providerId: null,
+    providerConversationId: null,
   };
   assert.deepEqual(parseRoute(routeUrl(route).slice(1)), route);
   assert.equal(parseRoute("?perfil=motorista&frete=f1").tab, "fretes");
