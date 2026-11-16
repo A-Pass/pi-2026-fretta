@@ -52,3 +52,43 @@ export async function salvarDocumentoMotorista({
     throw error;
   }
 }
+export async function verificarDocumentosMotorista(
+  motoristaId: string,
+  fotoPerfilId: string,
+  documentoCnhId: string,
+): Promise<boolean> {
+  if (
+    !fotoPerfilId.trim() ||
+    !documentoCnhId.trim() ||
+    fotoPerfilId === documentoCnhId
+  ) {
+    return false;
+  }
+
+  const documentos = await prisma.arquivoPrivado.findMany({
+    where: {
+      motoristaId,
+      id: {
+        in: [fotoPerfilId, documentoCnhId],
+      },
+    },
+    select: {
+      id: true,
+      tipo: true,
+    },
+  });
+
+  return (
+    documentos.length === 2 &&
+    documentos.some(
+      (documento) =>
+        documento.id === fotoPerfilId &&
+        documento.tipo === "FOTO_PERFIL",
+    ) &&
+    documentos.some(
+      (documento) =>
+        documento.id === documentoCnhId &&
+        documento.tipo === "CNH",
+    )
+  );
+}

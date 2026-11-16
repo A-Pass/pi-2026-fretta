@@ -7,7 +7,10 @@ import { test } from "node:test";
 import sharp from "sharp";
 
 import { prisma } from "../../../db/prisma";
-import { salvarDocumentoMotorista } from "./private-file-service";
+import {
+  salvarDocumentoMotorista,
+  verificarDocumentosMotorista,
+} from "./private-file-service";
 import { removerArquivoPrivado } from "../storage/private-file-storage";
 
 
@@ -166,3 +169,117 @@ test("remove arquivo físico quando a persistência falha", async () => {
 
   console.log("Arquivo removido após falha no PostgreSQL - OK");
 });
+    test("valida propriedade e tipos dos documentos privados", async () => {
+    const databaseUrl = process.env.DATABASE_URL;
+    assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+
+    const url = new URL(databaseUrl);
+
+    assert.ok(
+        ["localhost", "127.0.0.1"].includes(url.hostname) &&
+        url.pathname === "/fretta_test",
+        "Este teste só pode utilizar o banco local fretta_test.",
+    );
+
+    const banco = await prisma.$queryRaw<
+        Array<{ banco: string }>
+    >`SELECT current_database() AS banco`;
+
+    assert.equal(banco[0]?.banco, "fretta_test");
+
+    const motoristaId = `motorista-docs-${randomUUID()}`;
+    const outroMotoristaId = `outro-motorista-${randomUUID()}`;
+    const chavesArquivos: string[] = [];
+
+    try {
+        for (const id of [motoristaId, outroMotoristaId]) {
+        await prisma.user.create({
+            data: {
+            id,
+            name: "Motorista Fictício",
+            email: `${id}@fretta.invalid`,
+            emailVerified: false,
+            motorista: {
+                create: {},
+            },
+            },
+        });
+        }
+
+        const imagem = await sharp({
+        create: {
+            width: 100,
+            height: 100,
+            channels: 3,
+            background: "#ffffff",
+        },
+        })
+        .png()
+        .toBuffer();
+
+        async function criarDocumento(
+        proprietarioId: string,
+        tipo: "FOTO_PERFIL" | "CNH",
+        ) {
+        const documento = await salvarDocumentoMotorista({
+            motoristaId: proprietarioId,
+            tipo,
+            bytes: imagem,
+        });
+
+        const registro = await prisma.arquivoPrivado.findUniqueOrThrow({
+            where: { id: documento.id },
+        });
+
+        chavesArquivos.push(registro.chaveArmazenamento);
+
+        return documento.id;
+        }
+
+        const fotoId = await criarDocumento(motoristaId, "FOTO_PERFIL");
+        const cnhId = await criarDocumento(motoristaId, "CNH");
+        const cnhAlheiaId = await criarDocumento(outroMotoristaId, "CNH");
+
+        // Dois documentos corretos do mesmo motorista.
+        assert.equal(
+        await verificarDocumentosMotorista(motoristaId, fotoId, cnhId),
+        true,
+        );
+
+        // Documentos com tipos trocados.
+        assert.equal(
+        await verificarDocumentosMotorista(motoristaId, cnhId, fotoId),
+        false,
+        );
+
+        // Documento pertencente a outro motorista.
+        assert.equal(
+        await verificarDocumentosMotorista(
+            motoristaId,
+            fotoId,
+            cnhAlheiaId,
+        ),
+        false,
+        );
+
+        // Mesmo documento informado duas vezes.
+        assert.equal(
+        await verificarDocumentosMotorista(motoristaId, fotoId, fotoId),
+        false,
+        );
+
+        console.log("Propriedade e tipos dos documentos validados - OK");
+    } finally {
+        for (const chave of chavesArquivos) {
+        await removerArquivoPrivado(chave);
+        }
+
+        await prisma.user.deleteMany({
+        where: {
+            id: {
+            in: [motoristaId, outroMotoristaId],
+            },
+        },
+        });
+    }
+    });

@@ -98,6 +98,7 @@ try {
     tamanhoBytes: imagemNormalizada.length,
   };
 }
+
 export async function removerArquivoPrivado(
   chaveArmazenamento: string,
 ): Promise<void> {

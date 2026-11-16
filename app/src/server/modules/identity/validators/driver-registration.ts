@@ -17,6 +17,8 @@ export interface CadastroMotoristaInput {
   cnhCategoria: string;
   cnhValidade: string;
   veiculoId: string;
+  fotoPerfilId?: string;
+  documentoCnhId?: string;
 }
 
 export function validarCadastroMotorista(

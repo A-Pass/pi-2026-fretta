@@ -12,6 +12,9 @@ import { podeAlterarStatusCadastro } from "@/server/modules/identity/services/re
 import { Prisma } from "@/generated/prisma/client";
 import { verificarPermissaoUpload } from "@/server/modules/identity/services/private-upload-permissions";
 import { salvarDocumentoMotorista } from "../../../../server/modules/identity/services/private-file-service";
+import { verificarDocumentosMotorista } from "@/server/modules/identity/services/private-file-service";
+import { salvarCadastroMotorista } from "@/server/modules/identity/services/driver-registration-persistence";
+
 function extrairDadosCadastro(
   body: unknown,
 ): CadastroMotoristaInput | null {
@@ -36,7 +39,11 @@ function extrairDadosCadastro(
     (dados.cnpj !== undefined &&
       typeof dados.cnpj !== "string") ||
     (dados.razaoSocial !== undefined &&
-      typeof dados.razaoSocial !== "string")
+  typeof dados.razaoSocial !== "string") ||
+(dados.fotoPerfilId !== undefined &&
+  typeof dados.fotoPerfilId !== "string") ||
+(dados.documentoCnhId !== undefined &&
+  typeof dados.documentoCnhId !== "string")
   ) {
     return null;
   }
@@ -51,6 +58,8 @@ function extrairDadosCadastro(
     cnhCategoria: dados.cnhCategoria,
     cnhValidade: dados.cnhValidade,
     veiculoId: dados.veiculoId,
+    fotoPerfilId: dados.fotoPerfilId as string | undefined,
+    documentoCnhId: dados.documentoCnhId as string | undefined,
   };
 }
 
@@ -104,7 +113,6 @@ export async function GET(request: NextRequest) {
 },
       },
     });
-
     if (!user) {
       return Response.json(
         {
@@ -754,15 +762,102 @@ if (path === "/api/v1/driver/registration") {
     );
   }
 
-  // 8. Aguardar integração com armazenamento privado
-  return Response.json(
-    {
-      code: "DOCUMENT_UPLOAD_NOT_CONFIGURED",
-      message:
-        "Dados validados. O envio do cadastro depende da integração com o armazenamento privado de documentos.",
-    },
-    { status: 501 },
+
+  // 8. Exigir os identificadores dos documentos.
+  if (
+    !dados.fotoPerfilId?.trim() ||
+    !dados.documentoCnhId?.trim()
+  ) {
+    return Response.json(
+      {
+        code: "DOCUMENTS_REQUIRED",
+        message: "A foto de perfil e o documento da CNH são obrigatórios.",
+      },
+      { status: 422 },
+    );
+  }
+
+  // 9. Verificar propriedade e tipos dos documentos.
+  const documentosValidos = await verificarDocumentosMotorista(
+    session.user.id,
+    dados.fotoPerfilId,
+    dados.documentoCnhId,
   );
+
+  if (!documentosValidos) {
+    return Response.json(
+      {
+        code: "INVALID_DOCUMENTS",
+        message: "Documentos não encontrados, inválidos ou não autorizados.",
+      },
+      { status: 422 },
+    );
+  }
+  try {
+    const cadastro = await salvarCadastroMotorista(
+      session.user.id,
+      {
+        ...dados,
+        fotoPerfilId: dados.fotoPerfilId,
+        documentoCnhId: dados.documentoCnhId,
+      },
+    );
+
+    return Response.json(
+      {
+        id: cadastro.id,
+        status: cadastro.status,
+        enviadoEm: cadastro.enviadoEm,
+        message: "Cadastro enviado para análise com sucesso.",
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "REGISTRATION_NOT_EDITABLE"
+    ) {
+      return Response.json(
+        {
+          code: "REGISTRATION_NOT_EDITABLE",
+          message: "Este cadastro não pode ser reenviado no status atual.",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return Response.json(
+          {
+            code: "REGISTRATION_CONFLICT",
+            message: "Já existe um cadastro com esses dados.",
+          },
+          { status: 409 },
+        );
+      }
+
+      if (error.code === "P2034") {
+        return Response.json(
+          {
+            code: "REGISTRATION_CONFLICT",
+            message: "O cadastro foi alterado simultaneamente. Tente novamente.",
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    console.error("Falha ao salvar cadastro de motorista:", error);
+
+    return Response.json(
+      {
+        code: "REGISTRATION_FAILED",
+        message: "Não foi possível salvar o cadastro.",
+      },
+      { status: 500 },
+    );
+  }
 }
 
 
