@@ -10,3 +10,6 @@ out/
 
 # Arquivo auxiliar do Better Auth
 /app/prisma/auth-generated.prisma
+
+# Documentos privados enviados pelos usuarios
+/app/storage/private/
