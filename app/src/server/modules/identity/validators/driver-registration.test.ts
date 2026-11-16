@@ -71,5 +71,16 @@ assert.ok(
   semVeiculo.includes("É necessário selecionar um veículo."),
 );
 console.log("Teste 6: Veículo obrigatório - OK");
+// Teste 7: Tipo de pessoa inválido
+const tipoPessoaInvalido = validarCadastroMotorista({
+  ...cadastroPF,
+  tipoPessoa: "EMPRESA" as CadastroMotoristaInput["tipoPessoa"],
+});
 
-console.log("Todos os 6 testes passaram!");
+assert.ok(
+  tipoPessoaInvalido.includes("Tipo de pessoa inválido."),
+);
+
+console.log("Teste 7: Tipo de pessoa inválido - OK");
+
+console.log("Todos os 7 testes passaram!");
