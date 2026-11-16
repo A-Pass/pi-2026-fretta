@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
 import type { AppNotification, Role, Store } from "@/contracts";
 import { dateTime } from "../../lib/dates";
@@ -15,7 +15,11 @@ export function NotificationsView({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const list = (store.notifications || []).filter((n) => n.role === role);
+  const [onlyUnread, setOnlyUnread] = useState(false),
+    [visible, setVisible] = useState(12);
+  useEffect(() => setVisible(12), [role, onlyUnread]);
+  const all = (store.notifications || []).filter((n) => n.role === role);
+  const list = all.filter((n) => !onlyUnread || !n.read);
   async function mark(id?: string) {
     setBusy(true);
     setError("");
@@ -28,6 +32,9 @@ export function NotificationsView({
       });
       if (!ok) setError("Não foi possível atualizar as notificações.");
       return ok;
+    } catch {
+      setError("Não foi possível atualizar as notificações. Tente novamente.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -39,7 +46,7 @@ export function NotificationsView({
           <span className="eyebrow">ACOMPANHE AS NOVIDADES</span>
           <h1>Notificações</h1>
         </div>
-        {list.some((n) => !n.read) && (
+        {all.some((n) => !n.read) && (
           <button
             className="secondary"
             disabled={busy}
@@ -49,13 +56,33 @@ export function NotificationsView({
           </button>
         )}
       </div>
+      <div
+        className="notification-filters"
+        role="group"
+        aria-label="Filtrar notificações"
+      >
+        <button
+          className="secondary"
+          aria-pressed={!onlyUnread}
+          onClick={() => setOnlyUnread(false)}
+        >
+          Todas
+        </button>
+        <button
+          className="secondary"
+          aria-pressed={onlyUnread}
+          onClick={() => setOnlyUnread(true)}
+        >
+          Não lidas
+        </button>
+      </div>
       {error && (
         <p className="alert" role="alert">
           {error}
         </p>
       )}
       <section className="panel notification-list">
-        {list.map((n) => (
+        {list.slice(0, visible).map((n) => (
           <button
             key={n.id}
             disabled={busy}
@@ -82,7 +109,11 @@ export function NotificationsView({
         {!list.length && (
           <div className="empty">
             <Bell />
-            <h2>Tudo tranquilo por aqui</h2>
+            <h2>
+              {onlyUnread
+                ? "Nenhuma notificação não lida"
+                : "Tudo tranquilo por aqui"}
+            </h2>
             <p>
               Propostas, mensagens e atualizações dos seus fretes aparecerão
               aqui.
@@ -90,6 +121,16 @@ export function NotificationsView({
           </div>
         )}
       </section>
+      {visible < list.length && (
+        <div className="load-more">
+          <button
+            className="secondary"
+            onClick={() => setVisible(visible + 12)}
+          >
+            Mostrar mais notificações
+          </button>
+        </div>
+      )}
     </>
   );
 }

@@ -7,6 +7,7 @@ import {
   declineOffer,
   reviseOffer,
 } from "./freights/negotiation";
+import { providerId, providerName } from "./providers/rules";
 import { driverCanPropose } from "./onboarding/rules";
 import { ownProposal } from "./driver/rules";
 import { ProposalFormDialog } from "../components/ProposalFormDialog";
@@ -22,6 +23,8 @@ type Props = {
   send: (text: string) => Promise<boolean>;
   subscription: boolean;
   onManageVehicles: () => void;
+  onProvider?: (id: string, conversationId?: string) => void;
+  onFreight?: (id: string) => void;
   save: (store: Store) => Promise<boolean>;
 };
 export function ChatView({
@@ -34,6 +37,8 @@ export function ChatView({
   name,
   subscription,
   onManageVehicles,
+  onProvider,
+  onFreight,
 }: Props) {
   const conversation = store.proposals.find(
     (p) => p.id === chatId && (role === "cliente" || ownProposal(p, name)),
@@ -49,11 +54,14 @@ export function ChatView({
     [sendError, setSendError] = useState("");
   const contact =
     role === "cliente"
-      ? conversation?.driver || "Motorista"
+      ? conversation
+        ? providerName(conversation)
+        : "Motorista"
       : freight?.clientName || "Cliente de demonstração";
   async function submitMessage(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (sending || !draftText.trim()) return;
+    nearBottom.current = true;
     setSending(true);
     setSendError("");
     try {
@@ -90,16 +98,27 @@ export function ChatView({
     canNegotiate &&
     subscription &&
     driverCanPropose(store);
-  const bottom = useRef<HTMLDivElement>(null);
+  const bottom = useRef<HTMLDivElement>(null),
+    messagesViewport = useRef<HTMLDivElement>(null),
+    nearBottom = useRef(true);
+  const [hasNew, setHasNew] = useState(false),
+    [visibleEvents, setVisibleEvents] = useState(50),
+    [search, setSearch] = useState(""),
+    [visibleChats, setVisibleChats] = useState(20);
   useEffect(() => {
     setDecision(null);
+    setVisibleEvents(50);
+    nearBottom.current = true;
+    setHasNew(false);
     setNewOfferOpen(false);
     setDraftText("");
     setSendError("");
   }, [chatId]);
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "nearest" });
-  }, [chatId, store.messages.length, offers.length]);
+    if (nearBottom.current)
+      bottom.current?.scrollIntoView({ block: "nearest" });
+    else setHasNew(true);
+  }, [chatId, messages.length, offers.length]);
   if (conversation)
     return (
       <section
@@ -124,10 +143,49 @@ export function ChatView({
               }
             </p>
           </div>
+          <div className="conversation-header-links">
+            {role === "cliente" && onProvider && (
+              <button
+                className="provider-link"
+                onClick={() => onProvider(providerId(conversation), conversation.id)}
+              >
+                Ver perfil
+              </button>
+            )}
+            {onFreight && (
+              <button
+                className="provider-link"
+                onClick={() => onFreight(conversation.freightId)}
+              >
+                Ver frete
+              </button>
+            )}
+          </div>
         </header>
-        <div className="conversation-messages">
+        <div
+          className="conversation-messages"
+          ref={messagesViewport}
+          onScroll={() => {
+            const el = messagesViewport.current;
+            if (el) {
+              nearBottom.current =
+                el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+              if (nearBottom.current) setHasNew(false);
+            }
+          }}
+        >
           <div className="conversation-message-inner">
-            {timeline.map((entry) => {
+            {timeline.length > visibleEvents && (
+              <div className="load-more">
+                <button
+                  className="secondary"
+                  onClick={() => setVisibleEvents(visibleEvents + 50)}
+                >
+                  Carregar mensagens anteriores
+                </button>
+              </div>
+            )}
+            {timeline.slice(-visibleEvents).map((entry) => {
               if (entry.kind === "offer") {
                 const offer = entry.offer;
                 const active =
@@ -150,7 +208,12 @@ export function ChatView({
                     }
                     aria-label={`Proposta de ${conversation.driver}`}
                   >
-                    <small>{conversation.driver} · Proposta de frete</small>
+                    <small>
+                      {providerName(conversation)} · Proposta de frete
+                    </small>
+                    {conversation.providerKind === "empresa" && (
+                      <p className="muted">Motorista: {conversation.driver}</p>
+                    )}
                     <div className="chat-offer-heading">
                       <h2>{money(offer.priceCents)}</h2>
                       <span className="badge">{status}</span>
@@ -216,6 +279,20 @@ export function ChatView({
             <div ref={bottom} />
           </div>
         </div>
+        {hasNew && (
+          <div className="chat-new-messages">
+            <button
+              className="secondary"
+              onClick={() => {
+                nearBottom.current = true;
+                setHasNew(false);
+                bottom.current?.scrollIntoView({ block: "nearest" });
+              }}
+            >
+              Novas mensagens ↓
+            </button>
+          </div>
+        )}
         {canRevise && (
           <div className="chat-negotiation-action">
             <button className="secondary" onClick={() => setNewOfferOpen(true)}>
@@ -256,11 +333,11 @@ export function ChatView({
         <ConfirmDialog
           open={decision !== null}
           onClose={() => setDecision(null)}
-          title={`${decision?.action === "decline" ? "Recusar" : "Aceitar"} essa proposta de ${conversation.driver}?`}
+          title={`${decision?.action === "decline" ? "Recusar" : "Aceitar"} essa proposta de ${providerName(conversation)}?`}
           description={
             decision?.action === "decline"
               ? "A proposta será recusada. A conversa continuará aberta para negociar uma nova proposta."
-              : `O frete será agendado por ${money(decision?.offer.priceCents ?? 0)} e as outras propostas serão encerradas.`
+              : `O frete será agendado por ${money(decision?.offer.priceCents ?? 0)} e as outras propostas serão encerradas. Motorista: ${conversation.driver}. Veículo: ${decision?.offer.vehicle ?? ""}. Disponibilidade: ${decision ? dateTime(decision.offer.availableAt) : ""}.`
           }
           confirmLabel={
             decision?.action === "decline"
@@ -314,20 +391,35 @@ export function ChatView({
       </EmptyState>
     );
   const conversations = store.proposals.filter(
-    (p) => role === "cliente" || ownProposal(p, name),
+    (p) =>
+      (role === "cliente" || ownProposal(p, name)) &&
+      `${providerName(p)} ${store.freights.find((f) => f.id === p.freightId)?.title || ""}`
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase()),
   );
   return (
     <>
       <span className="eyebrow">VAMOS COMBINAR</span>
       <h1>Conversas</h1>
+      <label className="search conversations-search">
+        <span className="sr-only">Buscar conversas</span>
+        <input
+          placeholder="Buscar por nome ou frete"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setVisibleChats(20);
+          }}
+        />
+      </label>
       <section className="panel conversation-list conversations-only">
-        {conversations.map((p) => {
+        {conversations.slice(0, visibleChats).map((p) => {
           const last = store.messages
             .filter((m) => m.proposalId === p.id)
             .at(-1);
           const contactName =
             role === "cliente"
-              ? p.driver
+              ? providerName(p)
               : store.freights.find((f) => f.id === p.freightId)?.clientName ||
                 "Cliente de demonstração";
           return (
@@ -352,6 +444,16 @@ export function ChatView({
           </div>
         )}
       </section>
+      {visibleChats < conversations.length && (
+        <div className="load-more">
+          <button
+            className="secondary"
+            onClick={() => setVisibleChats(visibleChats + 20)}
+          >
+            Mostrar mais conversas
+          </button>
+        </div>
+      )}
     </>
   );
 }

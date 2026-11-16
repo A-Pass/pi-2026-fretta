@@ -232,7 +232,7 @@ export function DriverOnboardingView({
               Continuar como cliente
             </button>
             {store.proposals.some((p) =>
-              ownProposal(p, store.profile?.name || "Clayton"),
+              ownProposal(p, store.profile?.name || "Cleiton"),
             ) && (
               <button className="back" onClick={onServices}>
                 Acessar meus serviços existentes

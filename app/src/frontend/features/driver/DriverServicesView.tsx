@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, MapPin } from "lucide-react";
 import type { Store, Freight } from "@/contracts";
 import { ownProposal } from "./rules";
@@ -21,6 +21,8 @@ export function DriverServicesView({
   schedule: (f: Freight) => string | undefined;
 }) {
   const [tab, setTab] = useState("propostas");
+  const [visible, setVisible] = useState(12);
+  useEffect(() => setVisible(12), [tab]);
   const mine = store.proposals.filter((p) => ownProposal(p, name));
   const list = mine.flatMap((proposal) => {
     const freight = store.freights.find((f) => f.id === proposal.freightId);
@@ -72,7 +74,7 @@ export function DriverServicesView({
         ))}
       </div>
       <div className="cards">
-        {list.map(({ freight: f, proposal: p }) => (
+        {list.slice(0, visible).map(({ freight: f, proposal: p }) => (
           <article className="freight-card" key={p.id}>
             <div className="section-head">
               <StatusBadge status={f.status} />
@@ -121,6 +123,16 @@ export function DriverServicesView({
           </EmptyState>
         )}
       </div>
+      {visible < list.length && (
+        <div className="load-more">
+          <button
+            className="secondary"
+            onClick={() => setVisible(visible + 12)}
+          >
+            Mostrar mais serviços
+          </button>
+        </div>
+      )}
     </>
   );
 }

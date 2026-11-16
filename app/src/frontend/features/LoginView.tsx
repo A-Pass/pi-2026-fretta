@@ -56,7 +56,7 @@ export function LoginView({ role, onBack, onContinue }: Props) {
         <div className="login-demo">
           <b>Login simulado</b>
           <p>
-            Você entrará com o perfil fictício de Clayton. Nenhuma conta Google
+            Você entrará com o perfil fictício de Cleiton. Nenhuma conta Google
             será acessada e nenhum dado será enviado.
           </p>
         </div>

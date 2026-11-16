@@ -1,14 +1,13 @@
 import type { FrettaApi, Store } from "@/contracts";
 import { withDemoRequests } from "../mocks/demoRequests";
 import { withNotifications } from "../features/notifications/rules";
+import { createHttpTransport } from "./http";
 import { seed } from "../mocks/seed";
 const KEY = "fretta-demo-v1";
 export const api: FrettaApi = {
   async load() {
     if (process.env.NEXT_PUBLIC_API_MODE === "real") {
-      const r = await fetch("/api/v1/state");
-      if (!r.ok) throw new Error("Servidor ainda não implementado.");
-      return r.json();
+      return createHttpTransport().request<Store>("/state");
     }
     const raw = localStorage.getItem(KEY);
     if (!raw) {
@@ -23,7 +22,22 @@ export const api: FrettaApi = {
         !Array.isArray(s.messages)
       )
         throw Error();
-      const normalized = withDemoRequests(s as Store);
+      const corrected: Store = s;
+      const name = (value: string) => value.replace(/\bClayton\b/gi, "Cleiton");
+      if (corrected.profile)
+        corrected.profile.name = name(corrected.profile.name);
+      if (corrected.driverRegistration)
+        corrected.driverRegistration.fullName = name(
+          corrected.driverRegistration.fullName,
+        );
+      corrected.proposals.forEach((p) => {
+        p.driver = name(p.driver);
+      });
+      corrected.freights.forEach((f) => {
+        if (f.clientName) f.clientName = name(f.clientName);
+        if (f.agreement) f.agreement.driver = name(f.agreement.driver);
+      });
+      const normalized = withDemoRequests(corrected);
       return s.notifications
         ? normalized
         : withNotifications(

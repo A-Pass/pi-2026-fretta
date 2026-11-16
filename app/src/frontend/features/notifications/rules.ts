@@ -38,7 +38,7 @@ export function withNotifications(previous: Store, next: Store): Store {
         p.id,
       );
     if (
-      ownProposal(p, next.profile?.name || "Clayton") &&
+      ownProposal(p, next.profile?.name || "Cleiton") &&
       latest.status !== oldLatest?.status
     ) {
       if (latest.status === "RECUSADA")
@@ -77,7 +77,7 @@ export function withNotifications(previous: Store, next: Store): Store {
     const role: Role = m.role === "cliente" ? "motorista" : "cliente";
     if (
       role === "motorista" &&
-      !ownProposal(p, next.profile?.name || "Clayton")
+      !ownProposal(p, next.profile?.name || "Cleiton")
     )
       continue;
     add(
@@ -104,7 +104,7 @@ export function withNotifications(previous: Store, next: Store): Store {
     if (
       f.status === "CONCLUIDO" &&
       p &&
-      ownProposal(p, next.profile?.name || "Clayton")
+      ownProposal(p, next.profile?.name || "Cleiton")
     )
       add(
         `completed:${f.id}`,

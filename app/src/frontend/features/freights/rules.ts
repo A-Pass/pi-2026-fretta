@@ -24,6 +24,8 @@ export function acceptProposal(
             status: "AGENDADO",
             acceptedProposalId: id,
             agreement: {
+              providerName: p.providerName,
+              providerKind: p.providerKind,
               proposalId: id,
               offerId: proposalOffers(p).at(-1)!.id,
               driver: p.driver,
@@ -65,6 +67,7 @@ export function submitReview(
   role: Role,
   score: number,
   comment: string,
+  publishComment = false,
 ): Store {
   const freight = store.freights.find((f) => f.id === freightId);
   if (!freight || freight.status !== "CONCLUIDO" || freight.reviews[role])
@@ -86,6 +89,11 @@ export function submitReview(
             ...f,
             reviews: { ...f.reviews, [role]: score },
             reviewComments: { ...f.reviewComments, [role]: comment.trim() },
+            reviewPublicComments: {
+              ...f.reviewPublicComments,
+              [role]: publishComment,
+            },
+            reviewDates: { ...f.reviewDates, [role]: new Date().toISOString() },
           }
         : f,
     ),

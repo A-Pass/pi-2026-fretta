@@ -13,6 +13,7 @@ export function ReviewForm({
   store: Store;
   save: (s: Store) => Promise<boolean>;
 }) {
+  const [publishComment, setPublishComment] = useState(false);
   const [score, setScore] = useState(0),
     [comment, setComment] = useState(""),
     [busy, setBusy] = useState(false),
@@ -23,7 +24,18 @@ export function ReviewForm({
     setBusy(true);
     setError("");
     try {
-      if (!(await save(submitReview(store, freight.id, role, score, comment))))
+      if (
+        !(await save(
+          submitReview(
+            store,
+            freight.id,
+            role,
+            score,
+            comment,
+            role === "cliente" && publishComment,
+          ),
+        ))
+      )
         setError("Não foi possível enviar. Tente novamente.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível enviar.");
@@ -80,6 +92,20 @@ export function ReviewForm({
             placeholder="Conte como foi o atendimento…"
           />
         </label>
+        {role === "cliente" && (
+          <label className="checkbox-line">
+            <input
+              type="checkbox"
+              checked={publishComment}
+              onChange={(e) => setPublishComment(e.target.checked)}
+            />{" "}
+            Publicar meu comentário no perfil do prestador
+          </label>
+        )}
+        <p className="muted">
+          A nota compõe a avaliação do serviço. Evite incluir endereços,
+          documentos ou outros dados pessoais no comentário.
+        </p>
       </fieldset>
       {error && (
         <p role="alert" className="alert">

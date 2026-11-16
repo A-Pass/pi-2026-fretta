@@ -13,6 +13,7 @@ import { PhotoGallery } from "../components/PhotoGallery";
 import { ReviewForm } from "../components/ReviewForm";
 import { acceptProposal, money } from "./freights/rules";
 import { proposalOffers, proposalStatusLabel } from "./freights/negotiation";
+import { providerId, providerName } from "./providers/rules";
 import { ownProposal } from "./driver/rules";
 import { StatusBadge } from "../components/StatusBadge";
 import { dateTime } from "../lib/dates";
@@ -30,6 +31,7 @@ type Props = {
   setModal: (s: string) => void;
   setSelected: (s: string | null) => void;
   onChat: (id: string) => void;
+  onProvider?: (id: string, conversationId?: string) => void;
   save: (s: Store) => Promise<boolean>;
   schedule: (f: Freight) => string | undefined;
 };
@@ -77,6 +79,7 @@ export function FreightDetailsView({
   setModal,
   setSelected,
   onChat,
+  onProvider,
   save,
   schedule,
 }: Props) {
@@ -96,11 +99,22 @@ export function FreightDetailsView({
   const renderProposal = (p: Proposal) => (
     <article className="proposal" key={p.id}>
       <div className="section-head">
-        <b>{p.driver}</b>
+        <b>{providerName(p)}</b>
         <span>
           <Star size={14} /> {p.rating || "Novo"}
         </span>
       </div>
+      {p.providerKind === "empresa" && (
+        <p className="muted">Motorista: {p.driver}</p>
+      )}
+      {onProvider && (
+        <button
+          className="provider-link"
+          onClick={() => onProvider(providerId(p), p.id)}
+        >
+          Ver perfil do prestador
+        </button>
+      )}
       <small>{p.vehicle}</small>
       <h2>{money(p.priceCents)}</h2>
       <p>{dateTime(p.availableAt)}</p>
@@ -180,6 +194,12 @@ export function FreightDetailsView({
               <h2>
                 <Check size={20} /> Seu frete está combinado
               </h2>
+              {agreement.providerName &&
+                agreement.providerName !== agreement.driver && (
+                  <p>
+                    <b>Prestador contratado: {agreement.providerName}</b>
+                  </p>
+                )}
               <dl className="agreement-facts">
                 <div>
                   <dt>Motorista</dt>
@@ -289,8 +309,8 @@ export function FreightDetailsView({
       <ConfirmDialog
         open={proposalToAccept !== null}
         onClose={() => setProposalToAccept(null)}
-        title={`Aceitar essa proposta de ${proposalToAccept?.proposal.driver ?? ""}?`}
-        description={`O frete será agendado por ${proposalToAccept ? money(proposalToAccept.proposal.priceCents) : ""} e as outras propostas serão encerradas.`}
+        title={`Aceitar essa proposta de ${proposalToAccept ? providerName(proposalToAccept.proposal) : ""}?`}
+        description={`O frete será agendado por ${proposalToAccept ? money(proposalToAccept.proposal.priceCents) : ""} e as outras propostas serão encerradas. Motorista: ${proposalToAccept?.proposal.driver ?? ""}. Veículo: ${proposalToAccept?.proposal.vehicle ?? ""}. Disponibilidade: ${proposalToAccept ? dateTime(proposalToAccept.proposal.availableAt) : ""}.`}
         confirmLabel="Sim, aceitar proposta"
         cancelLabel="Voltar"
         pendingLabel="Aceitando…"

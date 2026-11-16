@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { LocateFixed, Check, MapPin } from "lucide-react";
-import type { Map as LeafletMap, Marker, Circle } from "leaflet";
+import type { Map as LeafletMap, Marker, Circle, TileLayer } from "leaflet";
 import type { MapPoint } from "@/contracts";
 const tiles =
   process.env.NEXT_PUBLIC_MAP_TILE_URL ||
@@ -14,6 +14,8 @@ export function LocationPicker({
   radiusKm?: number;
   onChange: (p: MapPoint | null) => void;
 }) {
+  const instructionsId = useId();
+  const tileLayer = useRef<TileLayer | null>(null);
   const container = useRef<HTMLDivElement>(null),
     map = useRef<LeafletMap | null>(null),
     marker = useRef<Marker | null>(null),
@@ -36,12 +38,18 @@ export function LocationPicker({
     import("leaflet")
       .then((L) => {
         if (disposed || !container.current) return;
-        const m = L.map(container.current, { scrollWheelZoom: false }).setView(
+        const m = L.map(container.current, {
+          scrollWheelZoom: false,
+          zoomControl: false,
+        }).setView(
           value ? [value.lat, value.lng] : [-16.377, -39.58],
           value ? 16 : 13,
         );
         map.current = m;
-        L.tileLayer(tiles, {
+        L.control
+          .zoom({ zoomInTitle: "Aproximar mapa", zoomOutTitle: "Afastar mapa" })
+          .addTo(m);
+        tileLayer.current = L.tileLayer(tiles, {
           maxZoom: 19,
           attribution:
             '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>',
@@ -166,8 +174,10 @@ export function LocationPicker({
   return (
     <div className="location-picker">
       <div className="section-head">
-        <p className="muted">
-          Toque no mapa ou arraste o marcador. Use + e − para ajustar o zoom.
+        <p className="muted" id={instructionsId}>
+          Toque no mapa ou arraste o marcador. No teclado, use as setas para
+          mover o mapa e o botão “Selecionar centro do mapa”. Use + e − para
+          ajustar o zoom.
         </p>
         <button
           type="button"
@@ -184,18 +194,45 @@ export function LocationPicker({
         className="address-map"
         role="region"
         aria-label="Mapa para selecionar o endereço"
+        aria-describedby={instructionsId}
+        tabIndex={0}
       />
       {tileError && (
-        <p role="status" className="map-message">
+        <div role="status" className="map-message">
           O mapa está com dificuldade para carregar. Confira sua conexão; se não
           conseguir identificar o local, tente novamente antes de confirmar.
-        </p>
+          <button
+            type="button"
+            className="provider-link"
+            onClick={() => {
+              setTileError(false);
+              tileLayer.current?.redraw();
+            }}
+          >
+            Tentar carregar o mapa novamente
+          </button>
+        </div>
       )}
       {error && (
         <p className="alert" role="alert">
           {error}
         </p>
       )}
+      <button
+        type="button"
+        className="secondary select-map-center"
+        disabled={!mapReady || loading}
+        onClick={() => {
+          const center = map.current?.getCenter();
+          if (center) {
+            placeRef.current({ lat: center.lat, lng: center.lng });
+            change.current(null);
+            setError("");
+          }
+        }}
+      >
+        <MapPin size={16} /> Selecionar centro do mapa
+      </button>
       <div className="map-confirm">
         <span>
           {value ? (

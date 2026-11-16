@@ -20,6 +20,8 @@ export interface Freight {
   acceptedProposalId?: string;
   reviews: Partial<Record<Role, number>>;
   reviewComments?: Partial<Record<Role, string>>;
+  reviewPublicComments?: Partial<Record<Role, boolean>>;
+  reviewDates?: Partial<Record<Role, string>>;
   agreement?: Agreement;
 }
 export interface Vehicle {
@@ -31,6 +33,8 @@ export interface Vehicle {
   description: string;
 }
 export interface Agreement {
+  providerName?: string;
+  providerKind?: "autonomo" | "empresa";
   proposalId: string;
   offerId: string;
   driver: string;
@@ -42,6 +46,9 @@ export interface Agreement {
   acceptedAt: string;
 }
 export interface Proposal {
+  providerName?: string;
+  providerKind?: "autonomo" | "empresa";
+  providerLogo?: string;
   vehicleId?: string;
   offers?: ProposalOffer[];
   driverId?: string;
@@ -97,7 +104,35 @@ export interface DriverRegistration {
   reviewedAt?: string;
   feedback?: string;
 }
+export interface CompanyProfile {
+  tradeName: string;
+  logo: string;
+  about: string;
+  city: string;
+}
+export interface PublicProviderProfile {
+  id: string;
+  kind: "autonomo" | "empresa";
+  name: string;
+  photo: string;
+  driver: { name: string; photo: string };
+  about: string;
+  city: string;
+  completedCount: number;
+  rating: number | null;
+  reviewCount: number;
+  reviews: { id: string; score: number; comment: string; date?: string }[];
+  vehicles: {
+    category: string;
+    model: string;
+    capacityKg?: number;
+    description: string;
+  }[];
+}
 export interface Store {
+  adminDemoCases?: AdminCase[];
+  adminReviews?: AdminReview[];
+  companyProfile?: CompanyProfile;
   driverRegistration?: DriverRegistration;
   vehicles?: Vehicle[];
   profile?: { name: string; photo: string };
@@ -153,3 +188,19 @@ export interface OperatingArea {
   radiusKm: number;
   label: string;
 }
+
+export type AdminCase = {
+  id: string;
+  registration: DriverRegistration;
+  photo: string;
+  vehicles: Vehicle[];
+};
+export type AdminReview = {
+  id: string;
+  caseId: string;
+  version: string;
+  actor: string;
+  at: string;
+  decision: "APROVADO" | "AJUSTES_SOLICITADOS";
+  reason: string;
+};

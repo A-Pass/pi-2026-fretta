@@ -45,3 +45,30 @@ Contratos a consolidar com a frente de identidade:
 - POST de proposta/nova oferta deve validar cadastro aprovado, habilitação, veículo e assinatura no momento da operação. Login Google ou preenchimento do formulário não equivalem a aprovação.
 
 A demonstração só persiste o resumo mascarado em driverRegistration. Os arquivos de CNH e os identificadores completos não são persistidos/transmitidos pelo adaptador local. A implementação real depende de armazenamento privado e do processo de verificação escolhido pelo grupo; nenhum provedor de consulta/OCR/biometria foi contratado ou conectado.
+
+## Complementos do front-end de 16/11/2026
+
+Cliente HTTP preparado em `app/src/frontend/api/http.ts` e chamadas principais em `backend.ts`; ainda não conectado ao fluxo real das telas. Confirmar schemas/respostas antes da integração.
+
+- GET /providers/:id: DTO público permitido (`PublicProviderProfile`), sem CPF/CNPJ/CNH/placa/endereços privados; empresa tem logo e motorista responsável com foto separados. Contagens e média são calculadas no servidor, somente de serviços concluídos.
+- POST /freights/:id/reviews: inclui `publishComment` explícito, falso por padrão; avaliações antigas sem esse campo não publicam comentários. Não expor identidade do cliente junto ao comentário público.
+- GET /addresses: coleção privada paginada. Acordar POST/PATCH/DELETE para o CRUD de endereços já existente na demonstração.
+- Empresa: acordar leitura/edição autenticada de nome comercial, logo, apresentação e cidade; razão social/CNPJ seguem privados no cadastro. O MVP tem um motorista responsável; não concede vínculo a outras contas.
+- Upload responde ID autorizado, não caminho arbitrário enviado pelo usuário. CNH usa endpoint privado separado. Identidade, autoria e permissão sempre derivadas da sessão no servidor.
+- Mensagens incluem `clientMessageId` para permitir deduplicação no servidor. Falhas de mutações não são repetidas automaticamente pelo transporte.
+
+## Painel administrativo — contrato proposto
+
+Rota de interface `/admin`, separada da navegação de cliente/motorista no mesmo projeto. Neste momento funciona somente com casos fictícios no adaptador local. Em modo real, consulta `/admin/me` e permanece bloqueada: não há sessão/autorização administrativa implementada. Não ativar o painel real apenas por e-mail, query string ou localStorage.
+
+Contrato a implementar pela frente de identidade/back-end:
+
+- GET /admin/me: identidade administrativa derivada da sessão do servidor, 401 sem sessão, 403 para conta sem permissão.
+- GET /admin/driver-registrations?status=EM_ANALISE&cursor=...: casos autorizados paginados, com versão de cada envio.
+- GET /admin/driver-registrations/:id: identificação necessária à análise, foto, habilitação e veículos; resposta privada sem cache. DTO privado separado do perfil público.
+- GET /admin/driver-registrations/:id/documents/:documentId: leitura do documento autorizada para administrador; arquivo fora de public/, cabeçalhos privados e sem URL pública permanente. A interface atual exibe um placeholder honesto pois a CNH nunca foi persistida no protótipo.
+- POST /admin/driver-registrations/:id/review: `{decision, reason, expectedVersion}`. Decisões APROVADO/AJUSTES_SOLICITADOS; motivo de ajustes entre 10 e 1000 caracteres. Servidor verifica o cadastro pendente, versão, documentos/validade e permissão; rejeita decisão concorrente com 409. Não aceitar autor/data enviados pelo navegador como verdade.
+- Registrar revisão e alteração de situação na mesma transação, com administrador, data do servidor, versão e motivo; histórico não editável pelo prestador. Notificar o prestador e devolver o resumo atualizado em GET /driver/registration.
+- CSRF/origem para operações com sessão por cookie, limites de uso e trilha de acesso a documentos. Conceder a primeira permissão por migração/seed administrativo controlado, nunca pelo cadastro público. Conta com acesso ao repositório não é automaticamente administradora.
+
+O demo mantém decisões em `adminReviews` e casos fictícios em `adminDemoCases`; o caso `demo-driver` lê e altera `driverRegistration` já existente. Reenvio do motorista mantém o histórico e muda a versão. As proteções locais evitam erros de apresentação, mas não equivalem à autorização ou concorrência transacional de servidor. Os botões antigos de autoaprovação foram retirados da tela do motorista.

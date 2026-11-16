@@ -31,12 +31,17 @@ export function useDemoNavigation() {
     return () => window.removeEventListener("popstate", restore);
   }, []);
   function navigate(patch: Partial<DemoRoute>, replace = false) {
+    const from = routeUrl(current.current);
     const next = { ...current.current, ...patch };
     current.current = next;
     setRoute(next);
     const url = routeUrl(next);
     if (url !== location.pathname + location.search)
-      window.history[replace ? "replaceState" : "pushState"](null, "", url);
+      window.history[replace ? "replaceState" : "pushState"](
+        { frettaBackTo: replace ? window.history.state?.frettaBackTo : from },
+        "",
+        url,
+      );
     window.scrollTo({ top: 0 });
   }
   return {
@@ -46,14 +51,62 @@ export function useDemoNavigation() {
     loginRequested,
     setLoginRequested,
     navigate,
+    back: (fallback: Tab = "fretes") => {
+      if (
+        typeof window.history.state?.frettaBackTo === "string" &&
+        window.history.state.frettaBackTo.startsWith("/?")
+      )
+        window.history.back();
+      else
+        navigate({
+          tab: fallback,
+          selected: null,
+          chatId: "",
+          providerId: null,
+          providerConversationId: null,
+        });
+    },
+    openProvider: (providerId: string, providerConversationId?: string) =>
+      navigate({
+        providerId,
+        providerConversationId: providerConversationId || null,
+        tab: "prestador",
+        selected: null,
+        chatId: "",
+      }),
     setRole: (role: Role) =>
-      navigate({ role, tab: "inicio", selected: null, chatId: "" }),
+      navigate({
+        role,
+        tab: "inicio",
+        selected: null,
+        chatId: "",
+        providerId: null,
+        providerConversationId: null,
+      }),
     setSelected: (selected: string | null) =>
-      navigate({ selected, chatId: "", tab: "fretes" }),
+      navigate({
+        selected,
+        chatId: "",
+        providerId: null,
+        providerConversationId: null,
+        tab: "fretes",
+      }),
     setChatId: (chatId: string) =>
-      navigate({ chatId, selected: null, tab: "chat" }),
+      navigate({
+        chatId,
+        selected: null,
+        providerId: null,
+        providerConversationId: null,
+        tab: "chat",
+      }),
     nav: (tab: string) =>
-      navigate({ tab: tab as Tab, selected: null, chatId: "" }),
+      navigate({
+        tab: tab as Tab,
+        selected: null,
+        chatId: "",
+        providerId: null,
+        providerConversationId: null,
+      }),
     login: () => {
       try {
         sessionStorage.setItem(sessionKey, "active");
@@ -67,7 +120,16 @@ export function useDemoNavigation() {
       } catch {}
       setEntered(false);
       setLoginRequested(false);
-      navigate({ tab: "inicio", selected: null, chatId: "" }, true);
+      navigate(
+        {
+          tab: "inicio",
+          selected: null,
+          chatId: "",
+          providerId: null,
+          providerConversationId: null,
+        },
+        true,
+      );
     },
   };
 }

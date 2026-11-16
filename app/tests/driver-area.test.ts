@@ -44,5 +44,5 @@ test("identidade do motorista preserva suas propostas após mudar nome", () => {
     ),
     true,
   );
-  assert.equal(ownProposal(seed.proposals[0], "Clayton"), false);
+  assert.equal(ownProposal(seed.proposals[0], "Cleiton"), false);
 });
