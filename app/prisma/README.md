@@ -1,0 +1,1 @@
+Modelo oficial a implementar pelo responsável de dados conforme docs/domain.md. Prisma e PostgreSQL são a escolha do projeto. O esquema anterior está na tag de backup. Não aplicar migrações antigas nesta base.
