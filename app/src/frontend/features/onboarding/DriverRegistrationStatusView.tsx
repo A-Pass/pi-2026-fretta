@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   BadgeCheck,
@@ -216,9 +217,9 @@ export function DriverRegistrationStatusView({
                 A análise agora pode ser feita pelo painel administrativo de
                 demonstração, com motivo e histórico da decisão.
               </p>
-              <a className="secondary" href="/admin">
+              <Link className="secondary" href="/admin">
                 Abrir painel administrativo · demonstração
-              </a>
+              </Link>
             </div>
           )}
         </section>

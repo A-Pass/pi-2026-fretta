@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -91,13 +92,13 @@ export function AdminApp() {
   return (
     <div className="admin-shell">
       <header className="admin-header">
-        <a className="brand" href="/">
+        <Link className="brand" href="/">
           FRETTA<span>•</span>
-        </a>
+        </Link>
         <span>
           <ShieldCheck size={19} /> Administração
         </span>
-        <a href="/?perfil=cliente&tela=perfil">Voltar ao aplicativo</a>
+        <Link href="/cliente/perfil">Voltar ao aplicativo</Link>
       </header>
       <main className="admin-main">
         <p className="admin-demo-note">

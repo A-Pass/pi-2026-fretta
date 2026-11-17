@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, Camera, LogOut, Pencil, User, X } from "lucide-react";
 import type { Role, DriverRegistration } from "@/contracts";
 import { prepareOnboardingPhoto } from "./onboarding/images";
@@ -214,9 +215,9 @@ export function ProfileView({
           <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
         </button>
         {process.env.NEXT_PUBLIC_API_MODE !== "real" && (
-          <a className="secondary profile-return" href="/admin">
+          <Link className="secondary profile-return" href="/admin">
             Painel administrativo · demonstração
-          </a>
+          </Link>
         )}
         {role === "motorista" && (
           <div className="profile-driver-links">

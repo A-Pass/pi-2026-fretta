@@ -53,7 +53,7 @@ Para executar main: faça commit de seu trabalho e use `git switch main`. Não u
 
 ## Estado do front-end
 
-A demonstração tem veículos, perfil persistente, negociação com histórico de ofertas no chat, notificações locais, acordo após aceite e avaliação com comentário. As telas usam URLs com parâmetros (`?perfil=motorista&tela=veiculos`, `?perfil=cliente&tela=fretes&frete=...` e `?perfil=cliente&tela=chat&conversa=...`). Voltar/Avançar e recarregar preservam o contexto; a sessão demonstrativa é mantida somente nesta aba até sair. Meus veículos e Minha assinatura ficam no perfil do motorista.
+A demonstração tem veículos, perfil persistente, negociação com histórico de ofertas no chat, notificações locais, acordo após aceite e avaliação com comentário. As telas usam segmentos do App Router (`/motorista/veiculos`, `/cliente/fretes/{id}` e `/cliente/chat/{id}`); links antigos com parâmetros de consulta são redirecionados para as rotas equivalentes. Voltar/Avançar e recarregar preservam o contexto; a sessão demonstrativa é mantida somente nesta aba até sair. Meus veículos e Minha assinatura ficam no perfil do motorista.
 
 No primeiro uso do perfil motorista, um cadastro guiado solicita dados, foto de perfil, CNH e veículo. O envio fica em análise; a aprovação só pode ser simulada nos controles identificados como demonstração. Use dados fictícios: números completos e imagem da CNH não são persistidos no protótipo. Serviços/conversas anteriores continuam acessíveis enquanto há pendência, mas novas propostas exigem aprovação simulada e assinatura ativa.
 

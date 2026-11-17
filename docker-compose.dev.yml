@@ -1,7 +1,7 @@
 services:
   app:
     build:
-      target: ${NODE_ENV}
+      target: ${APP_NODE_ENV}
     image: app-fretta:dev
     ports:
       - "9229:9229"
