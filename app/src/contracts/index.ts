@@ -7,6 +7,14 @@ export type Schedule = {
   end?: string;
 };
 export interface Freight {
+  revision?: number;
+  updatedAt?: string;
+  cancellation?: {
+    role: "cliente";
+    reason: string;
+    at: string;
+    previousStatus: FreightStatus;
+  };
   id: string;
   clientName?: string;
   title: string;
@@ -46,6 +54,8 @@ export interface Agreement {
   acceptedAt: string;
 }
 export interface Proposal {
+  companyId?: string;
+  requestRevision?: number;
   providerName?: string;
   providerKind?: "autonomo" | "empresa";
   providerLogo?: string;
@@ -73,6 +83,8 @@ export interface ProposalOffer {
   status: "PENDENTE" | "ACEITA" | "RECUSADA" | "SUBSTITUIDA" | "ENCERRADA";
 }
 export interface Message {
+  actorId?: string;
+  senderName?: string;
   id: string;
   freightId: string;
   proposalId: string;
@@ -81,6 +93,7 @@ export interface Message {
   createdAt: string;
 }
 export interface AppNotification {
+  companyInviteId?: string;
   id: string;
   role: Role;
   title: string;
@@ -103,6 +116,8 @@ export interface DriverRegistration {
   submittedAt: string;
   reviewedAt?: string;
   feedback?: string;
+  correctionItems?: CorrectionItem[];
+  submissionCount?: number;
 }
 export interface CompanyProfile {
   tradeName: string;
@@ -111,6 +126,7 @@ export interface CompanyProfile {
   city: string;
 }
 export interface PublicProviderProfile {
+  teamManaged?: boolean;
   id: string;
   kind: "autonomo" | "empresa";
   name: string;
@@ -130,6 +146,7 @@ export interface PublicProviderProfile {
   }[];
 }
 export interface Store {
+  fleet?: FleetState;
   adminDemoCases?: AdminCase[];
   adminReviews?: AdminReview[];
   companyProfile?: CompanyProfile;
@@ -190,11 +207,13 @@ export interface OperatingArea {
 }
 
 export type AdminCase = {
+  fleetCompanyId?: string;
   id: string;
   registration: DriverRegistration;
   photo: string;
   vehicles: Vehicle[];
 };
+export type CorrectionItem = "dados" | "foto" | "cnh" | "veiculo";
 export type AdminReview = {
   id: string;
   caseId: string;
@@ -203,4 +222,49 @@ export type AdminReview = {
   at: string;
   decision: "APROVADO" | "AJUSTES_SOLICITADOS";
   reason: string;
+  correctionItems?: CorrectionItem[];
 };
+
+export interface FleetPerson {
+  id: string;
+  code: string;
+  name: string;
+  photo: string;
+  registration: DriverRegistration;
+}
+export interface FleetInvite {
+  id: string;
+  companyId: string;
+  driverId: string;
+  createdAt: string;
+  expiresAt: string;
+  status: "PENDENTE" | "ACEITO" | "RECUSADO" | "CANCELADO";
+  respondedAt?: string;
+}
+export interface FleetMembership {
+  id: string;
+  companyId: string;
+  driverId: string;
+  joinedAt: string;
+  leftAt?: string;
+  activeSeat: boolean;
+}
+export interface FleetDispatch {
+  id: string;
+  companyId: string;
+  driverId: string;
+  vehicle: Vehicle;
+  freightId: string;
+  requestRevision: number;
+  createdAt: string;
+  status: "PENDENTE" | "ACEITA" | "RECUSADA" | "CANCELADA";
+  proposalId?: string;
+}
+export interface FleetState {
+  company: { id: string; managerId: string; name: string; logo: string };
+  people: FleetPerson[];
+  vehicles: Vehicle[];
+  invites: FleetInvite[];
+  members: FleetMembership[];
+  dispatches: FleetDispatch[];
+}

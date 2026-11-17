@@ -6,6 +6,7 @@ import {
   demoCases,
   reviewDemo,
   reviewVersion,
+  caseWarnings,
 } from "../src/frontend/features/admin/rules";
 import { AdminApp } from "../src/frontend/features/admin/AdminApp";
 import { driverCanPropose } from "../src/frontend/features/onboarding/rules";
@@ -51,12 +52,16 @@ test("corrections need a usable reason and remain visible to the driver", () => 
     reviewVersion(c),
     "AJUSTES_SOLICITADOS",
     "Reenvie uma imagem legível da CNH.",
+    undefined,
+    ["cnh"],
   );
   assert.equal(
     next.driverRegistration?.feedback,
     "Reenvie uma imagem legível da CNH.",
   );
   assert.equal(driverCanPropose(next), false);
+  assert.deepEqual(next.driverRegistration?.correctionItems, ["cnh"]);
+  assert.deepEqual(next.adminReviews?.[0].correctionItems, ["cnh"]);
   assert.throws(
     () => reviewDemo(next, c.id, reviewVersion(c), "APROVADO", ""),
     /mudou/,
@@ -91,6 +96,8 @@ test("resubmission invalidates old review version and audit survives later decis
     reviewVersion(c),
     "AJUSTES_SOLICITADOS",
     "Confira os dados enviados.",
+    undefined,
+    ["dados"],
   );
   changed.driverRegistration = {
     ...changed.driverRegistration!,
@@ -124,4 +131,52 @@ test("admin workspace clearly labels demo and real mode never renders local reco
     if (before === undefined) delete process.env.NEXT_PUBLIC_API_MODE;
     else process.env.NEXT_PUBLIC_API_MODE = before;
   }
+});
+
+test("correction categories must be present and valid, and approval blocks incomplete data", () => {
+  const s = pending(),
+    c = demoCases(s)[0];
+  assert.throws(
+    () =>
+      reviewDemo(
+        s,
+        c.id,
+        reviewVersion(c),
+        "AJUSTES_SOLICITADOS",
+        "Reenvie os documentos.",
+      ),
+    /Selecione/,
+  );
+  assert.throws(
+    () =>
+      reviewDemo(
+        s,
+        c.id,
+        reviewVersion(c),
+        "AJUSTES_SOLICITADOS",
+        "Reenvie os documentos.",
+        undefined,
+        ["invalid" as never],
+      ),
+    /Selecione/,
+  );
+  s.profile!.photo = "";
+  s.vehicles![0].model = "";
+  s.driverRegistration!.documentsSubmitted = false;
+  const warnings = caseWarnings(demoCases(s)[0]);
+  assert.ok(warnings.includes("Foto do motorista ausente."));
+  assert.ok(warnings.includes("Documentação não enviada."));
+  assert.ok(warnings.includes("Há um veículo com dados incompletos."));
+  assert.throws(
+    () => reviewDemo(s, c.id, reviewVersion(c), "APROVADO", ""),
+    /Não é possível/,
+  );
+});
+test("submission number changes review version even if timestamps are equal", () => {
+  const s = pending(),
+    c = demoCases(s)[0],
+    v = reviewVersion(c);
+  s.driverRegistration!.submissionCount = 2;
+  assert.notEqual(reviewVersion(demoCases(s)[0]), v);
+  assert.throws(() => reviewDemo(s, c.id, v, "APROVADO", ""), /mudou/);
 });

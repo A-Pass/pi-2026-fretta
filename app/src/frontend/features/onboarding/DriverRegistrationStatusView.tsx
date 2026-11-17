@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Store } from "@/contracts";
 import { driverCanPropose, licenseDateValid } from "./rules";
+import { correctionLabels } from "../admin/rules";
 import { dateTime } from "../../lib/dates";
 type Props = {
   store: Store;
@@ -88,6 +89,16 @@ export function DriverRegistrationStatusView({
                   ? registration.feedback
                   : "Mantenha sua foto, a habilitação e pelo menos um veículo atualizados para enviar propostas."}
           </p>
+          {!!registration.correctionItems?.length && (
+            <div className="alert">
+              <b>Itens para corrigir</b>
+              <ul>
+                {registration.correctionItems.map((item) => (
+                  <li key={item}>{correctionLabels[item]}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="registration-summary">
             <div className="registration-profile">
               {store.profile?.photo && (
@@ -210,17 +221,7 @@ export function DriverRegistrationStatusView({
               ficam salvos neste navegador.
             </span>
           </div>
-          {process.env.NEXT_PUBLIC_API_MODE !== "real" && pending && (
-            <div className="onboarding-demo-controls">
-              <p>
-                A análise agora pode ser feita pelo painel administrativo de
-                demonstração, com motivo e histórico da decisão.
-              </p>
-              <a className="secondary" href="/admin">
-                Abrir painel administrativo · demonstração
-              </a>
-            </div>
-          )}
+
         </section>
       </main>
     </div>

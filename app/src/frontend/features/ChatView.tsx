@@ -147,7 +147,9 @@ export function ChatView({
             {role === "cliente" && onProvider && (
               <button
                 className="provider-link"
-                onClick={() => onProvider(providerId(conversation), conversation.id)}
+                onClick={() =>
+                  onProvider(providerId(conversation), conversation.id)
+                }
               >
                 Ver perfil
               </button>
@@ -269,7 +271,8 @@ export function ChatView({
                   className={"bubble " + (m.role === role ? "mine" : "")}
                 >
                   <small>
-                    {m.role === "cliente" ? "Cliente" : "Motorista"}
+                    {m.senderName ||
+                      (m.role === "cliente" ? "Cliente" : "Motorista")}
                   </small>
                   <p>{m.text}</p>
                   <time>{time(m.createdAt)}</time>

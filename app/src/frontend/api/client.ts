@@ -1,3 +1,4 @@
+import { clearRequestDrafts } from "../features/requests/drafts";
 import type { FrettaApi, Store } from "@/contracts";
 import { withDemoRequests } from "../mocks/demoRequests";
 import { withNotifications } from "../features/notifications/rules";
@@ -64,5 +65,8 @@ export const api: FrettaApi = {
 };
 export function resetDemo() {
   localStorage.removeItem(KEY);
+  try {
+    clearRequestDrafts(sessionStorage);
+  } catch {}
   location.reload();
 }

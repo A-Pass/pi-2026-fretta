@@ -1,3 +1,7 @@
+import { FreightProgress } from "./requests/FreightProgress";
+import { CancelRequestDialog } from "./requests/CancelRequestDialog";
+import { cancelClientRequest } from "./requests/rules";
+import { SuccessDialog } from "../components/SuccessDialog";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -20,6 +24,7 @@ import { dateTime } from "../lib/dates";
 
 type Props = {
   f: Freight;
+  onEdit?: () => void;
   role: Role;
   name: string;
   store: Store;
@@ -82,8 +87,10 @@ export function FreightDetailsView({
   onProvider,
   save,
   schedule,
+  onEdit,
 }: Props) {
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
   const [proposalToAccept, setProposalToAccept] = useState<{
     proposal: Proposal;
     offerId: string;
@@ -93,7 +100,9 @@ export function FreightDetailsView({
   );
   const isOpportunity = role === "motorista" && f.status === "ABERTO";
   const chosenDriver = accepted && ownProposal(accepted, name);
-  const canSeeAgreement = accepted && (role === "cliente" || chosenDriver);
+  const canSeeAgreement =
+    (accepted && (role === "cliente" || chosenDriver)) ||
+    (role === "cliente" && !!f.agreement);
   const agreement = f.agreement || accepted;
   const snapshot = store.freightAddresses?.[f.id];
   const renderProposal = (p: Proposal) => (
@@ -154,6 +163,7 @@ export function FreightDetailsView({
         </div>
         <StatusBadge status={f.status} />
       </div>
+      {role === "cliente" && <FreightProgress freight={f} />}
       <div
         className={
           isOpportunity ? "detail-grid opportunity-detail" : "detail-grid"
@@ -192,7 +202,10 @@ export function FreightDetailsView({
           {canSeeAgreement && agreement && (
             <section className="agreed-service">
               <h2>
-                <Check size={20} /> Seu frete está combinado
+                <Check size={20} />{" "}
+                {f.status === "CANCELADO"
+                  ? "Acordo anterior · frete cancelado"
+                  : "Seu frete está combinado"}
               </h2>
               {agreement.providerName &&
                 agreement.providerName !== agreement.driver && (
@@ -229,15 +242,35 @@ export function FreightDetailsView({
                   address={snapshot?.delivery}
                 />
               </div>
-              <button className="secondary" onClick={() => onChat(accepted.id)}>
+              <button
+                className="secondary"
+                onClick={() => {
+                  const id = f.agreement?.proposalId || accepted?.id;
+                  if (id) onChat(id);
+                }}
+              >
                 Conversar sobre este frete
               </button>
             </section>
           )}
-          {role === "cliente" && f.status === "ABERTO" && (
-            <button className="danger" onClick={() => setCancelOpen(true)}>
-              Cancelar solicitação
+          {role === "cliente" && f.status === "ABERTO" && onEdit && (
+            <button className="secondary" onClick={onEdit}>
+              Editar solicitação
             </button>
+          )}
+          {role === "cliente" && ["ABERTO", "AGENDADO"].includes(f.status) && (
+            <button className="danger" onClick={() => setCancelOpen(true)}>
+              {f.status === "AGENDADO"
+                ? "Cancelar frete contratado"
+                : "Cancelar solicitação"}
+            </button>
+          )}
+          {role === "cliente" && f.status === "EM_TRANSPORTE" && (
+            <p className="muted">
+              O transporte já começou. Converse com o motorista para resolver
+              qualquer ocorrência; não é possível cancelar automaticamente nesta
+              etapa.
+            </p>
           )}
           {role === "motorista" && chosenDriver && f.status === "AGENDADO" && (
             <button className="primary" onClick={() => setTransition("start")}>
@@ -328,25 +361,32 @@ export function FreightDetailsView({
           return ok;
         }}
       />
-      <ConfirmDialog
-        open={cancelOpen}
-        onClose={() => setCancelOpen(false)}
-        title="Cancelar esta solicitação?"
-        description="Seu frete será cancelado e as propostas recebidas serão encerradas."
-        confirmLabel="Sim, cancelar solicitação"
-        onConfirm={async () => {
-          const ok = await save({
-            ...store,
-            freights: store.freights.map((x) =>
-              x.id === f.id ? { ...x, status: "CANCELADO" } : x,
-            ),
-            proposals: store.proposals.map((x) =>
-              x.freightId === f.id ? { ...x, status: "ENCERRADA" } : x,
-            ),
-          });
-          if (ok) setCancelOpen(false);
-          return ok;
-        }}
+      {cancelOpen && (
+        <CancelRequestDialog
+          freight={f}
+          onClose={() => setCancelOpen(false)}
+          onConfirm={async (reason, expectedStatus) => {
+            if (role !== "cliente") return false;
+            const next = cancelClientRequest(
+              store,
+              f.id,
+              reason,
+              expectedStatus,
+            );
+            const ok = await save(next);
+            if (ok) {
+              setCancelOpen(false);
+              setCancelled(true);
+            }
+            return ok;
+          }}
+        />
+      )}
+      <SuccessDialog
+        open={cancelled}
+        title="Frete cancelado"
+        description="O motivo foi registrado e as notificações foram geradas na demonstração. O histórico e as conversas foram preservados."
+        onClose={() => setCancelled(false)}
       />
       <ConfirmDialog
         open={transition !== null}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useId } from "react";
 import { Check, X } from "lucide-react";
 type Props = {
   open: boolean;
@@ -7,6 +7,8 @@ type Props = {
   onClose: () => void;
 };
 export function SuccessDialog({ open, title, description, onClose }: Props) {
+  const titleId = useId(),
+    descriptionId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -19,8 +21,8 @@ export function SuccessDialog({ open, title, description, onClose }: Props) {
     <dialog
       ref={dialog}
       className="success-dialog"
-      aria-labelledby="success-title"
-      aria-describedby="success-description"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -37,8 +39,8 @@ export function SuccessDialog({ open, title, description, onClose }: Props) {
         <Check size={36} strokeWidth={2.8} />
       </div>
       <span className="success-eyebrow">TUDO CERTO!</span>
-      <h2 id="success-title">{title}</h2>
-      <p id="success-description">{description}</p>
+      <h2 id={titleId}>{title}</h2>
+      <p id={descriptionId}>{description}</p>
       <button
         ref={confirmButton}
         autoFocus

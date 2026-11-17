@@ -7,6 +7,8 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { resetDemo } from "../api/client";
 type Props = {
   onAddresses: () => void;
+  onTeam?: () => void;
+  companyMember?: boolean;
   onRegistration: () => void;
   registration?: DriverRegistration;
   photoRequired: boolean;
@@ -25,6 +27,8 @@ type Props = {
 };
 export function ProfileView({
   onAddresses,
+  onTeam,
+  companyMember = false,
   onRegistration,
   registration,
   photoRequired,
@@ -56,7 +60,6 @@ export function ProfileView({
         <button className="back" onClick={() => discard.leave(onEdit)}>
           <ArrowLeft size={18} /> Voltar ao meu perfil
         </button>
-        <span className="eyebrow">DO SEU JEITO</span>
         <h1>Editar perfil</h1>
         <section className="panel profile profile-editor">
           <form
@@ -186,9 +189,10 @@ export function ProfileView({
     );
   return (
     <>
-      <span className="eyebrow">DO SEU JEITO</span>
-      <h1>Meu perfil</h1>
-      <section className="panel profile">
+      <div className="profile-page-heading">
+        <h1>Meu perfil</h1>
+      </div>
+      <section className="panel profile profile-overview">
         {photo ? (
           <img className="profile-photo" src={photo} alt={`Foto de ${name}`} />
         ) : (
@@ -213,13 +217,19 @@ export function ProfileView({
           Meus Endereços{" "}
           <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
         </button>
-        {process.env.NEXT_PUBLIC_API_MODE !== "real" && (
-          <a className="secondary profile-return" href="/admin">
-            Painel administrativo · demonstração
-          </a>
-        )}
+
         {role === "motorista" && (
           <div className="profile-driver-links">
+            {onTeam && (
+              <button className="secondary" onClick={onTeam}>
+                Minha equipe e convites
+              </button>
+            )}
+            {registration?.personType === "pj" && (
+              <a className="secondary" href="/empresa">
+                Gerenciar empresa · demonstração
+              </a>
+            )}
             <button className="secondary" onClick={onPublicProfile}>
               Ver meu perfil público
             </button>
@@ -242,10 +252,18 @@ export function ProfileView({
               Meus veículos{" "}
               <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
             </button>
-            <button className="secondary" onClick={onSubscription}>
-              Minha assinatura · {subscription ? "Ativa" : "Inativa"}{" "}
-              <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
-            </button>
+            {!companyMember && (
+              <button className="secondary" onClick={onSubscription}>
+                Minha assinatura · {subscription ? "Ativa" : "Inativa"}{" "}
+                <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
+              </button>
+            )}
+            {companyMember && (
+              <p>
+                O acesso aos serviços da equipe é responsabilidade da empresa.
+                Sem assinatura individual para estes serviços.
+              </p>
+            )}
           </div>
         )}
         <button

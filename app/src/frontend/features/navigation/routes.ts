@@ -12,6 +12,7 @@ export const tabs = [
   "cadastro-motorista",
   "prestador",
   "empresa",
+  "equipe",
 ] as const;
 export type Tab = (typeof tabs)[number];
 export type DemoRoute = {

@@ -91,7 +91,44 @@ export function withNotifications(previous: Store, next: Store): Store {
   }
   for (const f of next.freights) {
     const old = previous.freights.find((x) => x.id === f.id);
+    if (old && (old.revision || 0) !== (f.revision || 0)) {
+      for (const p of next.proposals.filter(
+        (p) =>
+          p.freightId === f.id &&
+          ownProposal(p, next.profile?.name || "Cleiton"),
+      ))
+        add(
+          `edited:${f.id}:${f.revision}:${p.id}`,
+          "motorista",
+          "Solicitação alterada",
+          "Os dados do frete mudaram. Confira os detalhes e envie uma nova proposta.",
+          f.id,
+          p.id,
+        );
+    }
     if (old?.status === f.status) continue;
+    if (f.status === "CANCELADO" && old) {
+      add(
+        `cancelled-client:${f.id}`,
+        "cliente",
+        "Frete cancelado",
+        f.cancellation?.reason || f.title,
+        f.id,
+      );
+      for (const p of next.proposals.filter(
+        (p) =>
+          p.freightId === f.id &&
+          ownProposal(p, next.profile?.name || "Cleiton"),
+      ))
+        add(
+          `cancelled-driver:${f.id}:${p.id}`,
+          "motorista",
+          "Frete cancelado pelo cliente",
+          f.cancellation?.reason || f.title,
+          f.id,
+          p.id,
+        );
+    }
     if (f.status === "EM_TRANSPORTE")
       add(
         `started:${f.id}`,
@@ -113,6 +150,27 @@ export function withNotifications(previous: Store, next: Store): Store {
         "O cliente confirmou a conclusão. Você já pode avaliar o serviço.",
         f.id,
       );
+  }
+  for (const invite of next.fleet?.invites || []) {
+    if (
+      invite.driverId !== "demo-driver" ||
+      invite.status !== "PENDENTE" ||
+      Date.parse(invite.expiresAt) <= Date.now() ||
+      previous.fleet?.invites.some((i) => i.id === invite.id)
+    )
+      continue;
+    const id = `company-invite:${invite.id}`;
+    if (!notifications.some((n) => n.id === id))
+      notifications.unshift({
+        id,
+        companyInviteId: invite.id,
+        role: "motorista",
+        title: "Convite para participar de uma empresa",
+        body: `${next.fleet!.company.name} convidou você para a equipe.`,
+        createdAt: invite.createdAt,
+        read: false,
+        freightId: "",
+      });
   }
   return { ...next, notifications };
 }

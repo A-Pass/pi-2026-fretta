@@ -1,19 +1,28 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
   ClipboardList,
   RefreshCw,
   ShieldCheck,
+  UserRound,
+  Camera,
+  IdCard,
+  Truck,
 } from "lucide-react";
-import type { Store } from "@/contracts";
+import type { Store, CorrectionItem } from "@/contracts";
 import { api } from "../../api/client";
 import { createHttpTransport } from "../../api/http";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { SuccessDialog } from "../../components/SuccessDialog";
+import { useDiscardChanges } from "../../components/useDiscardChanges";
+import { DocumentViewer } from "./DocumentViewer";
 import { dateTime } from "../../lib/dates";
 import {
   demoCases,
+  caseWarnings,
+  correctionLabels,
   reviewDemo,
   reviewVersion,
   type AdminCase,
@@ -37,6 +46,31 @@ export function AdminApp() {
     [checks, setChecks] = useState<string[]>([]),
     [decision, setDecision] = useState<AdminReview["decision"] | null>(null),
     [success, setSuccess] = useState("");
+  const [items, setItems] = useState<CorrectionItem[]>([]);
+  const [preview, setPreview] = useState<{ src: string; title: string } | null>(
+    null,
+  );
+  const [stale, setStale] = useState(false);
+  const dirty =
+    !!selected &&
+    !!store &&
+    demoCases(store).some(
+      (c) => c.id === selected && c.registration.status === "EM_ANALISE",
+    ) &&
+    (!!reason.trim() || checks.length > 0 || items.length > 0);
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const discard = useDiscardChanges(dirty);
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (dirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
   async function load() {
     setLoading(true);
     setError("");
@@ -49,6 +83,7 @@ export function AdminApp() {
         );
       }
       setStore(await api.load());
+      setStale(false);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Não foi possível carregar o painel.",
@@ -63,6 +98,10 @@ export function AdminApp() {
   useEffect(() => {
     if (real) return;
     const refresh = () => {
+      if (dirtyRef.current) {
+        setStale(true);
+        return;
+      }
       void load();
     };
     window.addEventListener("focus", refresh);
@@ -85,19 +124,39 @@ export function AdminApp() {
     setSelected(c.id);
     setReason("");
     setChecks([]);
+    setItems([]);
     setSuccess("");
     setError("");
   }
   return (
     <div className="admin-shell">
       <header className="admin-header">
-        <a className="brand" href="/">
+        <a
+          className="brand"
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            discard.leave(() => {
+              location.href = "/";
+            });
+          }}
+        >
           FRETTA<span>•</span>
         </a>
         <span>
           <ShieldCheck size={19} /> Administração
         </span>
-        <a href="/?perfil=cliente&tela=perfil">Voltar ao aplicativo</a>
+        <a
+          href="/?perfil=cliente&tela=perfil"
+          onClick={(e) => {
+            e.preventDefault();
+            discard.leave(() => {
+              location.href = "/?perfil=cliente&tela=perfil";
+            });
+          }}
+        >
+          Voltar ao aplicativo
+        </a>
       </header>
       <main className="admin-main">
         <p className="admin-demo-note">
@@ -134,9 +193,11 @@ export function AdminApp() {
                   className="panel"
                   aria-pressed={filter === status}
                   onClick={() => {
-                    setFilter(status);
-                    setLimit(12);
-                    setSelected(null);
+                    discard.leave(() => {
+                      setFilter(status);
+                      setLimit(12);
+                      setSelected(null);
+                    });
                   }}
                 >
                   <b>
@@ -194,6 +255,16 @@ export function AdminApp() {
                         <p>
                           {c.registration.companyName || "Motorista autônomo"}
                         </p>
+                        <p className="admin-submission">
+                          {(c.registration.submissionCount || 1) > 1
+                            ? `Reenviado após correções/atualização · envio ${c.registration.submissionCount}`
+                            : "Primeiro envio"}
+                        </p>
+                        {caseWarnings(c).length > 0 && (
+                          <p className="admin-warning-count">
+                            {caseWarnings(c).length} pendência(s) para conferir
+                          </p>
+                        )}
                         <small>
                           Enviado em {dateTime(c.registration.submittedAt)}
                         </small>
@@ -224,9 +295,11 @@ export function AdminApp() {
                 <button
                   className="back"
                   onClick={() => {
-                    setSelected(null);
-                    setError("");
-                    setSuccess("");
+                    discard.leave(() => {
+                      setSelected(null);
+                      setError("");
+                      setSuccess("");
+                    });
                   }}
                 >
                   <ArrowLeft size={18} />
@@ -244,6 +317,51 @@ export function AdminApp() {
                       {labels[current.registration.status]}
                     </span>
                   </div>
+                  <p className="admin-submission">
+                    {(current.registration.submissionCount || 1) > 1
+                      ? `Reenvio · envio ${current.registration.submissionCount}`
+                      : "Primeiro envio"}
+                  </p>
+                  {(() => {
+                    const previous = (store.adminReviews || [])
+                      .filter(
+                        (r) =>
+                          r.caseId === current.id &&
+                          r.decision === "AJUSTES_SOLICITADOS",
+                      )
+                      .at(-1);
+                    return (
+                      previous && (
+                        <div className="admin-previous">
+                          <h3>Últimas correções solicitadas</h3>
+                          <p>{previous.reason}</p>
+                          <p>
+                            {(previous.correctionItems || [])
+                              .map((i) => correctionLabels[i])
+                              .join(" · ")}
+                          </p>
+                          <small>{dateTime(previous.at)}</small>
+                        </div>
+                      )
+                    );
+                  })()}
+                  {caseWarnings(current).length > 0 && (
+                    <div className="admin-warnings" role="status">
+                      <h3>Pendências que impedem aprovação</h3>
+                      <ul>
+                        {caseWarnings(current).map((w) => (
+                          <li key={w}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {stale && (
+                    <p className="alert">
+                      Pode haver uma atualização em outra aba. Suas observações
+                      foram mantidas. A confirmação verificará a versão antes de
+                      salvar.
+                    </p>
+                  )}
                   <div className="admin-detail-grid">
                     <div>
                       <h3>Identificação</h3>
@@ -255,11 +373,22 @@ export function AdminApp() {
                         Enviado em {dateTime(current.registration.submittedAt)}
                       </p>
                       {current.photo ? (
-                        <img
-                          className="admin-face"
-                          src={current.photo}
-                          alt={`Foto de ${current.registration.fullName}`}
-                        />
+                        <button
+                          className="admin-photo-button"
+                          onClick={() =>
+                            setPreview({
+                              src: current.photo,
+                              title: `Foto de ${current.registration.fullName}`,
+                            })
+                          }
+                        >
+                          <img
+                            className="admin-face"
+                            src={current.photo}
+                            alt={`Foto de ${current.registration.fullName}`}
+                          />
+                          <span>Ampliar foto</span>
+                        </button>
                       ) : (
                         <p>Foto fictícia não incluída neste exemplo.</p>
                       )}
@@ -281,10 +410,27 @@ export function AdminApp() {
                         <ClipboardList />
                         <p>Imagem privada da CNH</p>
                         <small>
-                          A demonstração não guarda nem exibe a imagem da CNH. A
-                          visualização real depende de upload privado e
-                          autorização do servidor.
+                          A CNH real não fica salva nesta demonstração. A
+                          visualização real depende do armazenamento privado.
                         </small>
+                        {["example-0", "example-1"].includes(current.id) ? (
+                          <button
+                            className="secondary"
+                            onClick={() =>
+                              setPreview({
+                                src: "/admin-document-example.svg",
+                                title: "Documento fictício · sem valor legal",
+                              })
+                            }
+                          >
+                            Visualizar documento fictício
+                          </button>
+                        ) : (
+                          <p>
+                            Documento indisponível na demonstração. Nenhuma CNH
+                            real foi guardada.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -303,7 +449,11 @@ export function AdminApp() {
                       </article>
                     ))
                   ) : (
-                    <p>Nenhum veículo cadastrado.</p>
+                    <p>
+                      {current.fleetCompanyId
+                        ? "Motorista vinculado a uma empresa. O veículo será selecionado pela gestão em cada serviço."
+                        : "Nenhum veículo cadastrado."}
+                    </p>
                   )}
                   {current.registration.feedback && (
                     <p className="alert">
@@ -312,20 +462,58 @@ export function AdminApp() {
                   )}
                 </section>
                 {current.registration.status === "EM_ANALISE" && (
-                  <section className="panel">
-                    <h2>Conferência do cadastro</h2>
+                  <section className="panel admin-review-panel">
+                    <div className="admin-review-heading">
+                      <div>
+                        <span className="eyebrow">REVISÃO DO PRESTADOR</span>
+                        <h2>Conferência do cadastro</h2>
+                      </div>
+                      <span
+                        className={`admin-review-count ${checks.length === 4 ? "complete" : ""}`}
+                        role="status"
+                      >
+                        <CheckCircle2 size={17} />
+                        {checks.length} de 4 conferidos
+                      </span>
+                    </div>
+                    <div className="admin-review-progress" aria-hidden="true">
+                      <span style={{ width: `${checks.length * 25}%` }} />
+                    </div>
                     <p>
                       Marque os itens para testar a aprovação. Isso não confirma
                       autenticidade documental.
                     </p>
                     <div className="admin-checks">
                       {[
-                        "Identificação e dados conferidos",
-                        "Foto do motorista conferida",
-                        "Habilitação e validade conferidas",
-                        "Veículo e habilitação compatíveis",
-                      ].map((label) => (
-                        <label key={label}>
+                        {
+                          label: "Identificação e dados conferidos",
+                          description:
+                            "Confira nome e informações do cadastro.",
+                          Icon: UserRound,
+                        },
+                        {
+                          label: "Foto do motorista conferida",
+                          description:
+                            "Verifique se o rosto está visível e nítido.",
+                          Icon: Camera,
+                        },
+                        {
+                          label: "Habilitação e validade conferidas",
+                          description:
+                            "Confira os dados e o vencimento da CNH.",
+                          Icon: IdCard,
+                        },
+                        {
+                          label: "Veículo e habilitação compatíveis",
+                          description:
+                            "Revise o veículo e a categoria informada.",
+                          Icon: Truck,
+                        },
+                      ].map(({ label, description, Icon }) => (
+                        <label
+                          key={label}
+                          className={`admin-check-card ${checks.includes(label) ? "is-checked" : ""}`}
+                        >
                           <input
                             type="checkbox"
                             checked={checks.includes(label)}
@@ -337,10 +525,45 @@ export function AdminApp() {
                               )
                             }
                           />
-                          {label}
+                          <span className="admin-check-icon" aria-hidden="true">
+                            <Icon size={22} />
+                          </span>
+                          <span className="admin-check-copy">
+                            <strong>{label}</strong>
+                            <small>{description}</small>
+                          </span>
                         </label>
                       ))}
                     </div>
+                    <fieldset className="admin-correction-items">
+                      <legend>O que precisa ser corrigido?</legend>
+                      <p>Selecione os itens que o motorista deverá revisar.</p>
+                      {Object.entries(correctionLabels).map(
+                        ([value, label]) => (
+                          <label
+                            key={value}
+                            className={
+                              items.includes(value as CorrectionItem)
+                                ? "is-selected"
+                                : ""
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={items.includes(value as CorrectionItem)}
+                              onChange={(e) =>
+                                setItems((old) =>
+                                  e.target.checked
+                                    ? [...old, value as CorrectionItem]
+                                    : old.filter((i) => i !== value),
+                                )
+                              }
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ),
+                      )}
+                    </fieldset>
                     <label className="admin-reason">
                       Observações / correções a solicitar
                       <textarea
@@ -357,14 +580,20 @@ export function AdminApp() {
                     <div className="actions">
                       <button
                         className="secondary"
-                        disabled={reason.trim().length < 10}
+                        disabled={
+                          reason.trim().length < 10 || !items.length || loading
+                        }
                         onClick={() => setDecision("AJUSTES_SOLICITADOS")}
                       >
                         Solicitar correções
                       </button>
                       <button
                         className="primary"
-                        disabled={checks.length !== 4}
+                        disabled={
+                          checks.length !== 4 ||
+                          caseWarnings(current).length > 0 ||
+                          loading
+                        }
                         onClick={() => setDecision("APROVADO")}
                       >
                         <CheckCircle2 size={18} />
@@ -394,6 +623,14 @@ export function AdminApp() {
                           <p>
                             {r.actor} · {dateTime(r.at)}
                           </p>
+                          {r.correctionItems?.length ? (
+                            <p>
+                              Itens:{" "}
+                              {r.correctionItems
+                                .map((i) => correctionLabels[i])
+                                .join(" · ")}
+                            </p>
+                          ) : null}
                           {r.reason && <p>{r.reason}</p>}
                         </li>
                       ))}
@@ -415,7 +652,7 @@ export function AdminApp() {
         description={
           decision === "APROVADO"
             ? "A aprovação será registrada no histórico de demonstração. Não representa verificação oficial dos documentos."
-            : `O prestador verá este motivo ao consultar o cadastro: ${reason.trim()}`
+            : `Itens: ${items.map((i) => correctionLabels[i]).join(", ")}. O prestador verá este motivo: ${reason.trim()}`
         }
         confirmLabel={
           decision === "APROVADO"
@@ -433,6 +670,8 @@ export function AdminApp() {
             reviewVersion(current),
             decision,
             reason,
+            new Date().toISOString(),
+            items,
           );
           await api.save(updated);
           setStore(updated);
@@ -444,6 +683,18 @@ export function AdminApp() {
           setDecision(null);
           return true;
         }}
+      />
+      {discard.dialog}
+      <DocumentViewer source={preview} onClose={() => setPreview(null)} />
+      <SuccessDialog
+        open={!!success}
+        title={
+          current?.registration.status === "APROVADO"
+            ? "Cadastro aprovado!"
+            : "Correções solicitadas!"
+        }
+        description={success}
+        onClose={() => setSuccess("")}
       />
     </div>
   );

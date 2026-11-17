@@ -141,6 +141,9 @@ export function submitDriverRegistration(
   const registration: DriverRegistration = {
     mode: "demo",
     status: "EM_ANALISE",
+    submissionCount: store.driverRegistration
+      ? (store.driverRegistration.submissionCount || 1) + 1
+      : 1,
     fullName: draft.fullName.trim(),
     personType: draft.personType,
     cpfMasked: maskDocument(draft.cpf, "cpf"),

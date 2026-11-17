@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { clearRequestDrafts } from "../requests/drafts";
 import type { Role } from "@/contracts";
 import {
   initialRoute,
@@ -117,6 +118,7 @@ export function useDemoNavigation() {
     logout: () => {
       try {
         sessionStorage.removeItem(sessionKey);
+        clearRequestDrafts(sessionStorage);
       } catch {}
       setEntered(false);
       setLoginRequested(false);

@@ -79,6 +79,8 @@ export function reviseOffer(
       x.id === p.id
         ? {
             ...x,
+            requestRevision:
+              store.freights.find((f) => f.id === p.freightId)?.revision || 0,
             vehicle: offer.vehicle,
             vehicleId: offer.vehicleId,
             priceCents: offer.priceCents,

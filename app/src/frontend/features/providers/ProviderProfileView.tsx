@@ -61,7 +61,9 @@ export function ProviderProfileView({
         <div>
           <span className="badge">
             {provider.kind === "empresa"
-              ? "Empresa · um motorista responsável"
+              ? provider.teamManaged
+                ? "Empresa · equipe de motoristas"
+                : "Empresa · um motorista responsável"
               : "Motorista autônomo"}
           </span>
           <h1>{provider.name}</h1>
@@ -108,7 +110,11 @@ export function ProviderProfileView({
       )}
       {provider.kind === "empresa" && (
         <section className="panel provider-section">
-          <h2>Motorista responsável</h2>
+          <h2>
+            {provider.teamManaged
+              ? "Motorista apresentado na proposta"
+              : "Motorista responsável"}
+          </h2>
           <div className="provider-driver">
             {provider.driver.photo ? (
               <img

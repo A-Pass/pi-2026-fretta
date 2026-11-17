@@ -3,6 +3,14 @@ import { ArrowLeft, ArrowRight, Check, Camera, Truck, X } from "lucide-react";
 import type { FreightRequestDraft, SavedAddress, Schedule } from "@/contracts";
 import { prepareOnboardingPhoto } from "./onboarding/images";
 import { useDiscardChanges } from "../components/useDiscardChanges";
+import { PhotoGallery } from "../components/PhotoGallery";
+import { scheduleLabel } from "../lib/dates";
+import {
+  emptyRequest,
+  decodeDraft,
+  draftKey,
+  type SavedDraft,
+} from "./requests/drafts";
 import { AddressFields } from "./addresses/AddressFields";
 import {
   emptyAddress,
@@ -21,44 +29,120 @@ export function RequestWizard({
   addresses,
   onClose,
   onSubmit,
+  initialDraft,
+  editId,
+  revision = 0,
 }: {
   addresses: SavedAddress[];
+  initialDraft?: FreightRequestDraft;
+  editId?: string;
+  revision?: number;
   onClose: () => void;
   onSubmit: (draft: FreightRequestDraft) => Promise<boolean>;
 }) {
   const [step, setStep] = useState(0),
-    [draft, setDraft] = useState<FreightRequestDraft>({
-      title: "",
-      description: "",
-      photos: [],
-      pickup: emptyAddress(),
-      delivery: emptyAddress(),
-      savePickup: false,
-      saveDelivery: false,
-      vehicle: "",
-      schedule: { kind: "combinar" },
-    }),
+    [draft, setDraft] = useState<FreightRequestDraft>(() =>
+      structuredClone(initialDraft || emptyRequest()),
+    ),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [reading, setReading] = useState(false);
-  const dirty = !!(
-    draft.title ||
-    draft.description ||
-    draft.photos.length ||
-    draft.vehicle ||
-    draft.pickup.point ||
-    draft.pickup.street ||
-    draft.pickup.city ||
-    draft.pickup.neighborhood ||
-    draft.delivery.point ||
-    draft.delivery.street ||
-    draft.delivery.city ||
-    draft.delivery.neighborhood ||
-    draft.schedule.kind !== "combinar"
-  );
+  const dirty = initialDraft
+    ? JSON.stringify(draft) !== JSON.stringify(initialDraft)
+    : !!(
+        draft.title ||
+        draft.description ||
+        draft.photos.length ||
+        draft.vehicle ||
+        draft.pickup.point ||
+        draft.pickup.street ||
+        draft.pickup.city ||
+        draft.pickup.neighborhood ||
+        draft.delivery.point ||
+        draft.delivery.street ||
+        draft.delivery.city ||
+        draft.delivery.neighborhood ||
+        draft.schedule.kind !== "combinar"
+      );
+  const key = draftKey(editId, revision);
+  const [recovery, setRecovery] = useState<SavedDraft | null>(null),
+    [draftReady, setDraftReady] = useState(false),
+    [draftNotice, setDraftNotice] = useState("");
+  const skipSave = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      const saved = decodeDraft(raw);
+      if (saved) setRecovery(saved);
+      else if (raw) sessionStorage.removeItem(key);
+    } catch {
+      setDraftNotice(
+        "O navegador não permitiu recuperar rascunhos. Mantenha esta janela aberta até publicar.",
+      );
+    }
+    setDraftReady(true);
+  }, [key]);
+  useEffect(() => {
+    if (!draftReady || recovery || skipSave.current || !dirty) return;
+    const timer = setTimeout(() => {
+      try {
+        sessionStorage.setItem(
+          key,
+          JSON.stringify({ draft, step, at: Date.now() }),
+        );
+        setDraftNotice(
+          "Rascunho salvo nesta aba. Você pode recuperá-lo ao atualizar a página e abrir Solicitar frete. Expira em 24 horas ou ao sair da conta.",
+        );
+      } catch {
+        setDraftNotice(
+          "Não foi possível salvar o rascunho. O espaço pode estar cheio; mantenha esta janela aberta até publicar.",
+        );
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [draft, step, draftReady, recovery, dirty, key]);
+  useEffect(() => {
+    const flush = () => {
+      if (draftReady && dirty && !recovery && !skipSave.current) {
+        try {
+          sessionStorage.setItem(
+            key,
+            JSON.stringify({ draft, step, at: Date.now() }),
+          );
+        } catch {}
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [draft, step, draftReady, dirty, recovery, key]);
   const discard = useDiscardChanges(dirty);
+  const discardAndClose = () => {
+    skipSave.current = true;
+    try {
+      sessionStorage.removeItem(key);
+    } catch {}
+    onClose();
+  };
   const requestClose = () => {
-    if (!busy && !reading) discard.leave(onClose);
+    if (!busy && !reading) discard.leave(discardAndClose);
+  };
+  const keepDraft = () => {
+    try {
+      sessionStorage.setItem(
+        key,
+        JSON.stringify({ draft, step, at: Date.now() }),
+      );
+      skipSave.current = true;
+      onClose();
+    } catch {
+      setDraftNotice(
+        "Não foi possível salvar o rascunho. Libere espaço ou publique antes de fechar.",
+      );
+    }
   };
   const dialog = useRef<HTMLDialogElement>(null),
     heading = useRef<HTMLHeadingElement>(null),
@@ -78,6 +162,7 @@ export function RequestWizard({
     setError("");
   }
   async function advance() {
+    if (recovery) return;
     const message = stepError(draft, step);
     if (message) {
       setError(message);
@@ -100,7 +185,12 @@ export function RequestWizard({
     setBusy(true);
     setError("");
     try {
-      if (!(await onSubmit(draft)))
+      if (await onSubmit(draft)) {
+        skipSave.current = true;
+        try {
+          sessionStorage.removeItem(key);
+        } catch {}
+      } else
         setError(
           "Não foi possível salvar a solicitação. Confira o espaço disponível no navegador e tente novamente.",
         );
@@ -132,12 +222,14 @@ export function RequestWizard({
           <div className="wizard-header">
             <div>
               <span className="eyebrow">SEU FRETE, PASSO A PASSO</span>
-              <h2 id="request-title">Vamos planejar seu frete</h2>
+              <h2 id="request-title">
+                {editId ? "Editar solicitação" : "Vamos planejar seu frete"}
+              </h2>
             </div>
             <button
               type="button"
               aria-label="Fechar solicitação"
-              disabled={busy || reading}
+              disabled={busy || reading || !!recovery}
               onClick={requestClose}
             >
               <X />
@@ -148,7 +240,7 @@ export function RequestWizard({
               <button
                 key={label}
                 type="button"
-                disabled={i >= step || busy || reading}
+                disabled={i >= step || busy || reading || !!recovery}
                 aria-current={i === step ? "step" : undefined}
                 className={i === step ? "current" : i < step ? "complete" : ""}
                 onClick={() => {
@@ -161,7 +253,56 @@ export function RequestWizard({
               </button>
             ))}
           </nav>
-          <div className="wizard-body" ref={body}>
+          {recovery && (
+            <section
+              className="draft-recovery"
+              aria-label="Rascunho encontrado"
+            >
+              <h3>Você tem um rascunho salvo</h3>
+              <p>
+                Deseja continuar de onde parou? Os dados ficam somente nesta aba
+                do navegador.
+              </p>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    setDraft(recovery.draft);
+                    setStep(recovery.step);
+                    setRecovery(null);
+                  }}
+                >
+                  Retomar rascunho
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    try {
+                      sessionStorage.removeItem(key);
+                    } catch {}
+                    setRecovery(null);
+                  }}
+                >
+                  Descartar rascunho
+                </button>
+              </div>
+            </section>
+          )}
+          <div className="wizard-body" ref={body} inert={!!recovery}>
+            {editId && (
+              <p className="alert">
+                Ao salvar mudanças, as propostas anteriores serão encerradas. Os
+                motoristas precisarão enviar novos valores. As conversas serão
+                preservadas.
+              </p>
+            )}
+            {draftNotice && (
+              <p className="draft-notice" role="status">
+                {draftNotice}
+              </p>
+            )}
             <span className="step-count">Etapa {step + 1} de 6</span>
             <h2 tabIndex={-1} ref={heading} className="step-heading">
               {
@@ -422,25 +563,51 @@ export function RequestWizard({
                   <dl>
                     <div>
                       <dt>Transporte</dt>
-                      <dd>{draft.title}</dd>
+                      <dd>
+                        {draft.title}
+                        <p>{draft.description}</p>
+                      </dd>
                     </div>
                     <div>
                       <dt>Retirada</dt>
-                      <dd>{publicRegion(draft.pickup)}</dd>
+                      <dd>
+                        {draft.pickup.street}, {draft.pickup.number}
+                        {draft.pickup.complement
+                          ? ` · ${draft.pickup.complement}`
+                          : ""}
+                        <br />
+                        {publicRegion(draft.pickup)}
+                      </dd>
                     </div>
                     <div>
                       <dt>Entrega</dt>
-                      <dd>{publicRegion(draft.delivery)}</dd>
+                      <dd>
+                        {draft.delivery.street}, {draft.delivery.number}
+                        {draft.delivery.complement
+                          ? ` · ${draft.delivery.complement}`
+                          : ""}
+                        <br />
+                        {publicRegion(draft.delivery)}
+                      </dd>
                     </div>
                     <div>
                       <dt>Veículo</dt>
                       <dd>{draft.vehicle}</dd>
                     </div>
                     <div>
+                      <dt>Quando</dt>
+                      <dd>{scheduleLabel(draft.schedule)}</dd>
+                    </div>
+                    <div>
                       <dt>Fotos</dt>
                       <dd>{draft.photos.length} adicionadas</dd>
                     </div>
                   </dl>
+                  <PhotoGallery photos={draft.photos} />
+                  <p>
+                    Os endereços completos acima são visíveis para você nesta
+                    revisão.
+                  </p>
                   <p>
                     Os prestadores verão apenas bairro e cidade antes da
                     contratação.
@@ -450,10 +617,20 @@ export function RequestWizard({
             )}
           </div>
           <footer className="wizard-footer">
+            {dirty && !recovery && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || reading}
+                onClick={keepDraft}
+              >
+                Salvar e continuar depois
+              </button>
+            )}
             <button
               type="button"
               className="secondary"
-              disabled={busy || reading}
+              disabled={busy || reading || !!recovery}
               onClick={() => {
                 if (step === 0) requestClose();
                 else {
@@ -465,11 +642,16 @@ export function RequestWizard({
               <ArrowLeft size={17} />
               {step === 0 ? "Fechar" : "Voltar"}
             </button>
-            <button className="primary" disabled={busy || reading}>
+            <button
+              className="primary"
+              disabled={busy || reading || !!recovery}
+            >
               {busy
                 ? "Publicando…"
                 : step === 5
-                  ? "Publicar solicitação"
+                  ? editId
+                    ? "Salvar alterações"
+                    : "Publicar solicitação"
                   : "Continuar"}
               {step < 5 && <ArrowRight size={17} />}
             </button>

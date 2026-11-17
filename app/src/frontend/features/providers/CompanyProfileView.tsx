@@ -77,6 +77,9 @@ export function CompanyProfileView({
       </button>
       <span className="eyebrow">A IDENTIDADE DO SEU NEGÓCIO</span>
       <h1>Minha empresa</h1>
+      <a className="secondary" href="/empresa">
+        Gerenciar equipe e frota
+      </a>
       <p className="muted">
         A logo representa sua empresa. A foto e a identificação do motorista
         continuam separadas.
@@ -190,10 +193,18 @@ export function CompanyProfileView({
       <section className="panel provider-section">
         <h2>Motorista e veículos</h2>
         <p>
-          O responsável atual é{" "}
-          <b>{store.driverRegistration?.fullName || store.profile?.name}</b>. Os
-          veículos são gerenciados em “Meus veículos”. Cada proposta registra o
-          motorista e o veículo do serviço.
+          {store.fleet ? (
+            "Gerencie motoristas vinculados e veículos na área Equipe e frota. Cada proposta registra o motorista designado e o veículo daquele serviço."
+          ) : (
+            <>
+              O responsável atual é{" "}
+              {store.profile?.name ||
+                store.driverRegistration?.fullName ||
+                "o motorista cadastrado"}
+              . Os veículos são gerenciados em “Meus veículos”. Cada proposta
+              registra o motorista e o veículo do serviço.
+            </>
+          )}
         </p>
       </section>
       {discard.dialog}

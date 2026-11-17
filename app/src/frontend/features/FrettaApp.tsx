@@ -52,6 +52,11 @@ import {
 } from "./providers/rules";
 import { InstallApp } from "../components/InstallApp";
 
+import { editRequest, requestDraft } from "./requests/rules";
+
+import { FleetWorkspace } from "./fleet/FleetWorkspace";
+import { fleetState } from "./fleet/rules";
+
 export function FrettaApp() {
   const navigation = useDemoNavigation();
   const {
@@ -73,8 +78,15 @@ export function FrettaApp() {
   const [loadError, setLoadError] = useState("");
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [updatingDriver, setUpdatingDriver] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<{
+    id: string;
+    revision: number;
+    draft: FreightRequestDraft;
+  } | null>(null);
   const [modal, setModal] = useState(""),
-    [success, setSuccess] = useState<"proposal" | "request" | null>(null);
+    [success, setSuccess] = useState<"proposal" | "request" | "edit" | null>(
+      null,
+    );
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("TODOS");
   const latest = useRef<Store | null>(null),
@@ -113,6 +125,7 @@ export function FrettaApp() {
   }, []);
   useEffect(() => {
     setModal("");
+    setEditingRequest(null);
     setUpdatingDriver(false);
     setError("");
     if (entered && !chatId) main.current?.focus({ preventScroll: true });
@@ -172,6 +185,9 @@ export function FrettaApp() {
       role !== "motorista" ||
       !subscription ||
       !driverCanPropose(store) ||
+      !!fleetState(store)?.members.some(
+        (m) => m.driverId === "demo-driver" && !m.leftAt,
+      ) ||
       f.status !== "ABERTO"
     )
       throw new Error("Não é possível enviar uma proposta agora.");
@@ -185,6 +201,7 @@ export function FrettaApp() {
         ...offer,
         id: crypto.randomUUID(),
         freightId: f.id,
+        requestRevision: f.revision || 0,
         driver: name,
         driverId: "demo-driver",
         rating: publicProvider(store, "demo-driver")?.rating || 0,
@@ -232,6 +249,11 @@ export function FrettaApp() {
     });
   }
   function openNotification(n: AppNotification) {
+    if (n.companyInviteId) {
+      setRole("motorista");
+      navigation.nav("equipe");
+      return;
+    }
     if (n.proposalId) setChatId(n.proposalId);
     else setSelected(n.freightId);
   }
@@ -299,7 +321,11 @@ export function FrettaApp() {
   if (
     role === "motorista" &&
     (tab === "cadastro-motorista" ||
-      (!driverCanPropose(store) && tab === "inicio"))
+      (!driverCanPropose(store) &&
+        tab === "inicio" &&
+        !fleetState(store)?.members.some(
+          (m) => m.driverId === "demo-driver" && !m.leftAt,
+        )))
   ) {
     if (!store.driverRegistration || updatingDriver)
       return (
@@ -372,6 +398,7 @@ export function FrettaApp() {
                   "veiculos",
                   "assinatura",
                   "empresa",
+                  "equipe",
                 ].includes(tab));
             return (
               <button
@@ -477,10 +504,24 @@ export function FrettaApp() {
               </button>
             </div>
           )}
-          {providerId ? (
+          {role === "motorista" &&
+          ["inicio", "fretes", "chat"].includes(tab) &&
+          fleetState(store)?.members.some(
+            (m) => m.driverId === "demo-driver" && !m.leftAt,
+          ) ? (
+            <FleetWorkspace
+              embeddedStore={store}
+              onSave={save}
+              initialActor="demo-driver"
+            />
+          ) : providerId ? (
             <ProviderProfileView
               key={providerId}
-              provider={publicProvider(store, providerId)}
+              provider={publicProvider(
+                store,
+                providerId,
+                navigation.providerConversationId || undefined,
+              )}
               preview={role === "motorista" && providerId === "demo-driver"}
               onBack={() => navigation.back("fretes")}
               onConversation={
@@ -513,6 +554,14 @@ export function FrettaApp() {
             <FreightDetailsView
               key={`${f.id}:${role}`}
               f={f}
+              onEdit={() => {
+                setEditingRequest({
+                  id: f.id,
+                  revision: f.revision || 0,
+                  draft: requestDraft(store, f),
+                });
+                setModal("editar-pedido");
+              }}
               role={role}
               name={name}
               store={store}
@@ -527,6 +576,12 @@ export function FrettaApp() {
               onProvider={navigation.openProvider}
               save={save}
               schedule={(f) => scheduleLabel(f.schedule)}
+            />
+          ) : tab === "equipe" && role === "motorista" ? (
+            <FleetWorkspace
+              embeddedStore={store}
+              onSave={save}
+              initialActor="demo-driver"
             />
           ) : tab === "enderecos" ? (
             <AddressBookView
@@ -572,6 +627,12 @@ export function FrettaApp() {
                 photoRequired={!!store.driverRegistration}
                 registration={store.driverRegistration}
                 onRegistration={() => nav("cadastro-motorista")}
+                onTeam={() => nav("equipe")}
+                companyMember={
+                  !!fleetState(store)?.members.some(
+                    (m) => m.driverId === "demo-driver" && !m.leftAt,
+                  )
+                }
                 editing={tab === "editar-perfil"}
                 onEdit={() =>
                   nav(tab === "editar-perfil" ? "perfil" : "editar-perfil")
@@ -692,6 +753,34 @@ export function FrettaApp() {
           FRETTA © 2026 · Conectando pessoas, movimentando histórias.
         </footer>
       </div>
+      {modal === "editar-pedido" && editingRequest && (
+        <RequestWizard
+          key={`edit:${editingRequest.id}:${editingRequest.revision}`}
+          addresses={store.addresses || []}
+          initialDraft={editingRequest.draft}
+          editId={editingRequest.id}
+          revision={editingRequest.revision}
+          onClose={() => {
+            setModal("");
+            setEditingRequest(null);
+          }}
+          onSubmit={async (draft) => {
+            const current = latest.current;
+            if (!current || role !== "cliente") return false;
+            const next = editRequest(
+              current,
+              editingRequest.id,
+              draft,
+              editingRequest.revision,
+            );
+            if (!(await save(next))) return false;
+            setModal("");
+            setEditingRequest(null);
+            setSuccess("edit");
+            return true;
+          }}
+        />
+      )}
       {modal === "pedido" && (
         <RequestWizard
           addresses={store.addresses || []}
@@ -714,12 +803,18 @@ export function FrettaApp() {
       <SuccessDialog
         open={success !== null}
         title={
-          success === "request" ? "Solicitação publicada!" : "Proposta enviada!"
+          success === "edit"
+            ? "Solicitação atualizada!"
+            : success === "request"
+              ? "Solicitação publicada!"
+              : "Proposta enviada!"
         }
         description={
-          success === "request"
-            ? "Agora você pode acompanhar as propostas recebidas."
-            : "Acompanhe a resposta em Meus serviços ou continue a conversa pelo chat."
+          success === "edit"
+            ? "As mudanças foram salvas. Confira novas propostas antes de contratar."
+            : success === "request"
+              ? "Agora você pode acompanhar as propostas recebidas."
+              : "Acompanhe a resposta em Meus serviços ou continue a conversa pelo chat."
         }
         onClose={() => setSuccess(null)}
       />
