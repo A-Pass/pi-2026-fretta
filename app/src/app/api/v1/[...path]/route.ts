@@ -213,6 +213,157 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // GET /api/v1/admin/driver-registrations/:id
+  const cadastroDetalheMatch = request.nextUrl.pathname.match(
+    /^\/api\/v1\/admin\/driver-registrations\/([^/]+)$/,
+  );
+
+  if (cadastroDetalheMatch) {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (!session) {
+      return Response.json(
+        {
+          code: "UNAUTHORIZED",
+          message: "Você precisa estar autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
+    const administrador = await verificarAdministrador(session.user.id);
+
+    if (!administrador) {
+      return Response.json(
+        {
+          code: "FORBIDDEN",
+          message: "Acesso permitido apenas para administradores.",
+        },
+        { status: 403 },
+      );
+    }
+
+    let cadastroId: string;
+
+    try {
+      cadastroId = decodeURIComponent(cadastroDetalheMatch[1]);
+    } catch {
+      return Response.json(
+        {
+          code: "INVALID_REGISTRATION_ID",
+          message: "Identificador de cadastro inválido.",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (!cadastroId.trim()) {
+      return Response.json(
+        {
+          code: "INVALID_REGISTRATION_ID",
+          message: "Identificador de cadastro inválido.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const cadastro = await prisma.cadastroMotorista.findUnique({
+      where: {
+        id: cadastroId,
+      },
+      select: {
+        id: true,
+        motoristaId: true,
+        tipoPessoa: true,
+        cnpj: true,
+        razaoSocial: true,
+        cnhNumero: true,
+        cnhCategoria: true,
+        cnhValidade: true,
+        fotoPerfilId: true,
+        documentoCnhId: true,
+        status: true,
+        motivoAjuste: true,
+        enviadoEm: true,
+        analisadoEm: true,
+        atualizadoEm: true,
+        motorista: {
+          select: {
+            user: {
+              select: {
+                name: true,
+                pessoa: {
+                  select: {
+                    nomeCompleto: true,
+                    cpf: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        veiculo: {
+          select: {
+            id: true,
+            categoria: true,
+            modelo: true,
+            placa: true,
+            capacidadeKg: true,
+            descricao: true,
+            ativo: true,
+          },
+        },
+      },
+    });
+
+    if (!cadastro) {
+      return Response.json(
+        {
+          code: "REGISTRATION_NOT_FOUND",
+          message: "Cadastro de motorista não encontrado.",
+        },
+        { status: 404 },
+      );
+    }
+
+    return Response.json(
+      {
+        id: cadastro.id,
+        motoristaId: cadastro.motoristaId,
+        nomeCompleto:
+          cadastro.motorista.user.pessoa?.nomeCompleto ??
+          cadastro.motorista.user.name,
+        tipoPessoa: cadastro.tipoPessoa,
+        cpf: cadastro.motorista.user.pessoa?.cpf ?? null,
+        cnpj: cadastro.cnpj,
+        razaoSocial: cadastro.razaoSocial,
+        cnh: {
+          numero: cadastro.cnhNumero,
+          categoria: cadastro.cnhCategoria,
+          validade: cadastro.cnhValidade.toISOString(),
+        },
+        documentos: {
+          fotoPerfilId: cadastro.fotoPerfilId,
+          documentoCnhId: cadastro.documentoCnhId,
+        },
+        veiculo: cadastro.veiculo,
+        status: cadastro.status,
+        motivoAjuste: cadastro.motivoAjuste,
+        enviadoEm: cadastro.enviadoEm.toISOString(),
+        analisadoEm: cadastro.analisadoEm?.toISOString() ?? null,
+        atualizadoEm: cadastro.atualizadoEm.toISOString(),
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "private, no-store",
+        },
+      },
+    );
+  }
+
   // GET /api/v1/uploads/:id
   const uploadMatch = request.nextUrl.pathname.match(
     /^\/api\/v1\/uploads\/([^/]+)$/,
