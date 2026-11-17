@@ -1,52 +1,62 @@
-drop table if exists public.avaliacoes,
-public.clientes,
-public.enderecos,
-public.frete_fotos,
-public.fretes,
-public.mensagens,
-public.motoristas,
-public.propostas,
-public.usuarios,
-public.veiculos CASCADE;
-
-DROP type if exists public._porte_enum,
- public._status_frete_enum,
- public._status_proposta_enum,
- public.porte_enum,
- public.status_frete_enum,
- public.status_proposta_enum;
-
-
 -- ============================================================================
 -- SCHEMA: Aplicativo de Fretes (Clientes x Fretistas/Motoristas)
 -- Banco: PostgreSQL 13+
--- Convenções: nomes em snake_case, chaves primárias UUID, timestamps em UTC,
+-- Convenções: nomes em snake_case, timestamps em UTC,
 -- normalização até 3FN (dados de motorista/cliente separados da tabela base
 -- de usuários, endereços deduplicados em tabela própria, fotos em tabela 1:N).
 -- ============================================================================
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto; -- necessário para gen_random_uuid()
+-- ============================================================================
+-- RESET
+-- Descomente e exeute as linhas seguintes para resetar o banco.
+-- ============================================================================
+DROP TABLE IF EXISTS avaliacoes,
+	clientes,
+	enderecos,
+	frete_fotos,
+	fretes,
+	mensagens,
+	motoristas,
+	propostas,
+	"user",
+	"session",
+	account,
+	verification,
+	unidade_federativa,
+	cidade,
+	bairro,
+	logradouro,
+	pessoa,
+	enderecos,
+	veiculos cascade;
+
+DROP TYPE IF EXISTS 
+	porte_enum,
+	status_frete_enum,
+	status_proposta_enum,
+	sigla_uf_enum,
+	regiao_enum ;
 
 -- ============================================================================
 -- 1. TIPOS ENUMERADOS
 -- ============================================================================
 
-CREATE TYPE porte_enum AS ENUM ('pequeno', 'medio', 'grande');
+CREATE TYPE porte_enum AS ENUM ('PEQUENO', 'MEDIO', 'GRANDE');
 
 CREATE TYPE status_frete_enum AS ENUM (
-    'aberto',          -- cliente cadastrou, aguardando propostas
-    'em_negociacao',   -- já existe(m) proposta(s) em análise
-    'aceito',          -- cliente aceitou uma proposta / motorista definido
-    'em_transporte',   -- carga em rota
-    'concluido',       -- entrega finalizada
-    'cancelado'        -- cancelado pelo cliente ou pela plataforma
+    'ABERTO',          -- cliente cadastrou, aguardando propostas
+    'EM_NEGOCIACAO',   -- já existe(m) proposta(s) em análise
+    'ACEITO',          -- cliente aceitou uma proposta / motorista definido
+    'EM_TRANSPORTE',   -- carga em rota
+    'CONCLUIDO',       -- entrega finalizada
+    'CANCELADO'        -- cancelado pelo cliente ou pela plataforma
 );
 
 CREATE TYPE status_proposta_enum AS ENUM (
-    'pendente',
-    'aceita',
-    'rejeitada',
-    'cancelada'
+    'PENDENTE',
+    'ACEITA',
+    'REJEITADA',
+    'CANCELADA'
 );
 
 -- ============================================================================
@@ -61,6 +71,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION fn_updated_at_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ============================================================================
 -- 3. USUÁRIOS (tabela base de autenticação/identidade)
 -- Um usuário pode ser cliente, motorista, ou ambos — o "papel" é definido
@@ -68,54 +86,175 @@ $$ LANGUAGE plpgsql;
 -- evitando redundância e permitindo múltiplos papéis para a mesma pessoa.
 -- ============================================================================
 
-CREATE TABLE usuarios (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nome            VARCHAR(150) NOT NULL,
-    email           VARCHAR(150) NOT NULL UNIQUE,
-    senha      		VARCHAR(255) NOT NULL,
-    telefone        VARCHAR(20),
-    documento       VARCHAR(20)  NOT NULL UNIQUE, -- CPF ou CNPJ
-    foto_perfil_url TEXT,
-    ativo           BOOLEAN NOT NULL DEFAULT TRUE,
-    criado_em       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    atualizado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_email_formato CHECK (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$')
+CREATE TABLE "user" (
+    id BIGINT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    image TEXT,
+    createdAt TIMESTAMPTZ(3) NOT NULL DEFAULT now(),
+    updatedAt TIMESTAMPTZ(3) NOT NULL DEFAULT now(),
+
+	CONSTRAINT chk_user_email_formato CHECK (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+	CONSTRAINT chk_user_email_uq UNIQUE (email) 
 );
 
-CREATE TRIGGER trg_usuarios_atualizado_em
-    BEFORE UPDATE ON usuarios
-    FOR EACH ROW EXECUTE FUNCTION fn_atualizar_timestamp();
+CREATE TRIGGER trg_user_updated_at
+    BEFORE UPDATE ON "user"
+    FOR EACH ROW EXECUTE FUNCTION fn_updated_at_timestamp();
 
-CREATE INDEX idx_usuarios_email ON usuarios (email);
+CREATE TABLE "session" (
+    id         TEXT PRIMARY KEY,
+    token      TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    ip_address TEXT,
+    user_agent TEXT,
+    user_id    BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    CONSTRAINT session_token_uq UNIQUE (token),
+    CONSTRAINT session_user_fk FOREIGN KEY (user_id) REFERENCES "user"(id)
+);
+CREATE INDEX session_user_id_idx ON session(user_id);
+
+CREATE TABLE account (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL, 
+    account_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    access_token TEXT,
+    refresh_token TEXT,
+    id_token TEXT,
+    access_token_expires_at TIMESTAMPTZ,
+    refresh_token_expires_at TIMESTAMPTZ,
+    scope TEXT,
+    password TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+     
+    CONSTRAINT account_user_fk FOREIGN KEY (user_id) REFERENCES "user"(id)
+);
+CREATE INDEX account_user_id_idx ON account(user_id);
+
+CREATE TABLE verification (
+    id BIGINT PRIMARY KEY,
+    identifier TEXT NOT NULL,
+    value TEXT NOT NULL,
+    expiresAt TIMESTAMPTZ NOT NULL,
+    createdAt TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updatedAt TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX verification_identifier_idx ON verification(identifier);
 
 -- ============================================================================
 -- 4. ENDEREÇOS (reutilizável para origem/destino de frete e endereço padrão)
 -- ============================================================================
 
-CREATE TABLE enderecos (
-    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    logradouro   VARCHAR(200) NOT NULL,
-    numero       VARCHAR(20),
-    complemento  VARCHAR(100),
-    bairro       VARCHAR(100),
-    cidade       VARCHAR(100) NOT NULL,
-    estado       CHAR(2)      NOT NULL,
-    cep          VARCHAR(9)   NOT NULL,
-    pais         VARCHAR(60)  NOT NULL DEFAULT 'Brasil',
-    latitude     NUMERIC(10, 7),
-    longitude    NUMERIC(10, 7),
-    criado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TYPE sigla_uf_enum AS ENUM (
+	'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 
+	'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 
+	'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 
+	'RO', 'RR', 'SC', 'SP', 'SE', 'TO');
+
+CREATE TYPE regiao_enum AS ENUM (
+	'NORTE', 'NORDESTE', 'SUDESTE', 
+	'SUL', 'CENTRO_OESTE');
+
+CREATE TABLE unidade_federativa (
+    sigla sigla_uf_enum NOT NULL,
+    nome varchar(31) NOT NULL,
+    regiao regiao_enum NOT NULL,
+
+    CONSTRAINT unidade_federativa_pkey PRIMARY KEY (sigla),
+    CONSTRAINT unidade_federativa_nome_uq UNIQUE (nome)
 );
 
-CREATE INDEX idx_enderecos_cidade_estado ON enderecos (cidade, estado);
+CREATE TABLE cidade (
+    id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    uf_sigla sigla_uf_enum NOT NULL,
+    nome VARCHAR(63) NOT NULL,
+    cep VARCHAR(9),
+    padrao BOOLEAN NOT NULL DEFAULT FALSE,
+    origem varchar(15),
+    
+    CONSTRAINT cidade_uf_sigla_nome_uq UNIQUE (uf_sigla, nome),
+    CONSTRAINT cidade_uf_sigla_fk FOREIGN KEY (uf_sigla) 
+    	REFERENCES unidade_federativa(sigla) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE INDEX cidade_uf_idx ON cidade(uf_sigla);
+
+CREATE TABLE bairro (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome VARCHAR(64) NOT NULL,
+    cidade_id INTEGER NOT NULL,
+    padrao BOOLEAN NOT NULL DEFAULT FALSE,
+	origem varchar(15),
+	
+    CONSTRAINT bairro_cidade_nome_uq UNIQUE (cidade_id, nome),
+    CONSTRAINT bairro_cidade_id_fk 
+    	FOREIGN KEY (cidade_id) 
+    	REFERENCES cidade(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE logradouro (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome VARCHAR(128) NOT NULL,
+    cep CHAR(8) NOT NULL,
+    bairro_id BIGINT NOT NULL,
+    tipo TEXT,
+    padrao BOOLEAN NOT NULL DEFAULT FALSE,
+	origem varchar(15),
+    
+	CONSTRAINT logradouro_bairro_nome_uq UNIQUE (bairro_id, nome),
+	
+    CONSTRAINT logradouro_bairro_id_fk 
+    	FOREIGN KEY (bairro_id) 
+    	REFERENCES bairro(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+
+CREATE TABLE enderecos (
+	id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    logradouro_id BIGINT NOT NULL REFERENCES logradouro(id),
+    numero INTEGER NOT NULL,
+    complemento VARCHAR(127),
+	referencia VARCHAR(127),
+	criado_em timestamptz NOT NULL DEFAULT now(),
+	latitude    NUMERIC(10, 7),
+    longitude   NUMERIC(10, 7),
+	usuario_id bigint NOT NULL,
+	
+	CONSTRAINT enderecos_usuario_fk 
+		FOREIGN KEY (usuario_id)
+		REFERENCES "user"(id)
+);
+
+CREATE TABLE pessoa (
+    user_id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    cpf CHAR(11) NOT NULL,
+    nascimento DATE NOT NULL,
+    celular VARCHAR(14) NOT NULL,
+    criado_em TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT pessoa_cpf_chk CHECK (cpf ~ '^[0-9]{11}$'),
+    CONSTRAINT pessoa_celular_chk CHECK (celular ~ '^[1-9][0-9]9[0-9]{8}$'),
+    CONSTRAINT pessoa_cpf_uq UNIQUE (cpf),
+    
+    CONSTRAINT pessoa_user_fk FOREIGN KEY (user_id) REFERENCES "user"(id)
+);
+
+CREATE TRIGGER trg_pessoa_atualizado_em BEFORE UPDATE ON pessoa
+FOR EACH ROW EXECUTE FUNCTION fn_atualizar_timestamp();
 
 -- ============================================================================
 -- 5. CLIENTES (extensão 1:1 de usuarios)
 -- ============================================================================
 
 CREATE TABLE clientes (
-    usuario_id   UUID PRIMARY KEY REFERENCES usuarios (id) ON DELETE CASCADE,
-    endereco_id  UUID REFERENCES enderecos (id) ON DELETE SET NULL, -- endereço padrão, opcional
+    usuario_id   bigint PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+    endereco_id  bigint REFERENCES enderecos (id) ON DELETE RESTRICT, -- endereço padrão, opcional
     criado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -124,7 +263,7 @@ CREATE TABLE clientes (
 -- ============================================================================
 
 CREATE TABLE motoristas (
-    usuario_id       UUID PRIMARY KEY REFERENCES usuarios (id) ON DELETE CASCADE,
+    usuario_id       bigint PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
     cnh_numero       VARCHAR(20) NOT NULL UNIQUE,
     cnh_categoria    VARCHAR(5)  NOT NULL,
     cnh_validade     DATE        NOT NULL,
@@ -142,8 +281,8 @@ CREATE INDEX idx_motoristas_disponivel ON motoristas (disponivel);
 -- ============================================================================
 
 CREATE TABLE veiculos (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    motorista_id        UUID NOT NULL REFERENCES motoristas (usuario_id) ON DELETE CASCADE,
+    id                  bigint PRIMARY KEY generated ALWAYS AS identity,
+    motorista_id        bigint NOT NULL REFERENCES motoristas (usuario_id) ON DELETE CASCADE,
     placa               VARCHAR(8)  NOT NULL UNIQUE,
     modelo              VARCHAR(100) NOT NULL,
     marca               VARCHAR(60),
@@ -163,19 +302,19 @@ CREATE INDEX idx_veiculos_categoria ON veiculos (categoria_porte);
 -- ============================================================================
 
 CREATE TABLE fretes (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    cliente_id                UUID NOT NULL REFERENCES clientes (usuario_id),
+    id                        BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    cliente_id                BIGINT NOT NULL REFERENCES clientes (usuario_id),
     titulo                    VARCHAR(150) NOT NULL,
     descricao                 TEXT,
     categoria_porte           porte_enum NOT NULL,
     carroceria_fechada        BOOLEAN NOT NULL DEFAULT FALSE,
-    endereco_origem_id        UUID NOT NULL REFERENCES enderecos (id),
-    endereco_destino_id       UUID NOT NULL REFERENCES enderecos (id),
-    status_frete              status_frete_enum NOT NULL DEFAULT 'aberto',
+    endereco_origem_id        BIGINT NOT NULL REFERENCES enderecos (id),
+    endereco_destino_id       BIGINT NOT NULL REFERENCES enderecos (id),
+    status_frete              status_frete_enum NOT NULL DEFAULT 'ABERTO',
     data_coleta_prevista      DATE,
     data_entrega_prevista     DATE,
     valor_referencia          NUMERIC(10, 2) CHECK (valor_referencia IS NULL OR valor_referencia > 0),
-    motorista_selecionado_id  UUID REFERENCES motoristas (usuario_id),
+    motorista_selecionado_id  BIGINT REFERENCES motoristas (usuario_id),
     criado_em                 TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chk_origem_diferente_destino CHECK (endereco_origem_id <> endereco_destino_id),
@@ -195,15 +334,15 @@ CREATE INDEX idx_fretes_cliente ON fretes (cliente_id);
 CREATE INDEX idx_fretes_categoria ON fretes (categoria_porte);
 -- Acelera a listagem de "fretes disponíveis" para os motoristas
 CREATE INDEX idx_fretes_disponiveis ON fretes (status_frete, categoria_porte)
-    WHERE status_frete IN ('aberto', 'em_negociacao');
+    WHERE status_frete IN ('ABERTO', 'EM_NEGOCIACAO');
 
 -- ============================================================================
 -- 9. FOTOS DO FRETE (1:N)
 -- ============================================================================
 
 CREATE TABLE frete_fotos (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    frete_id   UUID NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
+    id         BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    frete_id   BIGINT NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
     url        TEXT NOT NULL,
     ordem      SMALLINT NOT NULL DEFAULT 0,
     criado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -217,12 +356,12 @@ CREATE INDEX idx_frete_fotos_frete ON frete_fotos (frete_id);
 -- ============================================================================
 
 CREATE TABLE propostas (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    frete_id         UUID NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
-    motorista_id     UUID NOT NULL REFERENCES motoristas (usuario_id),
+    id               BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    frete_id         BIGINT NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
+    motorista_id     BIGINT NOT NULL REFERENCES motoristas (usuario_id),
     valor_proposto   NUMERIC(10, 2) NOT NULL CHECK (valor_proposto > 0),
     mensagem         TEXT,
-    status_proposta  status_proposta_enum NOT NULL DEFAULT 'pendente',
+    status_proposta  status_proposta_enum NOT NULL DEFAULT 'PENDENTE',
     criado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Um motorista só pode ter uma proposta ativa por frete
@@ -245,18 +384,18 @@ CREATE INDEX idx_propostas_status ON propostas (status_proposta);
 CREATE OR REPLACE FUNCTION fn_aceitar_proposta()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.status_proposta = 'aceita' AND OLD.status_proposta IS DISTINCT FROM 'aceita' THEN
+    IF NEW.status_proposta = 'ACEITA' AND OLD.status_proposta IS DISTINCT FROM 'ACEITA' THEN
 
         UPDATE fretes
-           SET status_frete             = 'aceito',
+           SET status_frete             = 'ACEITO',
                motorista_selecionado_id  = NEW.motorista_id
          WHERE id = NEW.frete_id;
 
         UPDATE propostas
-           SET status_proposta = 'rejeitada'
+           SET status_proposta = 'REJEITADA'
          WHERE frete_id = NEW.frete_id
            AND id <> NEW.id
-           AND status_proposta = 'pendente';
+           AND status_proposta = 'PENDENTE';
 
     END IF;
     RETURN NEW;
@@ -272,10 +411,10 @@ CREATE TRIGGER trg_propostas_aceitar
 -- ============================================================================
 
 CREATE TABLE avaliacoes (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    frete_id      UUID NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
-    avaliador_id  UUID NOT NULL REFERENCES usuarios (id),
-    avaliado_id   UUID NOT NULL REFERENCES usuarios (id),
+    id            BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    frete_id      BIGINT NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
+    avaliador_id  BIGINT NOT NULL REFERENCES "user"(id),
+    avaliado_id   BIGINT NOT NULL REFERENCES "user"(id),
     nota          SMALLINT NOT NULL CHECK (nota BETWEEN 1 AND 5),
     comentario    TEXT,
     criado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -315,10 +454,10 @@ CREATE TRIGGER trg_avaliacoes_atualizar_media
 -- ============================================================================
 
 CREATE TABLE mensagens (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    frete_id       UUID NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
-    remetente_id   UUID NOT NULL REFERENCES usuarios (id),
-    destinatario_id UUID NOT NULL REFERENCES usuarios (id),
+    id             BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    frete_id       BIGINT NOT NULL REFERENCES fretes (id) ON DELETE CASCADE,
+    remetente_id   BIGINT NOT NULL REFERENCES "user"(id),
+    destinatario_id BIGINT NOT NULL REFERENCES "user"(id),
     conteudo       TEXT NOT NULL,
     lida           BOOLEAN NOT NULL DEFAULT FALSE,
     criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -342,18 +481,24 @@ SELECT
     f.valor_referencia,
     f.data_coleta_prevista,
     f.data_entrega_prevista,
-    origem.cidade   AS origem_cidade,
-    origem.estado   AS origem_estado,
-    destino.cidade  AS destino_cidade,
-    destino.estado  AS destino_estado,
-    u.nome          AS cliente_nome,
+    oc.nome   AS origem_cidade,
+    oc.uf_sigla   AS origem_estado,
+    dc.nome  AS destino_cidade,
+    dc.uf_sigla  AS destino_estado,
+    u.name          AS cliente_nome,
     f.criado_em
 FROM fretes f
 JOIN enderecos origem  ON origem.id  = f.endereco_origem_id
+JOIN logradouro ol ON ol.id = origem.logradouro_id
+JOIN bairro ob ON ob.id = ol.bairro_id
+JOIN cidade oc ON oc.id = ob.cidade_id
 JOIN enderecos destino ON destino.id = f.endereco_destino_id
+JOIN logradouro dl ON dl.id = destino.logradouro_id
+JOIN bairro db ON db.id = dl.bairro_id
+JOIN cidade dc ON dc.id = db.cidade_id
 JOIN clientes c ON c.usuario_id = f.cliente_id
-JOIN usuarios u ON u.id = c.usuario_id
-WHERE f.status_frete IN ('aberto', 'em_negociacao');
+JOIN "user" u ON u.id = c.usuario_id
+WHERE f.status_frete IN ('ABERTO', 'EM_NEGOCIACAO');
 
 -- ============================================================================
 -- FIM DO SCRIPT
