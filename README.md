@@ -1,5 +1,7 @@
 # FRETTA
 
+Este repositório contém o código e a documentação técnica da aplicação.
+
 Aplicação Next.js + TypeScript do IFBA Eunápolis. Interface demonstrativa com perfis de cliente/motorista, pedidos, propostas, aceite, conversa local, avaliação e perfil. Servidor, contas reais e pagamentos são trabalho pendente do grupo.
 
 ## Executar
