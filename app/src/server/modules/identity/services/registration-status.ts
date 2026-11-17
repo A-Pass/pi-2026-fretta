@@ -1,4 +1,3 @@
-
 import type { StatusCadastroMotorista } from "@/generated/prisma/client";
 
 export type AtorCadastro = "MOTORISTA" | "ADMIN";
@@ -11,10 +10,7 @@ export function podeAlterarStatusCadastro(
   // O motorista apenas reenvia um cadastro
   // que recebeu solicitação de ajustes.
   if (ator === "MOTORISTA") {
-    return (
-      statusAtual === "AJUSTES_SOLICITADOS" &&
-      novoStatus === "EM_ANALISE"
-    );
+    return statusAtual === "AJUSTES_SOLICITADOS" && novoStatus === "EM_ANALISE";
   }
 
   // O administrador pode aprovar
@@ -22,10 +18,7 @@ export function podeAlterarStatusCadastro(
   if (ator === "ADMIN") {
     return (
       statusAtual === "EM_ANALISE" &&
-      (
-        novoStatus === "APROVADO" ||
-        novoStatus === "AJUSTES_SOLICITADOS"
-      )
+      (novoStatus === "APROVADO" || novoStatus === "AJUSTES_SOLICITADOS")
     );
   }
 

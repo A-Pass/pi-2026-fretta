@@ -1,4 +1,3 @@
-
 import assert from "node:assert/strict";
 
 import {
@@ -56,9 +55,7 @@ const cnhVencida = validarCadastroMotorista({
   cnhValidade: "2020-01-01",
 });
 
-assert.ok(
-  cnhVencida.includes("CNH vencida ou data inválida."),
-);
+assert.ok(cnhVencida.includes("CNH vencida ou data inválida."));
 console.log("Teste 5: CNH vencida - OK");
 
 // Teste 6: Veículo não informado
@@ -67,9 +64,7 @@ const semVeiculo = validarCadastroMotorista({
   veiculoId: "",
 });
 
-assert.ok(
-  semVeiculo.includes("É necessário selecionar um veículo."),
-);
+assert.ok(semVeiculo.includes("É necessário selecionar um veículo."));
 console.log("Teste 6: Veículo obrigatório - OK");
 // Teste 7: Tipo de pessoa inválido
 const tipoPessoaInvalido = validarCadastroMotorista({
@@ -77,9 +72,7 @@ const tipoPessoaInvalido = validarCadastroMotorista({
   tipoPessoa: "EMPRESA" as CadastroMotoristaInput["tipoPessoa"],
 });
 
-assert.ok(
-  tipoPessoaInvalido.includes("Tipo de pessoa inválido."),
-);
+assert.ok(tipoPessoaInvalido.includes("Tipo de pessoa inválido."));
 
 console.log("Teste 7: Tipo de pessoa inválido - OK");
 

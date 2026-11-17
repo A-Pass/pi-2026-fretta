@@ -1,14 +1,9 @@
-
 import { randomUUID } from "node:crypto";
 import { mkdir, open, unlink } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
-const DIRETORIO_PRIVADO = path.resolve(
-  process.cwd(),
-  "storage",
-  "private",
-);
+const DIRETORIO_PRIVADO = path.resolve(process.cwd(), "storage", "private");
 
 const TAMANHO_MAXIMO = 5 * 1024 * 1024;
 const DIMENSAO_MAXIMA = 6000;
@@ -20,10 +15,7 @@ type ArquivoRecebido = {
   tipo: TipoArquivo;
 };
 
-export async function salvarArquivoPrivado({
-  bytes,
-  tipo,
-}: ArquivoRecebido) {
+export async function salvarArquivoPrivado({ bytes, tipo }: ArquivoRecebido) {
   if (bytes.length === 0 || bytes.length > TAMANHO_MAXIMO) {
     throw new Error("INVALID_FILE_SIZE");
   }
@@ -78,17 +70,17 @@ export async function salvarArquivoPrivado({
 
   let gravacaoConcluida = false;
 
-try {
-  await arquivo.writeFile(imagemNormalizada);
-  await arquivo.close();
+  try {
+    await arquivo.writeFile(imagemNormalizada);
+    await arquivo.close();
 
-  gravacaoConcluida = true;
-} finally {
-  if (!gravacaoConcluida) {
-    await arquivo.close().catch(() => {});
-    await unlink(caminho).catch(() => {});
+    gravacaoConcluida = true;
+  } finally {
+    if (!gravacaoConcluida) {
+      await arquivo.close().catch(() => {});
+      await unlink(caminho).catch(() => {});
+    }
   }
-}
 
   return {
     id,
@@ -110,10 +102,7 @@ export async function removerArquivoPrivado(
     throw new Error("INVALID_STORAGE_KEY");
   }
 
-  const caminho = path.join(
-    DIRETORIO_PRIVADO,
-    chaveArmazenamento,
-  );
+  const caminho = path.join(DIRETORIO_PRIVADO, chaveArmazenamento);
 
   await unlink(caminho);
 }

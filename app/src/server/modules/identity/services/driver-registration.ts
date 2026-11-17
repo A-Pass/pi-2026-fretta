@@ -1,4 +1,3 @@
-
 import { prisma } from "@/server/db/prisma";
 
 export async function verificarVeiculoMotorista(

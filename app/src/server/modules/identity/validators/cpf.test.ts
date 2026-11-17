@@ -1,4 +1,3 @@
-
 import { validarCPF } from "./cpf";
 
 const testes = [
@@ -14,7 +13,7 @@ for (const teste of testes) {
   const resultado = validarCPF(teste.cpf);
 
   console.log(
-    `CPF: ${teste.cpf} | Esperado: ${teste.esperado} | Resultado: ${resultado}`
+    `CPF: ${teste.cpf} | Esperado: ${teste.esperado} | Resultado: ${resultado}`,
   );
 
   if (resultado !== teste.esperado) {

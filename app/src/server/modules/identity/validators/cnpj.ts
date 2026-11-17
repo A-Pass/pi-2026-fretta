@@ -11,8 +11,7 @@ export function validarCNPJ(cnpj: string): boolean {
 
   function calcularDigito(base: string, pesos: number[]): number {
     const soma = [...base].reduce(
-      (total, digito, indice) =>
-        total + Number(digito) * pesos[indice],
+      (total, digito, indice) => total + Number(digito) * pesos[indice],
       0,
     );
 

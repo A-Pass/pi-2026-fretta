@@ -6,11 +6,7 @@ import sharp from "sharp";
 
 import { salvarArquivoPrivado } from "./private-file-storage";
 
-const diretorioPrivado = path.resolve(
-  process.cwd(),
-  "storage",
-  "private",
-);
+const diretorioPrivado = path.resolve(process.cwd(), "storage", "private");
 
 test("salva imagem válida em formato JPEG", async () => {
   const bytes = await sharp({
@@ -29,18 +25,12 @@ test("salva imagem válida em formato JPEG", async () => {
     tipo: "FOTO_PERFIL",
   });
 
-  const caminho = path.join(
-    diretorioPrivado,
-    resultado.chaveArmazenamento,
-  );
+  const caminho = path.join(diretorioPrivado, resultado.chaveArmazenamento);
 
   try {
     assert.equal(resultado.tipo, "FOTO_PERFIL");
     assert.equal(resultado.mimeType, "image/jpeg");
-    assert.match(
-      resultado.chaveArmazenamento,
-      /^[0-9a-f-]{36}\.jpg$/,
-    );
+    assert.match(resultado.chaveArmazenamento, /^[0-9a-f-]{36}\.jpg$/);
 
     const arquivoSalvo = await readFile(caminho);
     const metadados = await sharp(arquivoSalvo).metadata();

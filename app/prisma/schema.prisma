@@ -31,7 +31,9 @@ model User {
   ofertasCriadas Oferta[]
 
   // Comunicação
-  mensagensEnviadas Mensagem[]
+  mensagensEnviadas     Mensagem[]
+  notificacoesRecebidas Notificacao[]
+  arquivosEnviados      ArquivoUpload[]
 
   // Avaliações
   avaliacoesFeitas    Avaliacao[] @relation("AvaliacaoAutor")
@@ -112,9 +114,9 @@ model Motorista {
   propostas    Proposta[]
   assinaturas  VinculoAssinatura[]
 
-  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  veiculos Veiculo[]
-  cadastro CadastroMotorista?
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  veiculos         Veiculo[]
+  cadastro         CadastroMotorista?
   arquivosPrivados ArquivoPrivado[]
 }
 
@@ -348,15 +350,17 @@ model Conversa {
 }
 
 model Mensagem {
-  id         String   @id @default(uuid())
-  conversaId String
-  autorId    String
-  texto      String   @db.VarChar(2000)
-  criadoEm   DateTime @default(now())
+  id              String   @id @default(uuid())
+  conversaId      String
+  autorId         String
+  texto           String   @db.VarChar(2000)
+  clientMessageId String?
+  criadoEm        DateTime @default(now())
 
   conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Restrict)
   autor    User     @relation(fields: [autorId], references: [id], onDelete: Restrict)
 
+  @@unique([conversaId, autorId, clientMessageId])
   @@index([conversaId, criadoEm])
   @@index([autorId])
 }
@@ -401,6 +405,7 @@ model VinculoAssinatura {
   @@index([motoristaId])
   @@index([status])
 }
+
 enum TipoArquivoPrivado {
   FOTO_PERFIL
   CNH
@@ -418,4 +423,48 @@ model ArquivoPrivado {
   motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
 
   @@index([motoristaId, tipo])
+}
+
+model Notificacao {
+  id                String   @id @default(uuid())
+  destinatarioId    String
+  papelDestinatario String
+  evento            String
+  titulo            String
+  corpo             String
+  freteId           String?
+  propostaId        String?
+  conversaId        String?
+  lida              Boolean  @default(false)
+  criadoEm          DateTime @default(now())
+
+  destinatario User @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+
+  @@index([destinatarioId, criadoEm, id])
+  @@index([destinatarioId, lida])
+}
+
+model ArquivoUpload {
+  id                 String   @id @default(uuid())
+  usuarioId          String
+  finalidade         String   @default("freight")
+  chaveArmazenamento String   @unique
+  mimeType           String
+  tamanhoBytes       Int
+  criadoEm           DateTime @default(now())
+
+  usuario User @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, criadoEm])
+}
+
+model EventoWebhook {
+  id           String   @id @default(uuid())
+  provedor     String
+  eventoId     String
+  tipo         String
+  processadoEm DateTime @default(now())
+
+  @@unique([provedor, eventoId])
+  @@index([processadoEm])
 }

@@ -1,4 +1,3 @@
-
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -35,7 +34,6 @@ test("bloqueia cadastro de motorista sem autenticação", async () => {
 
   console.log("Cadastro sem autenticação bloqueado - OK");
 });
-
 
 test("bloqueia cadastro sem perfil de motorista", async () => {
   const databaseUrl = process.env.DATABASE_URL;
@@ -108,51 +106,51 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
     assert.equal(resposta.status, 403);
     assert.equal(resultado.code, "FORBIDDEN");
     // Ativar o perfil de motorista para testar a validação dos dados.
-await prisma.motorista.create({
-  data: {
-    userId: usuarioId!,
-  },
-});
+    await prisma.motorista.create({
+      data: {
+        userId: usuarioId!,
+      },
+    });
 
-const requisicaoInvalida = new NextRequest(
-  "http://localhost:3002/api/v1/driver/registration",
-  {
-    method: "POST",
-    headers: {
-      cookie: cookies,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({}),
-  },
-);
+    const requisicaoInvalida = new NextRequest(
+      "http://localhost:3002/api/v1/driver/registration",
+      {
+        method: "POST",
+        headers: {
+          cookie: cookies,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+    );
 
-const respostaInvalida = await POST(requisicaoInvalida);
-const dadosInvalidos = await respostaInvalida.json();
+    const respostaInvalida = await POST(requisicaoInvalida);
+    const dadosInvalidos = await respostaInvalida.json();
 
-assert.equal(respostaInvalida.status, 422);
-assert.equal(dadosInvalidos.code, "INVALID_INPUT");
+    assert.equal(respostaInvalida.status, 422);
+    assert.equal(dadosInvalidos.code, "INVALID_INPUT");
 
-console.log("Cadastro com dados incompletos bloqueado - OK");
+    console.log("Cadastro com dados incompletos bloqueado - OK");
 
-const requisicaoCpfInvalido = new NextRequest(
-  "http://localhost:3002/api/v1/driver/registration",
-  {
-    method: "POST",
-    headers: {
-      cookie: cookies,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      tipoPessoa: "PF",
-      nomeCompleto: "Motorista de Teste",
-      cpf: "11111111111",
-      cnhNumero: "12345678901",
-      cnhCategoria: "B",
-      cnhValidade: "2099-12-31",
-      veiculoId: "veiculo-ficticio",
-    }),
-  },
-);
+    const requisicaoCpfInvalido = new NextRequest(
+      "http://localhost:3002/api/v1/driver/registration",
+      {
+        method: "POST",
+        headers: {
+          cookie: cookies,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          tipoPessoa: "PF",
+          nomeCompleto: "Motorista de Teste",
+          cpf: "11111111111",
+          cnhNumero: "12345678901",
+          cnhCategoria: "B",
+          cnhValidade: "2099-12-31",
+          veiculoId: "veiculo-ficticio",
+        }),
+      },
+    );
 
     const respostaCpfInvalido = await POST(requisicaoCpfInvalido);
     const dadosCpfInvalido = await respostaCpfInvalido.json();
@@ -163,259 +161,111 @@ const requisicaoCpfInvalido = new NextRequest(
 
     console.log("Cadastro com CPF inválido bloqueado - OK");
 
-const requisicaoCnhVencida = new NextRequest(
-  "http://localhost:3002/api/v1/driver/registration",
-  {
-    method: "POST",
-    headers: {
-      cookie: cookies,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      tipoPessoa: "PF",
-      nomeCompleto: "Motorista de Teste",
-      cpf: "529.982.247-25",
-      cnhNumero: "12345678901",
-      cnhCategoria: "B",
-      cnhValidade: "2020-01-01",
-      veiculoId: "veiculo-ficticio",
-    }),
-  },
-);
+    const requisicaoCnhVencida = new NextRequest(
+      "http://localhost:3002/api/v1/driver/registration",
+      {
+        method: "POST",
+        headers: {
+          cookie: cookies,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          tipoPessoa: "PF",
+          nomeCompleto: "Motorista de Teste",
+          cpf: "529.982.247-25",
+          cnhNumero: "12345678901",
+          cnhCategoria: "B",
+          cnhValidade: "2020-01-01",
+          veiculoId: "veiculo-ficticio",
+        }),
+      },
+    );
 
     const respostaCnhVencida = await POST(requisicaoCnhVencida);
     const dadosCnhVencida = await respostaCnhVencida.json();
 
     assert.equal(respostaCnhVencida.status, 422);
     assert.equal(dadosCnhVencida.code, "VALIDATION_ERROR");
-    assert.match(
-    dadosCnhVencida.message,
-    /CNH vencida ou data inválida/,
-    );
+    assert.match(dadosCnhVencida.message, /CNH vencida ou data inválida/);
 
     console.log("Cadastro com CNH vencida bloqueado - OK");
 
-const outroMotoristaId = `motorista-teste-${randomUUID()}`;
-
-try {
-  // Criar outro motorista fictício.
-  await prisma.user.create({
-    data: {
-      id: outroMotoristaId,
-      name: "Outro Motorista Fictício",
-      email: `${outroMotoristaId}@fretta.invalid`,
-      emailVerified: false,
-      motorista: {
-        create: {},
-      },
-    },
-  });
-
-  // O veículo pertence ao outro motorista.
-  const veiculoDeOutroMotorista = await prisma.veiculo.create({
-    data: {
-      motoristaId: outroMotoristaId,
-      categoria: "UTILITARIO",
-      modelo: "Veículo Fictício",
-      placa: `T${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`,
-      capacidadeKg: 1000,
-      descricao: "Teste de propriedade do veículo",
-    },
-  });
-
-  // O motorista autenticado tenta usar esse veículo.
-  const requisicaoVeiculoAlheio = new NextRequest(
-    "http://localhost:3002/api/v1/driver/registration",
-    {
-      method: "POST",
-      headers: {
-        cookie: cookies,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        tipoPessoa: "PF",
-        nomeCompleto: "Motorista de Teste",
-        cpf: "529.982.247-25",
-        cnhNumero: "12345678901",
-        cnhCategoria: "B",
-        cnhValidade: "2099-12-31",
-        veiculoId: veiculoDeOutroMotorista.id,
-      }),
-    },
-  );
-
-  const respostaVeiculoAlheio = await POST(requisicaoVeiculoAlheio);
-  const dadosVeiculoAlheio = await respostaVeiculoAlheio.json();
-
-  assert.equal(respostaVeiculoAlheio.status, 422);
-  assert.equal(dadosVeiculoAlheio.code, "INVALID_VEHICLE");
-
-  console.log("Uso de veículo de outro motorista bloqueado - OK");
-} finally {
-  await prisma.user.deleteMany({
-    where: {
-      id: outroMotoristaId,
-    },
-  });
-}
-
-const veiculoProprio = await prisma.veiculo.create({
-  data: {
-    motoristaId: usuarioId!,
-    categoria: "UTILITARIO",
-    modelo: "Veículo Próprio de Teste",
-    placa: `T${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`,
-    capacidadeKg: 1000,
-    descricao: "Teste de cadastro com veículo próprio",
-  },
-});
-
-const requisicaoValida = new NextRequest(
-  "http://localhost:3002/api/v1/driver/registration",
-  {
-    method: "POST",
-    headers: {
-      cookie: cookies,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      tipoPessoa: "PF",
-      nomeCompleto: "Motorista de Teste",
-      cpf: "529.982.247-25",
-      cnhNumero: "12345678901",
-      cnhCategoria: "B",
-      cnhValidade: "2099-12-31",
-      veiculoId: veiculoProprio.id,
-    }),
-  },
-);
-
-const respostaValida = await POST(requisicaoValida);
-const dadosValidos = await respostaValida.json();
-
-    assert.equal(respostaValida.status, 422);
-    assert.equal(dadosValidos.code, "DOCUMENTS_REQUIRED");
-
-    console.log("Cadastro sem documentos obrigatórios bloqueado - OK");
-
-    const imagemTeste = await sharp({
-    create: {
-        width: 100,
-        height: 100,
-        channels: 3,
-        background: "#ffffff",
-    },
-    })
-    .png()
-    .toBuffer();
-
-    const documentosCriados: string[] = [];
+    const outroMotoristaId = `motorista-teste-${randomUUID()}`;
 
     try {
-    // Criar foto de perfil vinculada ao motorista.
-    const foto = await salvarDocumentoMotorista({
-        motoristaId: usuarioId!,
-        tipo: "FOTO_PERFIL",
-        bytes: imagemTeste,
-    });
+      // Criar outro motorista fictício.
+      await prisma.user.create({
+        data: {
+          id: outroMotoristaId,
+          name: "Outro Motorista Fictício",
+          email: `${outroMotoristaId}@fretta.invalid`,
+          emailVerified: false,
+          motorista: {
+            create: {},
+          },
+        },
+      });
 
-    documentosCriados.push(foto.id);
+      // O veículo pertence ao outro motorista.
+      const veiculoDeOutroMotorista = await prisma.veiculo.create({
+        data: {
+          motoristaId: outroMotoristaId,
+          categoria: "UTILITARIO",
+          modelo: "Veículo Fictício",
+          placa: `T${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+          capacidadeKg: 1000,
+          descricao: "Teste de propriedade do veículo",
+        },
+      });
 
-    // Criar documento da CNH.
-    const cnh = await salvarDocumentoMotorista({
-        motoristaId: usuarioId!,
-        tipo: "CNH",
-        bytes: imagemTeste,
-    });
-
-    documentosCriados.push(cnh.id);
-
-    // Enviar cadastro completo.
-    const requisicaoCompleta = new NextRequest(
+      // O motorista autenticado tenta usar esse veículo.
+      const requisicaoVeiculoAlheio = new NextRequest(
         "http://localhost:3002/api/v1/driver/registration",
         {
-        method: "POST",
-        headers: {
+          method: "POST",
+          headers: {
             cookie: cookies,
             "content-type": "application/json",
-        },
-        body: JSON.stringify({
+          },
+          body: JSON.stringify({
             tipoPessoa: "PF",
             nomeCompleto: "Motorista de Teste",
             cpf: "529.982.247-25",
             cnhNumero: "12345678901",
             cnhCategoria: "B",
             cnhValidade: "2099-12-31",
-            veiculoId: veiculoProprio.id,
-            fotoPerfilId: foto.id,
-            documentoCnhId: cnh.id,
-        }),
+            veiculoId: veiculoDeOutroMotorista.id,
+          }),
         },
-    );
+      );
 
-    const respostaCompleta = await POST(requisicaoCompleta);
-    const dadosCompletos = await respostaCompleta.json();
+      const respostaVeiculoAlheio = await POST(requisicaoVeiculoAlheio);
+      const dadosVeiculoAlheio = await respostaVeiculoAlheio.json();
 
-    assert.equal(
-        respostaCompleta.status,
-        201,
-        JSON.stringify(dadosCompletos),
-    );
+      assert.equal(respostaVeiculoAlheio.status, 422);
+      assert.equal(dadosVeiculoAlheio.code, "INVALID_VEHICLE");
 
-    assert.equal(dadosCompletos.status, "EM_ANALISE");
+      console.log("Uso de veículo de outro motorista bloqueado - OK");
+    } finally {
+      await prisma.user.deleteMany({
+        where: {
+          id: outroMotoristaId,
+        },
+      });
+    }
 
-    // Confirmar persistência do cadastro.
-    const cadastroSalvo =
-        await prisma.cadastroMotorista.findUniqueOrThrow({
-        where: { motoristaId: usuarioId! },
-        });
-
-    assert.equal(cadastroSalvo.status, "EM_ANALISE");
-    assert.equal(cadastroSalvo.fotoPerfilId, foto.id);
-    assert.equal(cadastroSalvo.documentoCnhId, cnh.id);
-    assert.equal(cadastroSalvo.veiculoId, veiculoProprio.id);
-
-    // Confirmar persistência dos dados pessoais.
-    const pessoaSalva = await prisma.pessoa.findUniqueOrThrow({
-        where: { userId: usuarioId! },
+    const veiculoProprio = await prisma.veiculo.create({
+      data: {
+        motoristaId: usuarioId!,
+        categoria: "UTILITARIO",
+        modelo: "Veículo Próprio de Teste",
+        placa: `T${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+        capacidadeKg: 1000,
+        descricao: "Teste de cadastro com veículo próprio",
+      },
     });
 
-    assert.equal(pessoaSalva.nomeCompleto, "Motorista de Teste");
-    assert.equal(pessoaSalva.cpf, "52998224725");
-
-    console.log("Cadastro completo persistido no PostgreSQL - OK");
-
-  // Consultar o cadastro pela API.
-  const requisicaoConsulta = new NextRequest(
-    "http://localhost:3002/api/v1/driver/registration",
-    {
-      method: "GET",
-      headers: {
-        cookie: cookies,
-      },
-    },
-  );
-
-  const respostaConsulta = await GET(requisicaoConsulta);
-  const dadosConsulta = await respostaConsulta.json();
-
-  assert.equal(respostaConsulta.status, 200);
-  assert.equal(dadosConsulta.status, "EM_ANALISE");
-  assert.equal(dadosConsulta.cadastroCompleto, true);
-  assert.equal(dadosConsulta.podeRealizarFretes, false);
-
-  // A consulta não deve expor documentos ou dados sensíveis.
-  assert.equal(dadosConsulta.cpf, undefined);
-  assert.equal(dadosConsulta.cnhNumero, undefined);
-  assert.equal(dadosConsulta.fotoPerfilId, undefined);
-  assert.equal(dadosConsulta.documentoCnhId, undefined);
-
-  console.log("Consulta privada do cadastro em análise - OK");
-
-
-  // Impedir novo envio enquanto o cadastro está em análise.
-  const respostaReenvio = await POST(
-    new NextRequest(
+    const requisicaoValida = new NextRequest(
       "http://localhost:3002/api/v1/driver/registration",
       {
         method: "POST",
@@ -431,226 +281,347 @@ const dadosValidos = await respostaValida.json();
           cnhCategoria: "B",
           cnhValidade: "2099-12-31",
           veiculoId: veiculoProprio.id,
-          fotoPerfilId: foto.id,
-          documentoCnhId: cnh.id,
         }),
       },
-    ),
-  );
+    );
 
-  const dadosReenvio = await respostaReenvio.json();
+    const respostaValida = await POST(requisicaoValida);
+    const dadosValidos = await respostaValida.json();
 
-  assert.equal(respostaReenvio.status, 409);
-  assert.equal(dadosReenvio.code, "REGISTRATION_NOT_EDITABLE");
+    assert.equal(respostaValida.status, 422);
+    assert.equal(dadosValidos.code, "DOCUMENTS_REQUIRED");
 
-  const quantidadeCadastros = await prisma.cadastroMotorista.count({
-    where: { motoristaId: usuarioId! },
-  });
+    console.log("Cadastro sem documentos obrigatórios bloqueado - OK");
 
-  assert.equal(quantidadeCadastros, 1);
-
-  console.log("Reenvio de cadastro em análise bloqueado - OK");
-
-  // Simular uma solicitação de ajustes pelo administrador.
-  await prisma.cadastroMotorista.update({
-    where: { motoristaId: usuarioId! },
-    data: {
-      status: "AJUSTES_SOLICITADOS",
-      motivoAjuste: "Atualizar os dados da CNH.",
-      analisadoEm: new Date(),
-    },
-  });
-
-  // Consultar o cadastro após solicitação de ajustes.
-  const respostaConsultaAjustes = await GET(
-    new NextRequest(
-      "http://localhost:3002/api/v1/driver/registration",
-      {
-        method: "GET",
-        headers: {
-          cookie: cookies,
-        },
+    const imagemTeste = await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 3,
+        background: "#ffffff",
       },
-    ),
-  );
+    })
+      .png()
+      .toBuffer();
 
-  const dadosConsultaAjustes =
-    await respostaConsultaAjustes.json();
+    const documentosCriados: string[] = [];
 
-  assert.equal(respostaConsultaAjustes.status, 200);
-  assert.equal(dadosConsultaAjustes.status, "AJUSTES_SOLICITADOS");
-  assert.equal(
-    dadosConsultaAjustes.motivoAjuste,
-    "Atualizar os dados da CNH.",
-  );
-  assert.ok(dadosConsultaAjustes.analisadoEm);
-  assert.equal(dadosConsultaAjustes.podeRealizarFretes, false);
+    try {
+      // Criar foto de perfil vinculada ao motorista.
+      const foto = await salvarDocumentoMotorista({
+        motoristaId: usuarioId!,
+        tipo: "FOTO_PERFIL",
+        bytes: imagemTeste,
+      });
 
-  console.log("Consulta dos ajustes solicitados - OK");
+      documentosCriados.push(foto.id);
 
-  // Motorista corrige os dados e reenvia o cadastro.
-  const respostaAjustes = await POST(
-    new NextRequest(
-      "http://localhost:3002/api/v1/driver/registration",
-      {
-        method: "POST",
-        headers: {
-          cookie: cookies,
-          "content-type": "application/json",
+      // Criar documento da CNH.
+      const cnh = await salvarDocumentoMotorista({
+        motoristaId: usuarioId!,
+        tipo: "CNH",
+        bytes: imagemTeste,
+      });
+
+      documentosCriados.push(cnh.id);
+
+      // Enviar cadastro completo.
+      const requisicaoCompleta = new NextRequest(
+        "http://localhost:3002/api/v1/driver/registration",
+        {
+          method: "POST",
+          headers: {
+            cookie: cookies,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            tipoPessoa: "PF",
+            nomeCompleto: "Motorista de Teste",
+            cpf: "529.982.247-25",
+            cnhNumero: "12345678901",
+            cnhCategoria: "B",
+            cnhValidade: "2099-12-31",
+            veiculoId: veiculoProprio.id,
+            fotoPerfilId: foto.id,
+            documentoCnhId: cnh.id,
+          }),
         },
-        body: JSON.stringify({
-          tipoPessoa: "PF",
-          nomeCompleto: "Motorista de Teste Atualizado",
-          cpf: "529.982.247-25",
-          cnhNumero: "12345678901",
-          cnhCategoria: "B",
-          cnhValidade: "2099-12-31",
-          veiculoId: veiculoProprio.id,
-          fotoPerfilId: foto.id,
-          documentoCnhId: cnh.id,
+      );
+
+      const respostaCompleta = await POST(requisicaoCompleta);
+      const dadosCompletos = await respostaCompleta.json();
+
+      assert.equal(
+        respostaCompleta.status,
+        201,
+        JSON.stringify(dadosCompletos),
+      );
+
+      assert.equal(dadosCompletos.status, "EM_ANALISE");
+
+      // Confirmar persistência do cadastro.
+      const cadastroSalvo = await prisma.cadastroMotorista.findUniqueOrThrow({
+        where: { motoristaId: usuarioId! },
+      });
+
+      assert.equal(cadastroSalvo.status, "EM_ANALISE");
+      assert.equal(cadastroSalvo.fotoPerfilId, foto.id);
+      assert.equal(cadastroSalvo.documentoCnhId, cnh.id);
+      assert.equal(cadastroSalvo.veiculoId, veiculoProprio.id);
+
+      // Confirmar persistência dos dados pessoais.
+      const pessoaSalva = await prisma.pessoa.findUniqueOrThrow({
+        where: { userId: usuarioId! },
+      });
+
+      assert.equal(pessoaSalva.nomeCompleto, "Motorista de Teste");
+      assert.equal(pessoaSalva.cpf, "52998224725");
+
+      console.log("Cadastro completo persistido no PostgreSQL - OK");
+
+      // Consultar o cadastro pela API.
+      const requisicaoConsulta = new NextRequest(
+        "http://localhost:3002/api/v1/driver/registration",
+        {
+          method: "GET",
+          headers: {
+            cookie: cookies,
+          },
+        },
+      );
+
+      const respostaConsulta = await GET(requisicaoConsulta);
+      const dadosConsulta = await respostaConsulta.json();
+
+      assert.equal(respostaConsulta.status, 200);
+      assert.equal(dadosConsulta.status, "EM_ANALISE");
+      assert.equal(dadosConsulta.cadastroCompleto, true);
+      assert.equal(dadosConsulta.podeRealizarFretes, false);
+
+      // A consulta não deve expor documentos ou dados sensíveis.
+      assert.equal(dadosConsulta.cpf, undefined);
+      assert.equal(dadosConsulta.cnhNumero, undefined);
+      assert.equal(dadosConsulta.fotoPerfilId, undefined);
+      assert.equal(dadosConsulta.documentoCnhId, undefined);
+
+      console.log("Consulta privada do cadastro em análise - OK");
+
+      // Impedir novo envio enquanto o cadastro está em análise.
+      const respostaReenvio = await POST(
+        new NextRequest("http://localhost:3002/api/v1/driver/registration", {
+          method: "POST",
+          headers: {
+            cookie: cookies,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            tipoPessoa: "PF",
+            nomeCompleto: "Motorista de Teste",
+            cpf: "529.982.247-25",
+            cnhNumero: "12345678901",
+            cnhCategoria: "B",
+            cnhValidade: "2099-12-31",
+            veiculoId: veiculoProprio.id,
+            fotoPerfilId: foto.id,
+            documentoCnhId: cnh.id,
+          }),
         }),
-      },
-    ),
-  );
+      );
 
-  const dadosAjustes = await respostaAjustes.json();
+      const dadosReenvio = await respostaReenvio.json();
 
-  assert.equal(respostaAjustes.status, 201, JSON.stringify(dadosAjustes));
-  assert.equal(dadosAjustes.status, "EM_ANALISE");
+      assert.equal(respostaReenvio.status, 409);
+      assert.equal(dadosReenvio.code, "REGISTRATION_NOT_EDITABLE");
 
-  const cadastroReenviado =
-    await prisma.cadastroMotorista.findUniqueOrThrow({
-      where: { motoristaId: usuarioId! },
-    });
+      const quantidadeCadastros = await prisma.cadastroMotorista.count({
+        where: { motoristaId: usuarioId! },
+      });
 
-  assert.equal(cadastroReenviado.status, "EM_ANALISE");
-  assert.equal(cadastroReenviado.motivoAjuste, null);
-  assert.equal(cadastroReenviado.analisadoEm, null);
+      assert.equal(quantidadeCadastros, 1);
 
-  const pessoaAtualizada = await prisma.pessoa.findUniqueOrThrow({
-    where: { userId: usuarioId! },
-  });
+      console.log("Reenvio de cadastro em análise bloqueado - OK");
 
-  assert.equal(
-    pessoaAtualizada.nomeCompleto,
-    "Motorista de Teste Atualizado",
-  );
-
-  assert.equal(
-    await prisma.cadastroMotorista.count({
-      where: { motoristaId: usuarioId! },
-    }),
-    1,
-  );
-
-  console.log("Reenvio após solicitação de ajustes aprovado - OK");
-
-  // Simular a aprovação administrativa.
-  await prisma.cadastroMotorista.update({
-    where: { motoristaId: usuarioId! },
-    data: {
-      status: "APROVADO",
-      analisadoEm: new Date(),
-    },
-  });
-
-  // Tentar reenviar um cadastro já aprovado.
-  const respostaAprovado = await POST(
-    new NextRequest(
-      "http://localhost:3002/api/v1/driver/registration",
-      {
-        method: "POST",
-        headers: {
-          cookie: cookies,
-          "content-type": "application/json",
+      // Simular uma solicitação de ajustes pelo administrador.
+      await prisma.cadastroMotorista.update({
+        where: { motoristaId: usuarioId! },
+        data: {
+          status: "AJUSTES_SOLICITADOS",
+          motivoAjuste: "Atualizar os dados da CNH.",
+          analisadoEm: new Date(),
         },
-        body: JSON.stringify({
-          tipoPessoa: "PF",
-          nomeCompleto: "Alteração Não Autorizada",
-          cpf: "529.982.247-25",
-          cnhNumero: "12345678901",
-          cnhCategoria: "B",
-          cnhValidade: "2099-12-31",
-          veiculoId: veiculoProprio.id,
-          fotoPerfilId: foto.id,
-          documentoCnhId: cnh.id,
+      });
+
+      // Consultar o cadastro após solicitação de ajustes.
+      const respostaConsultaAjustes = await GET(
+        new NextRequest("http://localhost:3002/api/v1/driver/registration", {
+          method: "GET",
+          headers: {
+            cookie: cookies,
+          },
         }),
-      },
-    ),
-  );
+      );
 
-  const dadosAprovado = await respostaAprovado.json();
+      const dadosConsultaAjustes = await respostaConsultaAjustes.json();
 
-  assert.equal(respostaAprovado.status, 409);
-  assert.equal(
-    dadosAprovado.code,
-    "REGISTRATION_ALREADY_APPROVED",
-  );
+      assert.equal(respostaConsultaAjustes.status, 200);
+      assert.equal(dadosConsultaAjustes.status, "AJUSTES_SOLICITADOS");
+      assert.equal(
+        dadosConsultaAjustes.motivoAjuste,
+        "Atualizar os dados da CNH.",
+      );
+      assert.ok(dadosConsultaAjustes.analisadoEm);
+      assert.equal(dadosConsultaAjustes.podeRealizarFretes, false);
 
-  const cadastroAprovado =
-    await prisma.cadastroMotorista.findUniqueOrThrow({
-      where: { motoristaId: usuarioId! },
-    });
+      console.log("Consulta dos ajustes solicitados - OK");
 
-  assert.equal(cadastroAprovado.status, "APROVADO");
+      // Motorista corrige os dados e reenvia o cadastro.
+      const respostaAjustes = await POST(
+        new NextRequest("http://localhost:3002/api/v1/driver/registration", {
+          method: "POST",
+          headers: {
+            cookie: cookies,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            tipoPessoa: "PF",
+            nomeCompleto: "Motorista de Teste Atualizado",
+            cpf: "529.982.247-25",
+            cnhNumero: "12345678901",
+            cnhCategoria: "B",
+            cnhValidade: "2099-12-31",
+            veiculoId: veiculoProprio.id,
+            fotoPerfilId: foto.id,
+            documentoCnhId: cnh.id,
+          }),
+        }),
+      );
 
-  const pessoaAprovada = await prisma.pessoa.findUniqueOrThrow({
-    where: { userId: usuarioId! },
-  });
+      const dadosAjustes = await respostaAjustes.json();
 
-  assert.equal(
-    pessoaAprovada.nomeCompleto,
-    "Motorista de Teste Atualizado",
-  );
+      assert.equal(respostaAjustes.status, 201, JSON.stringify(dadosAjustes));
+      assert.equal(dadosAjustes.status, "EM_ANALISE");
 
-  console.log("Reenvio de cadastro aprovado bloqueado - OK");
+      const cadastroReenviado =
+        await prisma.cadastroMotorista.findUniqueOrThrow({
+          where: { motoristaId: usuarioId! },
+        });
 
-  // Consultar o cadastro após aprovação administrativa.
-  const respostaConsultaAprovado = await GET(
-    new NextRequest(
-      "http://localhost:3002/api/v1/driver/registration",
-      {
-        method: "GET",
-        headers: {
-          cookie: cookies,
+      assert.equal(cadastroReenviado.status, "EM_ANALISE");
+      assert.equal(cadastroReenviado.motivoAjuste, null);
+      assert.equal(cadastroReenviado.analisadoEm, null);
+
+      const pessoaAtualizada = await prisma.pessoa.findUniqueOrThrow({
+        where: { userId: usuarioId! },
+      });
+
+      assert.equal(
+        pessoaAtualizada.nomeCompleto,
+        "Motorista de Teste Atualizado",
+      );
+
+      assert.equal(
+        await prisma.cadastroMotorista.count({
+          where: { motoristaId: usuarioId! },
+        }),
+        1,
+      );
+
+      console.log("Reenvio após solicitação de ajustes aprovado - OK");
+
+      // Simular a aprovação administrativa.
+      await prisma.cadastroMotorista.update({
+        where: { motoristaId: usuarioId! },
+        data: {
+          status: "APROVADO",
+          analisadoEm: new Date(),
         },
-      },
-    ),
-  );
+      });
 
-  const dadosConsultaAprovado =
-    await respostaConsultaAprovado.json();
+      // Tentar reenviar um cadastro já aprovado.
+      const respostaAprovado = await POST(
+        new NextRequest("http://localhost:3002/api/v1/driver/registration", {
+          method: "POST",
+          headers: {
+            cookie: cookies,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            tipoPessoa: "PF",
+            nomeCompleto: "Alteração Não Autorizada",
+            cpf: "529.982.247-25",
+            cnhNumero: "12345678901",
+            cnhCategoria: "B",
+            cnhValidade: "2099-12-31",
+            veiculoId: veiculoProprio.id,
+            fotoPerfilId: foto.id,
+            documentoCnhId: cnh.id,
+          }),
+        }),
+      );
 
-  assert.equal(respostaConsultaAprovado.status, 200);
-  assert.equal(dadosConsultaAprovado.status, "APROVADO");
-  assert.equal(dadosConsultaAprovado.cadastroCompleto, true);
-  assert.equal(dadosConsultaAprovado.podeRealizarFretes, false);
-  assert.ok(dadosConsultaAprovado.analisadoEm);
+      const dadosAprovado = await respostaAprovado.json();
 
-  // Não expor dados pessoais ou documentos na resposta.
-  assert.equal(dadosConsultaAprovado.cpf, undefined);
-  assert.equal(dadosConsultaAprovado.cnhNumero, undefined);
-  assert.equal(dadosConsultaAprovado.fotoPerfilId, undefined);
-  assert.equal(dadosConsultaAprovado.documentoCnhId, undefined);
+      assert.equal(respostaAprovado.status, 409);
+      assert.equal(dadosAprovado.code, "REGISTRATION_ALREADY_APPROVED");
 
-  console.log("Consulta do cadastro aprovado - OK");
+      const cadastroAprovado = await prisma.cadastroMotorista.findUniqueOrThrow(
+        {
+          where: { motoristaId: usuarioId! },
+        },
+      );
 
+      assert.equal(cadastroAprovado.status, "APROVADO");
+
+      const pessoaAprovada = await prisma.pessoa.findUniqueOrThrow({
+        where: { userId: usuarioId! },
+      });
+
+      assert.equal(
+        pessoaAprovada.nomeCompleto,
+        "Motorista de Teste Atualizado",
+      );
+
+      console.log("Reenvio de cadastro aprovado bloqueado - OK");
+
+      // Consultar o cadastro após aprovação administrativa.
+      const respostaConsultaAprovado = await GET(
+        new NextRequest("http://localhost:3002/api/v1/driver/registration", {
+          method: "GET",
+          headers: {
+            cookie: cookies,
+          },
+        }),
+      );
+
+      const dadosConsultaAprovado = await respostaConsultaAprovado.json();
+
+      assert.equal(respostaConsultaAprovado.status, 200);
+      assert.equal(dadosConsultaAprovado.status, "APROVADO");
+      assert.equal(dadosConsultaAprovado.cadastroCompleto, true);
+      assert.equal(dadosConsultaAprovado.podeRealizarFretes, false);
+      assert.ok(dadosConsultaAprovado.analisadoEm);
+
+      // Não expor dados pessoais ou documentos na resposta.
+      assert.equal(dadosConsultaAprovado.cpf, undefined);
+      assert.equal(dadosConsultaAprovado.cnhNumero, undefined);
+      assert.equal(dadosConsultaAprovado.fotoPerfilId, undefined);
+      assert.equal(dadosConsultaAprovado.documentoCnhId, undefined);
+
+      console.log("Consulta do cadastro aprovado - OK");
     } finally {
-    // Remover somente arquivos criados por este teste.
-    for (const id of documentosCriados) {
+      // Remover somente arquivos criados por este teste.
+      for (const id of documentosCriados) {
         const registro = await prisma.arquivoPrivado.findUnique({
-        where: { id },
+          where: { id },
         });
 
         if (registro) {
-        await removerArquivoPrivado(
-            registro.chaveArmazenamento,
-        );
+          await removerArquivoPrivado(registro.chaveArmazenamento);
         }
-    }
+      }
 
-    // Os registros do banco serão removidos pelo
-    // finally externo, ao excluir o usuário fictício.
+      // Os registros do banco serão removidos pelo
+      // finally externo, ao excluir o usuário fictício.
     }
     console.log("Cadastro sem perfil de motorista bloqueado - OK");
   } finally {

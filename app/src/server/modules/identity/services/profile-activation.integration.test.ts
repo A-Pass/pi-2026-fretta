@@ -123,18 +123,12 @@ test("ativa os perfis de cliente e motorista sem duplicidade", async () => {
   }
 });
 test("impede ativação de perfis sem autenticação", async () => {
-  const caminhos = [
-    "/api/v1/me/client",
-    "/api/v1/me/driver",
-  ];
+  const caminhos = ["/api/v1/me/client", "/api/v1/me/driver"];
 
   for (const caminho of caminhos) {
-    const requisicao = new NextRequest(
-      `http://localhost:3002${caminho}`,
-      {
-        method: "POST",
-      },
-    );
+    const requisicao = new NextRequest(`http://localhost:3002${caminho}`, {
+      method: "POST",
+    });
 
     const resposta = await POST(requisicao);
     const dados = await resposta.json();

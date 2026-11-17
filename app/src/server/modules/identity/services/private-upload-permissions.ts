@@ -1,9 +1,7 @@
 import { auth } from "../../../auth/auth";
 import { prisma } from "../../../db/prisma";
 
-export async function verificarPermissaoUpload(
-  headers: Headers,
-) {
+export async function verificarPermissaoUpload(headers: Headers) {
   const session = await auth.api.getSession({ headers });
 
   if (!session) {

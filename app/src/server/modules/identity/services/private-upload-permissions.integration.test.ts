@@ -46,17 +46,17 @@ test("controla o acesso ao upload privado de documentos", async () => {
   const email = `upload-${randomUUID()}@fretta.invalid`;
   let usuarioId: string | undefined;
   const requisicaoSemSessao = new NextRequest(
-  "http://localhost:3002/api/v1/driver/registration/uploads",
-  {
-    method: "POST",
-  },
-);
+    "http://localhost:3002/api/v1/driver/registration/uploads",
+    {
+      method: "POST",
+    },
+  );
 
-const respostaSemSessao = await POST(requisicaoSemSessao);
-const dadosSemSessao = await respostaSemSessao.json();
+  const respostaSemSessao = await POST(requisicaoSemSessao);
+  const dadosSemSessao = await respostaSemSessao.json();
 
-assert.equal(respostaSemSessao.status, 401);
-assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
+  assert.equal(respostaSemSessao.status, 401);
+  assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
   // Usuário sem sessão
   const semSessao = await verificarPermissaoUpload(new Headers());
 
@@ -100,11 +100,11 @@ assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
     }
     // Usuário autenticado sem perfil de motorista
     const requisicaoSemPerfil = new NextRequest(
-    "http://localhost:3002/api/v1/driver/registration/uploads",
-    {
+      "http://localhost:3002/api/v1/driver/registration/uploads",
+      {
         method: "POST",
         headers,
-    },
+      },
     );
 
     const respostaSemPerfil = await POST(requisicaoSemPerfil);
@@ -119,8 +119,7 @@ assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
       },
     });
 
-    const motoristaAutorizado =
-      await verificarPermissaoUpload(headers);
+    const motoristaAutorizado = await verificarPermissaoUpload(headers);
 
     assert.equal(motoristaAutorizado.autorizado, true);
 
@@ -242,11 +241,9 @@ assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
     formularioGrande.set("tipo", "CNH");
     formularioGrande.set(
       "arquivo",
-      new File(
-        [new Uint8Array(5 * 1024 * 1024 + 1)],
-        "arquivo-grande.png",
-        { type: "image/png" },
-      ),
+      new File([new Uint8Array(5 * 1024 * 1024 + 1)], "arquivo-grande.png", {
+        type: "image/png",
+      }),
     );
 
     const requisicaoGrande = new NextRequest(
@@ -268,17 +265,17 @@ assert.equal(dadosSemSessao.code, "UNAUTHORIZED");
 
     console.log("Upload acima de 5 MB bloqueado - OK");
 
-console.log("Motorista autenticado acessou a rota protegida - OK");
+    console.log("Motorista autenticado acessou a rota protegida - OK");
     console.log("Autorização do upload privado - OK");
     // Uma sessão não pode assumir a identidade de outro motorista.
     const outroEmail = `outro-upload-${randomUUID()}@fretta.invalid`;
     const outroCadastro = await authTeste.api.signUpEmail({
-    body: {
+      body: {
         name: "Outro Motorista Fictício",
         email: outroEmail,
         password: "SenhaFicticia123!",
-    },
-    asResponse: true,
+      },
+      asResponse: true,
     });
 
     assert.equal(outroCadastro.status, 200);
@@ -287,33 +284,33 @@ console.log("Motorista autenticado acessou a rota protegida - OK");
     const outroUsuarioId = outrosDados.user.id;
 
     try {
-    await prisma.motorista.create({
+      await prisma.motorista.create({
         data: {
-        userId: outroUsuarioId,
+          userId: outroUsuarioId,
         },
-    });
+      });
 
-    // Mantemos os headers da primeira conta.
-    const permissaoOriginal = await verificarPermissaoUpload(headers);
+      // Mantemos os headers da primeira conta.
+      const permissaoOriginal = await verificarPermissaoUpload(headers);
 
-    assert.equal(permissaoOriginal.autorizado, true);
+      assert.equal(permissaoOriginal.autorizado, true);
 
-    if (permissaoOriginal.autorizado) {
+      if (permissaoOriginal.autorizado) {
         assert.equal(permissaoOriginal.motoristaId, usuarioId);
         assert.notEqual(permissaoOriginal.motoristaId, outroUsuarioId);
-    }
+      }
 
-    console.log("Isolamento entre motoristas - OK");
+      console.log("Isolamento entre motoristas - OK");
     } finally {
-    await prisma.user.deleteMany({
+      await prisma.user.deleteMany({
         where: { id: outroUsuarioId },
-    });
+      });
     }
-    } finally {
-        if (usuarioId) {
-        await prisma.user.deleteMany({
-            where: { id: usuarioId },
-        });
-        }
+  } finally {
+    if (usuarioId) {
+      await prisma.user.deleteMany({
+        where: { id: usuarioId },
+      });
     }
-    });
+  }
+});

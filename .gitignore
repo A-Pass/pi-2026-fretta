@@ -13,3 +13,6 @@ out/
 
 # Documentos privados enviados pelos usuarios
 /app/storage/private/
+
+# Imagens enviadas pelos usuarios
+/app/storage/uploads/

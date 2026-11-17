@@ -82,13 +82,11 @@ export async function verificarDocumentosMotorista(
     documentos.length === 2 &&
     documentos.some(
       (documento) =>
-        documento.id === fotoPerfilId &&
-        documento.tipo === "FOTO_PERFIL",
+        documento.id === fotoPerfilId && documento.tipo === "FOTO_PERFIL",
     ) &&
     documentos.some(
       (documento) =>
-        documento.id === documentoCnhId &&
-        documento.tipo === "CNH",
+        documento.id === documentoCnhId && documento.tipo === "CNH",
     )
   );
 }

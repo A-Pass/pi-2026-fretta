@@ -1,4 +1,3 @@
-
 export function validarNumeroCNH(numero: string): boolean {
   const numeros = numero.replace(/\D/g, "");
 
@@ -13,22 +12,23 @@ export function validarNumeroCNH(numero: string): boolean {
   return true;
 }
 
-export function validarCategoriaCNH(
-  categoria: string,
-): boolean {
+export function validarCategoriaCNH(categoria: string): boolean {
   const categoriasPermitidas = [
-    "A", "B", "AB", "C", "D", "E",
-    "AC", "AD", "AE",
+    "A",
+    "B",
+    "AB",
+    "C",
+    "D",
+    "E",
+    "AC",
+    "AD",
+    "AE",
   ];
 
-  return categoriasPermitidas.includes(
-    categoria.trim().toUpperCase(),
-  );
+  return categoriasPermitidas.includes(categoria.trim().toUpperCase());
 }
 
-export function validarValidadeCNH(
-  validade: string,
-): boolean {
+export function validarValidadeCNH(validade: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(validade)) {
     return false;
   }

@@ -46,11 +46,11 @@ export async function salvarCadastroMotorista(
         tipoPessoa: dados.tipoPessoa,
         cnpj:
           dados.tipoPessoa === "PJ"
-            ? dados.cnpj?.replace(/\D/g, "") ?? null
+            ? (dados.cnpj?.replace(/\D/g, "") ?? null)
             : null,
         razaoSocial:
           dados.tipoPessoa === "PJ"
-            ? dados.razaoSocial?.trim() ?? null
+            ? (dados.razaoSocial?.trim() ?? null)
             : null,
         cnhNumero: dados.cnhNumero.trim(),
         cnhCategoria: dados.cnhCategoria.trim(),

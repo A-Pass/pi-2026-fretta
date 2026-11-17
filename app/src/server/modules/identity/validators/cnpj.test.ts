@@ -13,7 +13,7 @@ for (const teste of testes) {
   const resultado = validarCNPJ(teste.cnpj);
 
   console.log(
-    `CNPJ: ${teste.cnpj} | Esperado: ${teste.esperado} | Resultado: ${resultado}`
+    `CNPJ: ${teste.cnpj} | Esperado: ${teste.esperado} | Resultado: ${resultado}`,
   );
 
   if (resultado !== teste.esperado) {
