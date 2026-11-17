@@ -5,11 +5,21 @@ Aplicação Next.js + TypeScript do IFBA Eunápolis. Interface demonstrativa com
 ## Executar
 
 Node.js 20.9+ e npm:
+Docker Engine
 
+Executar localmente (precisa de um banco de dados configurado)
 ```sh
 cd app
 npm ci
 npm run dev
+```
+
+### Via Docker
+
+Executa a aplicação em um container com debug ativado - <small>executa a aplicação, banco de dados e inicializa banco de dados automaticamente)</small>.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --rm --build --force-recreate --remove-orphans
 ```
 
 Abra http://localhost:3000. Os exemplos são compartilhados pelos perfis e persistem apenas neste navegador. Use Meu perfil → Restaurar demonstração para recomeçar. Nenhuma mensagem é enviada a terceiros e nenhuma assinatura é cobrada.
