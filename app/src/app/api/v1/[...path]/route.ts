@@ -79,6 +79,140 @@ function extrairDadosCadastro(body: unknown): CadastroMotoristaInput | null {
 // ==========================================
 
 export async function GET(request: NextRequest) {
+  // GET /api/v1/admin/driver-registrations
+  if (request.nextUrl.pathname === "/api/v1/admin/driver-registrations") {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (!session) {
+      return Response.json(
+        {
+          code: "UNAUTHORIZED",
+          message: "Você precisa estar autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
+    const administrador = await verificarAdministrador(session.user.id);
+
+    if (!administrador) {
+      return Response.json(
+        {
+          code: "FORBIDDEN",
+          message: "Acesso permitido apenas para administradores.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const params = request.nextUrl.searchParams;
+    const status = params.get("status");
+    const cursor = params.get("cursor");
+
+    const statusValido =
+      status === null ||
+      status === "EM_ANALISE" ||
+      status === "APROVADO" ||
+      status === "AJUSTES_SOLICITADOS";
+
+    if (!statusValido) {
+      return Response.json(
+        {
+          code: "INVALID_STATUS",
+          message: "Filtro de status inválido.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const filtroStatus =
+      status === "EM_ANALISE" ||
+      status === "APROVADO" ||
+      status === "AJUSTES_SOLICITADOS"
+        ? status
+        : undefined;
+
+    const limite = 20;
+
+    if (cursor !== null) {
+      if (!cursor.trim()) {
+        return Response.json(
+          {
+            code: "INVALID_CURSOR",
+            message: "Cursor inválido.",
+          },
+          { status: 422 },
+        );
+      }
+
+      const cursorExistente = await prisma.cadastroMotorista.findFirst({
+        where: {
+          id: cursor,
+          ...(filtroStatus ? { status: filtroStatus } : {}),
+        },
+        select: { id: true },
+      });
+
+      if (!cursorExistente) {
+        return Response.json(
+          {
+            code: "INVALID_CURSOR",
+            message: "Cursor inválido.",
+          },
+          { status: 422 },
+        );
+      }
+    }
+
+    const cadastros = await prisma.cadastroMotorista.findMany({
+      where: filtroStatus ? { status: filtroStatus } : {},
+      take: limite + 1,
+      ...(cursor
+        ? {
+            skip: 1,
+            cursor: { id: cursor },
+          }
+        : {}),
+      orderBy: [{ enviadoEm: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        motoristaId: true,
+        tipoPessoa: true,
+        status: true,
+        enviadoEm: true,
+        atualizadoEm: true,
+        motorista: {
+          select: {
+            user: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const temProximaPagina = cadastros.length > limite;
+
+    const pagina = cadastros.slice(0, limite);
+
+    return Response.json({
+      items: pagina.map((cadastro) => ({
+        id: cadastro.id,
+        motoristaId: cadastro.motoristaId,
+        nome: cadastro.motorista.user.name,
+        tipoPessoa: cadastro.tipoPessoa,
+        status: cadastro.status,
+        enviadoEm: cadastro.enviadoEm.toISOString(),
+        atualizadoEm: cadastro.atualizadoEm.toISOString(),
+      })),
+      nextCursor: temProximaPagina ? pagina[pagina.length - 1].id : null,
+    });
+  }
+
   // GET /api/v1/uploads/:id
   const uploadMatch = request.nextUrl.pathname.match(
     /^\/api\/v1\/uploads\/([^/]+)$/,
