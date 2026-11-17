@@ -1,0 +1,10 @@
+services:
+  app:
+    build:
+      target: ${NODE_ENV}
+    image: app-fretta:dev
+    ports:
+      - "9229:9229"
+    environment:
+      NODE_ENV: development
+      NODE_OPTIONS: "--inspect=0.0.0.0:9229"
