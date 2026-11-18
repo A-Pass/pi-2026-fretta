@@ -68,3 +68,105 @@ PWA: manifest e ícones preparados; em produção (`npm run build` e `npm start`
 ## Solicitações e endereços
 
 Novo fluxo: Itens e fotos → Retirada → Entrega → Veículo → Quando → Datas/confirmação. A opção A combinar dispensa datas na etapa final. Endereços salvos em Meu perfil → Meus Endereços podem ser reutilizados, editados e excluídos. A caixa Salvar este endereço só grava quando o pedido é publicado. Os dados permanecem locais neste navegador, sem contas reais. O mapa online Leaflet/OpenStreetMap permite zoom, marcação e consulta pontual de GPS mediante permissão. Não há pesquisa automática de endereço. O Início do motorista filtra oportunidades por raio da retirada e permite alterar a base para buscar fretes de retorno; Meus serviços lista apenas suas propostas e serviços. O filtro atual usa os dados locais da demonstração. Consulte docs/domain.md para os limites de privacidade e integração.
+
+
+## Backend e banco de dados
+
+O backend do FRETTA utiliza Next.js, TypeScript, Prisma 7,
+PostgreSQL e Better Auth.
+
+### Requisitos
+
+- Node.js 20.9 ou superior
+- npm
+- PostgreSQL
+
+### Configuração local
+
+1. Acesse a pasta `app`.
+2. Instale as dependências com `npm ci`.
+3. Crie um banco PostgreSQL chamado `fretta_dev`.
+4. Configure o arquivo `.env` na pasta `app`.
+
+Exemplo de variáveis necessárias:
+
+```env
+DATABASE_URL="postgresql://USUARIO:SENHA@localhost:5432/fretta_dev"
+BETTER_AUTH_SECRET="SUBSTITUIR_POR_SEGREDO_ALEATORIO_FORTE"
+BETTER_AUTH_URL="http://localhost:3001"
+GOOGLE_CLIENT_ID="CONFIGURAR_CREDENCIAL_GOOGLE"
+GOOGLE_CLIENT_SECRET="CONFIGURAR_CREDENCIAL_GOOGLE"
+```
+
+Nunca compartilhe o `.env` nem envie credenciais ao Git.
+
+### Preparar o banco
+
+Execute na pasta `app`:
+
+```sh
+npx prisma migrate deploy
+npx prisma generate
+```
+
+O primeiro comando aplica as migrações pendentes.
+O segundo gera o Prisma Client.
+
+### Dados de desenvolvimento
+
+Para inserir dados fictícios no banco local:
+
+```sh
+npm run seed
+```
+
+O seed é limitado ao banco local `fretta_dev`.
+
+Ele cria um usuário fictício, um perfil de cliente,
+um endereço e um frete de exemplo.
+
+O script utiliza identificadores fixos para evitar
+registros duplicados em execuções repetidas.
+
+### Executar o servidor
+
+```sh
+npm run dev -- -p 3001
+```
+
+Servidor local:
+
+http://localhost:3001
+
+### Verificações
+
+```sh
+npm run typecheck
+npx prisma validate
+npx prisma migrate status
+```
+
+### Funcionalidades implementadas
+
+- Autenticação real com Google pelo Better Auth.
+- Sessões de usuários.
+- Perfis de cliente e motorista.
+- Cadastro e listagem de veículos.
+- Atualização e desativação lógica de veículos.
+- Validação de CPF, CNPJ e CNH.
+- Autorização administrativa.
+- Estrutura das tabelas de fretes, propostas, ofertas,
+  mensagens, avaliações e assinaturas.
+
+### Funcionalidades pendentes
+
+- Integração do frontend com as APIs reais.
+- Armazenamento privado dos documentos dos motoristas.
+- Fluxo completo de aprovação administrativa.
+- APIs de fretes, negociação, chat e avaliações.
+- Integração de pagamentos e assinaturas.
+- Configuração de produção, backups e deploy.
+
+O frontend demonstrativo continua utilizando dados
+simulados em funcionalidades ainda não integradas.
+```

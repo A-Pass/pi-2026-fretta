@@ -1,0 +1,470 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id
+  name          String
+  email         String
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  papel PapelSistema @default(USUARIO)
+
+  // Autenticação
+  sessions Session[]
+  accounts Account[]
+
+  // Perfis
+  cliente   Cliente?
+  motorista Motorista?
+  pessoa    Pessoa?
+
+  // Negociação
+  ofertasCriadas Oferta[]
+
+  // Comunicação
+  mensagensEnviadas     Mensagem[]
+  notificacoesRecebidas Notificacao[]
+  arquivosEnviados      ArquivoUpload[]
+
+  // Avaliações
+  avaliacoesFeitas    Avaliacao[] @relation("AvaliacaoAutor")
+  avaliacoesRecebidas Avaliacao[] @relation("AvaliacaoAvaliado")
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Cliente {
+  userId    String   @id
+  createdAt DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enderecos Endereco[]
+  fretes    Frete[]
+}
+
+enum StatusCadastroMotorista {
+  EM_ANALISE
+  AJUSTES_SOLICITADOS
+  APROVADO
+}
+
+model Motorista {
+  userId       String              @id
+  disponivel   Boolean             @default(true)
+  criadoEm     DateTime            @default(now())
+  atualizadoEm DateTime            @updatedAt
+  propostas    Proposta[]
+  assinaturas  VinculoAssinatura[]
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  veiculos         Veiculo[]
+  cadastro         CadastroMotorista?
+  arquivosPrivados ArquivoPrivado[]
+}
+
+model Pessoa {
+  userId       String    @id
+  nomeCompleto String
+  cpf          String?   @unique
+  celular      String?
+  nascimento   DateTime? @db.Date
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Veiculo {
+  id           String   @id @default(uuid())
+  motoristaId  String
+  categoria    String
+  modelo       String
+  placa        String   @unique
+  capacidadeKg Float?
+  descricao    String   @default("")
+  ativo        Boolean  @default(true)
+  ofertas      Oferta[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  motorista Motorista           @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
+  cadastros CadastroMotorista[]
+
+  @@unique([id, motoristaId])
+  @@index([motoristaId])
+}
+
+enum TipoPessoa {
+  PF
+  PJ
+}
+
+model CadastroMotorista {
+  id             String                  @id @default(uuid())
+  motoristaId    String                  @unique
+  tipoPessoa     TipoPessoa
+  cnpj           String?                 @unique
+  razaoSocial    String?
+  cnhNumero      String
+  cnhCategoria   String
+  cnhValidade    DateTime                @db.Date
+  fotoPerfilId   String
+  documentoCnhId String
+  veiculoId      String
+  status         StatusCadastroMotorista @default(EM_ANALISE)
+  motivoAjuste   String?
+  enviadoEm      DateTime                @default(now())
+  analisadoEm    DateTime?
+  atualizadoEm   DateTime                @updatedAt
+
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
+  veiculo   Veiculo   @relation(fields: [veiculoId, motoristaId], references: [id, motoristaId], onDelete: Restrict)
+}
+
+enum PapelSistema {
+  USUARIO
+  ADMIN
+}
+
+model Endereco {
+  id          String  @id @default(uuid())
+  clienteId   String
+  nome        String
+  cep         String?
+  logradouro  String
+  numero      String
+  complemento String?
+  bairro      String
+  cidade      String
+  uf          String
+  referencia  String?
+  latitude    Decimal @db.Decimal(10, 7)
+  longitude   Decimal @db.Decimal(10, 7)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  cliente       Cliente @relation(fields: [clienteId], references: [userId], onDelete: Cascade)
+  fretesOrigem  Frete[] @relation("FreteOrigem")
+  fretesDestino Frete[] @relation("FreteDestino")
+
+  @@index([clienteId])
+}
+
+enum StatusFrete {
+  ABERTO
+  AGENDADO
+  EM_TRANSPORTE
+  CONCLUIDO
+  CANCELADO
+}
+
+enum TipoAgendamento {
+  FIXA
+  INTERVALO
+  COMBINAR
+}
+
+model Frete {
+  id               String      @id @default(uuid())
+  clienteId        String
+  titulo           String
+  descricao        String?
+  status           StatusFrete @default(ABERTO)
+  propostaAceitaId String?     @unique
+
+  propostaAceita Proposta? @relation("PropostaAceita", fields: [propostaAceitaId, id], references: [id, freteId], onDelete: Restrict)
+
+  // Veículo necessário
+  categoriaVeiculo String
+
+  // Agendamento da retirada
+  tipoAgendamento TipoAgendamento @default(COMBINAR)
+  dataInicio      DateTime?       @db.Date
+  dataFim         DateTime?       @db.Date
+
+  // Referências opcionais aos endereços salvos
+  origemId  String?
+  destinoId String?
+  origem    Endereco? @relation("FreteOrigem", fields: [origemId], references: [id], onDelete: SetNull)
+  destino   Endereco? @relation("FreteDestino", fields: [destinoId], references: [id], onDelete: SetNull)
+
+  // Cópias dos endereços no momento da solicitação
+  origemSnapshot  Json
+  destinoSnapshot Json
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Cliente responsável pelo frete
+  cliente Cliente @relation(fields: [clienteId], references: [userId], onDelete: Restrict)
+
+  // Relacionamentos
+  fotos      FreteFoto[]
+  propostas  Proposta[]
+  avaliacoes Avaliacao[]
+
+  @@unique([propostaAceitaId, id])
+  @@index([clienteId])
+  @@index([status])
+  @@index([origemId])
+  @@index([destinoId])
+}
+
+model FreteFoto {
+  id        String   @id @default(uuid())
+  freteId   String
+  arquivoId String
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
+
+  frete Frete @relation(fields: [freteId], references: [id], onDelete: Cascade)
+
+  @@index([freteId])
+}
+
+enum StatusProposta {
+  PENDENTE
+  ACEITA
+  RECUSADA
+  CANCELADA
+}
+
+model Proposta {
+  id              String         @id @default(uuid())
+  freteId         String
+  motoristaId     String
+  status          StatusProposta @default(PENDENTE)
+  ofertas         Oferta[]
+  conversa        Conversa?
+  freteQueAceitou Frete?         @relation("PropostaAceita")
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  frete     Frete     @relation(fields: [freteId], references: [id], onDelete: Restrict)
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Restrict)
+
+  @@unique([freteId, motoristaId])
+  @@unique([id, freteId])
+  @@index([motoristaId])
+  @@index([status])
+}
+
+enum StatusOferta {
+  PENDENTE
+  ACEITA
+  RECUSADA
+  SUBSTITUIDA
+}
+
+model Oferta {
+  id         String       @id @default(uuid())
+  propostaId String
+  autorId    String
+  valorCents Int
+  veiculoId  String?
+  retiradaEm DateTime?
+  entregaEm  DateTime?
+  comentario String?
+  status     StatusOferta @default(PENDENTE)
+
+  criadoEm DateTime @default(now())
+
+  proposta Proposta @relation(fields: [propostaId], references: [id], onDelete: Restrict)
+  autor    User     @relation(fields: [autorId], references: [id], onDelete: Restrict)
+  veiculo  Veiculo? @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+
+  @@index([propostaId, criadoEm])
+  @@index([autorId])
+  @@index([veiculoId])
+}
+
+model Conversa {
+  id           String   @id @default(uuid())
+  propostaId   String   @unique
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  proposta  Proposta   @relation(fields: [propostaId], references: [id], onDelete: Restrict)
+  mensagens Mensagem[]
+}
+
+model Mensagem {
+  id              String   @id @default(uuid())
+  conversaId      String
+  autorId         String
+  texto           String   @db.VarChar(2000)
+  clientMessageId String?
+  criadoEm        DateTime @default(now())
+
+  conversa Conversa @relation(fields: [conversaId], references: [id], onDelete: Restrict)
+  autor    User     @relation(fields: [autorId], references: [id], onDelete: Restrict)
+
+  @@unique([conversaId, autorId, clientMessageId])
+  @@index([conversaId, criadoEm])
+  @@index([autorId])
+}
+
+model Avaliacao {
+  id         String   @id @default(uuid())
+  freteId    String
+  autorId    String
+  avaliadoId String
+  nota       Int
+  comentario String?
+  criadoEm   DateTime @default(now())
+
+  frete    Frete @relation(fields: [freteId], references: [id], onDelete: Restrict)
+  autor    User  @relation("AvaliacaoAutor", fields: [autorId], references: [id], onDelete: Restrict)
+  avaliado User  @relation("AvaliacaoAvaliado", fields: [avaliadoId], references: [id], onDelete: Restrict)
+
+  @@unique([freteId, autorId])
+  @@index([avaliadoId])
+}
+
+enum StatusAssinatura {
+  PENDENTE
+  ATIVA
+  CANCELADA
+  EXPIRADA
+}
+
+model VinculoAssinatura {
+  id          String           @id @default(uuid())
+  motoristaId String
+  status      StatusAssinatura @default(PENDENTE)
+
+  inicioEm DateTime?
+  fimEm    DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Restrict)
+
+  @@index([motoristaId])
+  @@index([status])
+}
+
+enum TipoArquivoPrivado {
+  FOTO_PERFIL
+  CNH
+}
+
+model ArquivoPrivado {
+  id                 String             @id @default(uuid())
+  motoristaId        String
+  tipo               TipoArquivoPrivado
+  chaveArmazenamento String             @unique
+  mimeType           String
+  tamanhoBytes       Int
+  criadoEm           DateTime           @default(now())
+
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
+
+  @@index([motoristaId, tipo])
+}
+
+model Notificacao {
+  id                String   @id @default(uuid())
+  destinatarioId    String
+  papelDestinatario String
+  evento            String
+  titulo            String
+  corpo             String
+  freteId           String?
+  propostaId        String?
+  conversaId        String?
+  lida              Boolean  @default(false)
+  criadoEm          DateTime @default(now())
+
+  destinatario User @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+
+  @@index([destinatarioId, criadoEm, id])
+  @@index([destinatarioId, lida])
+}
+
+model ArquivoUpload {
+  id                 String   @id @default(uuid())
+  usuarioId          String
+  finalidade         String   @default("freight")
+  chaveArmazenamento String   @unique
+  mimeType           String
+  tamanhoBytes       Int
+  criadoEm           DateTime @default(now())
+
+  usuario User @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, criadoEm])
+}
+
+model EventoWebhook {
+  id           String   @id @default(uuid())
+  provedor     String
+  eventoId     String
+  tipo         String
+  processadoEm DateTime @default(now())
+
+  @@unique([provedor, eventoId])
+  @@index([processadoEm])
+}

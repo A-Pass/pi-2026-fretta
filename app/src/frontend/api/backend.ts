@@ -44,7 +44,7 @@ export type NewOffer = {
   availableAt: string;
   message: string;
 };
-/** Prepared against docs/api.md. The UI's demo adapter stays independent until the group implements and confirms the API DTOs. No mutation is retried automatically. */
+
 export function createBackendClient(
   options?: Parameters<typeof createHttpTransport>[0],
 ) {
@@ -125,7 +125,9 @@ export function createBackendClient(
         signal,
       }),
     subscription: () =>
-      http.request<{ active: boolean; expiresAt?: string }>("/subscription"),
+      http.request<{ active: boolean; expiresAt: string | null }>(
+        "/subscription",
+      ),
     upload: (
       file: File,
       purpose: "freight" | "profile" | "company" | "license",

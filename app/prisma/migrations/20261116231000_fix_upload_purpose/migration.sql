@@ -1,0 +1,1 @@
+ALTER TABLE "ArquivoUpload" ADD COLUMN IF NOT EXISTS "finalidade" TEXT NOT NULL DEFAULT 'freight';
