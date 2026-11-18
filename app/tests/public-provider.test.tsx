@@ -112,7 +112,7 @@ test("prestadores legados são navegáveis e URLs preservam a negociação de or
     providerId: id,
     providerConversationId: "p1",
   };
-  assert.deepEqual(parseRoute(routeUrl(route).slice(1)), route);
+  assert.deepEqual(parseRoute(routeUrl(route)), route);
   assert.notEqual(
     companyError({ tradeName: " ", about: "", city: "", logo: "" }),
     "",

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { clearRequestDrafts } from "../requests/drafts";
+import { usePathname, useRouter } from "next/navigation";
 import type { Role } from "@/contracts";
 import {
   initialRoute,
@@ -9,42 +10,60 @@ import {
   type Tab,
 } from "./routes";
 const sessionKey = "fretta-demo-session";
+
 export function useDemoNavigation() {
-  const [route, setRoute] = useState<DemoRoute>(initialRoute);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [route, setRoute] = useState<DemoRoute>(() => parseRoute(pathname));
   const current = useRef(route);
+  const currentPath = useRef(pathname);
   const [entered, setEntered] = useState(false);
   const [ready, setReady] = useState(false);
   const [loginRequested, setLoginRequested] = useState(false);
+  const history = useRef<string[]>([]);
+  const pendingPath = useRef<string | null>(null);
+
   useEffect(() => {
-    const restore = () => {
-      const r = parseRoute(location.search);
-      current.current = r;
-      setRoute(r);
-    };
-    restore();
+    const next = parseRoute(pathname);
+    current.current = next;
+    currentPath.current = pathname;
+    setRoute(next);
+    if (pathname === pendingPath.current) {
+      pendingPath.current = null;
+    } else {
+      const previousIndex = history.current.lastIndexOf(pathname);
+      history.current =
+        previousIndex === -1 ? [] : history.current.slice(0, previousIndex);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
     try {
       setEntered(sessionStorage.getItem(sessionKey) === "active");
     } catch {
       /* Session stays in memory when storage is unavailable. */
     }
     setReady(true);
-    window.addEventListener("popstate", restore);
-    return () => window.removeEventListener("popstate", restore);
   }, []);
+
   function navigate(patch: Partial<DemoRoute>, replace = false) {
-    const from = routeUrl(current.current);
+    const from = currentPath.current;
     const next = { ...current.current, ...patch };
+    const url = routeUrl(next);
     current.current = next;
     setRoute(next);
-    const url = routeUrl(next);
-    if (url !== location.pathname + location.search)
-      window.history[replace ? "replaceState" : "pushState"](
-        { frettaBackTo: replace ? window.history.state?.frettaBackTo : from },
-        "",
-        url,
-      );
-    window.scrollTo({ top: 0 });
+    if (url === from) return;
+
+    currentPath.current = url;
+    pendingPath.current = url;
+    if (replace) {
+      router.replace(url);
+    } else {
+      history.current.push(from);
+      router.push(url);
+    }
   }
+
   return {
     ...route,
     ready,
@@ -53,12 +72,11 @@ export function useDemoNavigation() {
     setLoginRequested,
     navigate,
     back: (fallback: Tab = "fretes") => {
-      if (
-        typeof window.history.state?.frettaBackTo === "string" &&
-        window.history.state.frettaBackTo.startsWith("/?")
-      )
-        window.history.back();
-      else
+      const previousPath = history.current.pop();
+      if (previousPath) {
+        pendingPath.current = previousPath;
+        router.back();
+      } else {
         navigate({
           tab: fallback,
           selected: null,
@@ -66,6 +84,7 @@ export function useDemoNavigation() {
           providerId: null,
           providerConversationId: null,
         });
+      }
     },
     openProvider: (providerId: string, providerConversationId?: string) =>
       navigate({

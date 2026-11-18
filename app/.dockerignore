@@ -1,0 +1,4 @@
+Dockfile
+.env*
+node_modules
+*.md

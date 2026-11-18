@@ -1,15 +1,27 @@
 # FRETTA
 
+Este repositório contém o código e a documentação técnica da aplicação.
+
 Aplicação Next.js + TypeScript do IFBA Eunápolis. Interface demonstrativa com perfis de cliente/motorista, pedidos, propostas, aceite, conversa local, avaliação e perfil. Servidor, contas reais e pagamentos são trabalho pendente do grupo.
 
 ## Executar
 
 Node.js 20.9+ e npm:
+Docker Engine
 
+Executar localmente (precisa de um banco de dados configurado)
 ```sh
 cd app
 npm ci
 npm run dev
+```
+
+### Via Docker
+
+Executa a aplicação em um container com debug ativado - <small>executa a aplicação, banco de dados e inicializa banco de dados automaticamente)</small>.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --rm --build --force-recreate --remove-orphans
 ```
 
 Abra http://localhost:3000. Os exemplos são compartilhados pelos perfis e persistem apenas neste navegador. Use Meu perfil → Restaurar demonstração para recomeçar. Nenhuma mensagem é enviada a terceiros e nenhuma assinatura é cobrada.
@@ -41,7 +53,7 @@ Para executar main: faça commit de seu trabalho e use `git switch main`. Não u
 
 ## Estado do front-end
 
-A demonstração tem veículos, perfil persistente, negociação com histórico de ofertas no chat, notificações locais, acordo após aceite e avaliação com comentário. As telas usam URLs com parâmetros (`?perfil=motorista&tela=veiculos`, `?perfil=cliente&tela=fretes&frete=...` e `?perfil=cliente&tela=chat&conversa=...`). Voltar/Avançar e recarregar preservam o contexto; a sessão demonstrativa é mantida somente nesta aba até sair. Meus veículos e Minha assinatura ficam no perfil do motorista.
+A demonstração tem veículos, perfil persistente, negociação com histórico de ofertas no chat, notificações locais, acordo após aceite e avaliação com comentário. As telas usam segmentos do App Router (`/motorista/veiculos`, `/cliente/fretes/{id}` e `/cliente/chat/{id}`); links antigos com parâmetros de consulta são redirecionados para as rotas equivalentes. Voltar/Avançar e recarregar preservam o contexto; a sessão demonstrativa é mantida somente nesta aba até sair. Meus veículos e Minha assinatura ficam no perfil do motorista.
 
 No primeiro uso do perfil motorista, um cadastro guiado solicita dados, foto de perfil, CNH e veículo. O envio fica em análise; a aprovação só pode ser simulada nos controles identificados como demonstração. Use dados fictícios: números completos e imagem da CNH não são persistidos no protótipo. Serviços/conversas anteriores continuam acessíveis enquanto há pendência, mas novas propostas exigem aprovação simulada e assinatura ativa.
 

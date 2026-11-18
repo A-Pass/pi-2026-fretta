@@ -147,11 +147,11 @@ export function AdminApp() {
           <ShieldCheck size={19} /> Administração
         </span>
         <a
-          href="/?perfil=cliente&tela=perfil"
+          href="/cliente/perfil"
           onClick={(e) => {
             e.preventDefault();
             discard.leave(() => {
-              location.href = "/?perfil=cliente&tela=perfil";
+              location.href = "/cliente/perfil";
             });
           }}
         >

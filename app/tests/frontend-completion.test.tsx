@@ -14,6 +14,8 @@ import { withNotifications } from "../src/frontend/features/notifications/rules"
 import { validateVehicle } from "../src/frontend/features/vehicles/rules";
 import { fromLocalDateTime, localDateTime } from "../src/frontend/lib/dates";
 import {
+  isAppRoute,
+  parseLegacyRoute,
   parseRoute,
   routeUrl,
 } from "../src/frontend/features/navigation/routes";
@@ -46,7 +48,7 @@ test("datas usam horário da Bahia independentemente do fuso do dispositivo", ()
   );
   assert.throws(() => fromLocalDateTime("2026-02-30T09:00"));
 });
-test("URLs preservam perfil, detalhe e conversa sem aceitar telas desconhecidas", () => {
+test("rotas usam segmentos do App Router e preservam IDs escapados", () => {
   const route = {
     role: "motorista" as const,
     tab: "chat" as const,
@@ -55,9 +57,21 @@ test("URLs preservam perfil, detalhe e conversa sem aceitar telas desconhecidas"
     providerId: null,
     providerConversationId: null,
   };
-  assert.deepEqual(parseRoute(routeUrl(route).slice(1)), route);
-  assert.equal(parseRoute("?perfil=motorista&frete=f1").tab, "fretes");
-  assert.equal(parseRoute("?tela=desconhecida").tab, "inicio");
+  assert.equal(routeUrl(route), "/motorista/chat/a%26b");
+  assert.deepEqual(parseRoute(routeUrl(route)), route);
+  assert.equal(isAppRoute("/motorista/chat/a%26b"), true);
+  assert.equal(isAppRoute("/cliente/fretes/f1"), true);
+  assert.equal(
+    isAppRoute("/motorista/prestador/provider-1/negociacao/p1"),
+    true,
+  );
+  assert.equal(isAppRoute("/motorista/tela-desconhecida"), false);
+  assert.equal(isAppRoute("/cliente/prestador/provider-1/unknown/p1"), false);
+  assert.equal(
+    parseLegacyRoute("?perfil=motorista&frete=f1").selected,
+    "f1",
+  );
+  assert.equal(parseLegacyRoute("?tela=desconhecida").tab, "inicio");
 });
 test("aceite registra snapshot e rejeita confirmação de oferta substituída", () => {
   const s = structuredClone(seed);
