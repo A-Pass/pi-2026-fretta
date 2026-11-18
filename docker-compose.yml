@@ -1,34 +1,46 @@
 services:
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: fretta
+      POSTGRES_DB: fretta
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no .env}
+    volumes:
+      - fretta_prisma_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fretta -d fretta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  migrate:
+    build:
+      context: ./app
+      target: base
+    environment:
+      DATABASE_URL: postgresql://fretta:${DB_PASSWORD}@database:5432/fretta
+    command: ["npm", "run", "db:migrate"]
+    depends_on:
+      database:
+        condition: service_healthy
   app:
     build:
       context: ./app
-      dockerfile: Dockerfile
-      target: prod
-    image: app-fretta:prod
+      target: production
+      args:
+        NEXT_PUBLIC_API_MODE: ${NEXT_PUBLIC_API_MODE:-demo}
     ports:
-      - "127.0.0.1:${APP_PORT}:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
-      NODE_ENV: ${APP_NODE_ENV}
-      DATABASE_URL: ${DB_URL}
-    depends_on:
-      - database
-
-  database:
-    image: postgres:17
-    ports:
-      - "127.0.0.1:${DB_PORT}:5432"
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      DATABASE_URL: postgresql://fretta:${DB_PASSWORD}@database:5432/fretta
+      BETTER_AUTH_URL: http://localhost:${APP_PORT:-3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Defina BETTER_AUTH_SECRET no .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     volumes:
-      - ./_storage_/db:/var/lib/postgres/data
-      - ./database/migration.sql:/docker-entrypoint-initdb.d/01-migration.sql:ro
-      - ./database/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
+      - fretta_documents:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  fretta_prisma_data:
+  fretta_documents:

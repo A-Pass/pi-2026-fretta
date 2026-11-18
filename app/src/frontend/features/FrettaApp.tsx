@@ -57,7 +57,16 @@ import { editRequest, requestDraft } from "./requests/rules";
 import { FleetWorkspace } from "./fleet/FleetWorkspace";
 import { fleetState } from "./fleet/rules";
 
+import { RealPortal } from "./integration/RealPortal";
+
 export function FrettaApp() {
+  return process.env.NEXT_PUBLIC_API_MODE === "real" ? (
+    <RealPortal />
+  ) : (
+    <DemoFrettaApp />
+  );
+}
+function DemoFrettaApp() {
   const navigation = useDemoNavigation();
   const {
     role,

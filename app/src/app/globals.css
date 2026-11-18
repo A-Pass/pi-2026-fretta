@@ -3951,3 +3951,5 @@ a {
     width: 100%;
   }
 }
+.real-mode-note{background:#eaf4ee;color:#245b39;border:1px solid #c4ddcc;padding:14px 18px;border-radius:12px;font-size:13px;}
+.real-role-choice{display:flex;justify-content:center;gap:12px;padding:18px;}

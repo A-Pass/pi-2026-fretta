@@ -27,6 +27,7 @@ import {
 } from "./rules";
 const steps = ["Identificação", "Sua foto", "CNH", "Veículo", "Revisão"];
 type Props = {
+  mode?: "demo" | "real";
   store: Store;
   onSubmit: (draft: DriverOnboardingDraft) => Promise<boolean>;
   onClient: () => void;
@@ -39,6 +40,7 @@ export function DriverOnboardingView({
   onClient,
   onLogout,
   onServices,
+  mode = "demo",
 }: Props) {
   const [step, setStep] = useState(0),
     [busy, setBusy] = useState(false),
@@ -161,9 +163,19 @@ export function DriverOnboardingView({
         <div className="onboarding-demo-note">
           <ShieldCheck size={20} />
           <span>
-            <b>Cadastro de demonstração</b> · Use dados fictícios. Não envie
-            documentos reais. As imagens da CNH e os números completos ficam
-            apenas nesta tela e não são guardados ao finalizar ou sair.
+            {mode === "real" ? (
+              <>
+                Cadastro conectado ao servidor · Os dados e documentos serão
+                enviados ao armazenamento privado para análise. Confira sua
+                conta antes de enviar.
+              </>
+            ) : (
+              <>
+                <b>Cadastro de demonstração</b> · Use dados fictícios. Não envie
+                documentos reais. As imagens da CNH e os números completos ficam
+                apenas nesta tela e não são guardados ao finalizar ou sair.
+              </>
+            )}
           </span>
         </div>
         {step === 0 ? (
@@ -224,9 +236,11 @@ export function DriverOnboardingView({
               <button className="primary" onClick={() => setStep(1)}>
                 Começar cadastro <ArrowRight size={18} />
               </button>
-              <button className="secondary" onClick={sample}>
-                <Sparkles size={17} /> Preencher exemplo fictício
-              </button>
+              {mode === "demo" && (
+                <button className="secondary" onClick={sample}>
+                  <Sparkles size={17} /> Preencher exemplo fictício
+                </button>
+              )}
             </div>
             <button className="back" onClick={onClient}>
               Continuar como cliente
@@ -671,10 +685,9 @@ export function DriverOnboardingView({
                       Conferi os dados e as imagens deste cadastro.
                     </label>
                     <p className="muted">
-                      Nesta demonstração, apenas a foto de perfil e o resumo com
-                      números ocultos ficam salvos no navegador. Ao retomar um
-                      envio incompleto, os documentos precisarão ser
-                      selecionados novamente.
+                      {mode === "real"
+                        ? "As imagens serão enviadas ao armazenamento privado para análise do cadastro."
+                        : "Nesta demonstração, apenas a foto de perfil e o resumo com números ocultos ficam salvos no navegador. Ao retomar um envio incompleto, os documentos precisarão ser selecionados novamente."}
                     </p>
                   </>
                 )}

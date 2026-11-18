@@ -201,6 +201,25 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
 
     assert.ok(cookies, "Sessão de teste não foi criada.");
 
+    const stale = await PATCH(
+      new NextRequest(
+        "http://localhost:3002/api/v1/admin/driver/registration",
+        {
+          method: "PATCH",
+          headers: { cookie: cookies, "content-type": "application/json" },
+          body: JSON.stringify({
+            motoristaId,
+            status: "APROVADO",
+            expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+          }),
+        },
+      ),
+    );
+    assert.equal(
+      stale.status,
+      409,
+      "Uma análise desatualizada não pode aprovar o cadastro",
+    );
     const requisicao = new NextRequest(
       "http://localhost:3002/api/v1/admin/driver/registration",
       {

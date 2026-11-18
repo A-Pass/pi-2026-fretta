@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      target: prod
+    image: app-fretta:prod
+    ports:
+      - "127.0.0.1:${APP_PORT}:3000"
+    environment:
+      NODE_ENV: ${APP_NODE_ENV}
+      DATABASE_URL: ${DB_URL}
+    depends_on:
+      - database
+
+  database:
+    image: postgres:17
+    ports:
+      - "127.0.0.1:${DB_PORT}:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./_storage_/db:/var/lib/postgres/data
+      - ./database/migration.sql:/docker-entrypoint-initdb.d/01-migration.sql:ro
+      - ./database/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+

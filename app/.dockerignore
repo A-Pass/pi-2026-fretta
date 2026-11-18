@@ -1,4 +1,7 @@
-Dockfile
-.env*
 node_modules
-*.md
+.next
+.git
+.env*
+storage
+src/generated/prisma
+*.tsbuildinfo

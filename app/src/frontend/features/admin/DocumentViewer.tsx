@@ -3,9 +3,11 @@ import { X, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
 export function DocumentViewer({
   source,
   onClose,
+  demo = true,
 }: {
   source: { src: string; title: string } | null;
   onClose: () => void;
+  demo?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     titleId = useId();
@@ -37,8 +39,9 @@ export function DocumentViewer({
         </button>
       </div>
       <p>
-        Exibição de demonstração. Nenhuma imagem confirma a autenticidade de um
-        documento.
+        {demo
+          ? "Exibição de demonstração. Nenhuma imagem confirma a autenticidade de um documento."
+          : "Documento privado. Acesso autorizado pelo servidor; não compartilhe esta imagem."}
       </p>
       <div className="actions">
         <button

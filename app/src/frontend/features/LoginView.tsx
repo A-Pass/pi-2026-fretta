@@ -1,9 +1,23 @@
 import { ArrowLeft, ArrowRight, Package, Truck } from "lucide-react";
 import type { Role } from "@/contracts";
 
-type Props = { role: Role; onBack: () => void; onContinue: () => void };
+type Props = {
+  role: Role;
+  onBack: () => void;
+  onContinue: () => void;
+  real?: boolean;
+  busy?: boolean;
+  error?: string;
+};
 
-export function LoginView({ role, onBack, onContinue }: Props) {
+export function LoginView({
+  role,
+  onBack,
+  onContinue,
+  real = false,
+  busy = false,
+  error,
+}: Props) {
   const driver = role === "motorista";
   return (
     <main className="login-page">
@@ -32,7 +46,12 @@ export function LoginView({ role, onBack, onContinue }: Props) {
           {driver ? <Truck size={18} /> : <Package size={18} />} Você está
           entrando como <strong>{driver ? "motorista" : "cliente"}</strong>
         </div>
-        <button className="google-login" onClick={onContinue}>
+        {error && (
+          <p className="alert" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="google-login" disabled={busy} onClick={onContinue}>
           <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
             <path
               fill="#4285F4"
@@ -53,15 +72,19 @@ export function LoginView({ role, onBack, onContinue }: Props) {
           </svg>
           Continuar com Google <ArrowRight size={17} />
         </button>
-        <div className="login-demo">
-          <b>Login simulado</b>
-          <p>
-            Você entrará com o perfil fictício de Cleiton. Nenhuma conta Google
-            será acessada e nenhum dado será enviado.
-          </p>
-        </div>
+        {!real && (
+          <div className="login-demo">
+            <b>Login simulado</b>
+            <p>
+              Você entrará com o perfil fictício de Cleiton. Nenhuma conta
+              Google será acessada e nenhum dado será enviado.
+            </p>
+          </div>
+        )}
         <small>
-          Na versão integrada, você poderá entrar com sua conta Google.
+          {real
+            ? "Você entrará com sua conta Google. Seus perfis e permissões serão conferidos pelo servidor."
+            : "Na versão integrada, você poderá entrar com sua conta Google."}
         </small>
       </section>
       <footer>FRETTA · Conectando pessoas, movimentando histórias.</footer>

@@ -8,7 +8,11 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts tests/*.test.tsx",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "generate": "prisma generate",
+    "prebuild": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "test:server": "node scripts/test-server.mjs"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.7.21",
@@ -18,7 +22,7 @@
     "dotenv": "^18.0.10",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
-    "next": "^16.1.4",
+    "next": "^16.4.6",
     "pg": "^8.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

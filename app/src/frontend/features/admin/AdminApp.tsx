@@ -33,7 +33,15 @@ const labels = {
   APROVADO: "Aprovado",
   AJUSTES_SOLICITADOS: "Ajustes solicitados",
 };
+import { RealAdminPanel } from "../integration/RealAdminPanel";
 export function AdminApp() {
+  return process.env.NEXT_PUBLIC_API_MODE === "real" ? (
+    <RealAdminPanel />
+  ) : (
+    <DemoAdminApp />
+  );
+}
+function DemoAdminApp() {
   const real = process.env.NEXT_PUBLIC_API_MODE === "real";
   const [store, setStore] = useState<Store | null>(null),
     [error, setError] = useState(""),

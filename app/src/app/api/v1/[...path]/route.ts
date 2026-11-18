@@ -2009,6 +2009,16 @@ export async function PATCH(request: NextRequest) {
     const novoStatus = dados.status;
 
     const motivoAjuste = dados.motivoAjuste;
+    const expectedUpdatedAt = dados.expectedUpdatedAt;
+    if (
+      expectedUpdatedAt !== undefined &&
+      (typeof expectedUpdatedAt !== "string" ||
+        !Number.isFinite(Date.parse(expectedUpdatedAt)))
+    )
+      return Response.json(
+        { code: "INVALID_INPUT", message: "Versão do cadastro inválida." },
+        { status: 422 },
+      );
 
     if (
       typeof motoristaId !== "string" ||
@@ -2051,6 +2061,7 @@ export async function PATCH(request: NextRequest) {
         id: true,
 
         status: true,
+        atualizadoEm: true,
       },
     });
 
@@ -2065,6 +2076,18 @@ export async function PATCH(request: NextRequest) {
         { status: 404 },
       );
     }
+
+    if (
+      expectedUpdatedAt &&
+      cadastro.atualizadoEm.toISOString() !== expectedUpdatedAt
+    )
+      return Response.json(
+        {
+          code: "REGISTRATION_CONFLICT",
+          message: "O cadastro foi reenviado. Atualize antes de decidir.",
+        },
+        { status: 409 },
+      );
 
     if (!podeAlterarStatusCadastro(cadastro.status, novoStatus, "ADMIN")) {
       return Response.json(
@@ -2085,6 +2108,7 @@ export async function PATCH(request: NextRequest) {
         id: cadastro.id,
 
         status: cadastro.status,
+        atualizadoEm: cadastro.atualizadoEm,
       },
 
       data: {
