@@ -80,7 +80,9 @@ export function createHttpTransport({
             ? (data as { code?: unknown; message?: unknown })
             : {};
         const message =
-          response.status === 422 && typeof error.message === "string"
+          (response.status === 422 ||
+            (path.startsWith("/company/") && response.status === 409)) &&
+          typeof error.message === "string"
             ? error.message.slice(0, 500)
             : messages[response.status] ||
               "O serviço está indisponível. Tente novamente em instantes.";

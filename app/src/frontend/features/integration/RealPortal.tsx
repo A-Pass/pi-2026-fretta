@@ -12,6 +12,7 @@ import {
   Truck,
   User,
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { SavedAddress, Store, Vehicle, Role } from "@/contracts";
 import { authClient } from "../../api/auth-client";
@@ -33,6 +34,8 @@ import { RealConversations } from "./RealConversations";
 import { RealNotifications } from "./RealNotifications";
 import { DriverCorrectionForm } from "./DriverCorrectionForm";
 import { DemoPixView } from "./DemoPixView";
+import { DriverPublicId } from "./DriverPublicId";
+import { RealCompanyWorkspace } from "./RealCompanyWorkspace";
 import { RealFreights } from "./RealFreights";
 
 const client = createIdentityClient();
@@ -89,6 +92,7 @@ export function RealPortal() {
     };
   }, [sessionUserId, notificationRevision, pathname]);
   const hasUnread = !!sessionUserId && unreadOwner === sessionUserId;
+  const [companySelected, setCompanySelected] = useState(false);
   const [welcomeRole, setWelcomeRole] = useState<Role>("cliente");
   const role = route.role,
     tab = route.tab;
@@ -267,10 +271,15 @@ export function RealPortal() {
       <WelcomeView
         real
         role={welcomeRole}
-        setRole={setWelcomeRole}
+        setRole={(next) => {
+          setCompanySelected(false);
+          setWelcomeRole(next);
+        }}
+        companySelected={companySelected}
+        onSelectCompany={() => setCompanySelected(true)}
         onEnter={() => {
           setError("");
-          router.push(`/${welcomeRole}/inicio`);
+          router.push(companySelected ? "/empresa" : `/${welcomeRole}/inicio`);
         }}
       />
     );
@@ -503,7 +512,22 @@ export function RealPortal() {
               </section>
             )}
 
+          {driverHome && viewer?.companyMembership && (
+            <>
+              <section className="driver-registration-banner">
+                <div>
+                  <b>{viewer.companyMembership}</b>
+                  <p>
+                    Você recebe apenas os fretes atribuídos pela empresa
+                    enquanto estiver vinculado.
+                  </p>
+                </div>
+              </section>
+              <RealCompanyWorkspace key={viewer.id} driverHome />
+            </>
+          )}
           {driverHome &&
+            !viewer?.companyMembership &&
             registrationOwner === viewer?.id &&
             registration?.demoPixDisponivel &&
             !registration.assinaturaAtiva && (
@@ -520,34 +544,40 @@ export function RealPortal() {
                 </button>
               </section>
             )}
-          {role === "motorista" && viewer && !viewer.roles.motorista && (
-            <section className="panel">
-              <h2>Ativar perfil de motorista</h2>
-              <p>Esta conta ainda não possui este perfil no servidor.</p>
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    await client.activate("motorista");
-                    await reload();
-                    setEditingRegistration(true);
-                  } catch (e) {
-                    setError(
-                      e instanceof Error
-                        ? e.message
-                        : "Não foi possível ativar.",
-                    );
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Ativar perfil
-              </button>
-            </section>
-          )}
+          {role === "motorista" &&
+            viewer &&
+            !viewer.roles.motorista &&
+            !(
+              (tab === "chat" || (tab === "fretes" && route.selected)) &&
+              viewer.managesCompany
+            ) && (
+              <section className="panel">
+                <h2>Ativar perfil de motorista</h2>
+                <p>Esta conta ainda não possui este perfil no servidor.</p>
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await client.activate("motorista");
+                      await reload();
+                      setEditingRegistration(true);
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : "Não foi possível ativar.",
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Ativar perfil
+                </button>
+              </section>
+            )}
           {role === "motorista" &&
           tab === "assinatura" &&
           registrationOwner === viewer?.id &&
@@ -562,7 +592,10 @@ export function RealPortal() {
               role={role}
               onRead={() => setNotificationRevision((revision) => revision + 1)}
             />
-          ) : tab === "chat" && viewer?.roles[role] ? (
+          ) : tab === "chat" &&
+            viewer &&
+            (viewer.roles[role] ||
+              (role === "motorista" && viewer.managesCompany)) ? (
             <RealConversations
               key={viewer.id}
               role={role}
@@ -573,7 +606,13 @@ export function RealPortal() {
                 registration?.podeRealizarFretes === true
               }
             />
-          ) : (tab === "fretes" || tab === "inicio") && viewer?.roles[role] ? (
+          ) : (tab === "fretes" || tab === "inicio") &&
+            viewer &&
+            (viewer.roles[role] ||
+              (role === "motorista" &&
+                viewer.managesCompany &&
+                !!route.selected)) &&
+            !(driverHome && viewer.companyMembership) ? (
             <RealFreights
               key={`${viewer.id}:${role}`}
               role={role}
@@ -796,6 +835,12 @@ export function RealPortal() {
                 )}
                 <h2>{viewer.name}</h2>
                 <p>{viewer.email}</p>
+                {role === "motorista" && viewer.driverPublicId && (
+                  <DriverPublicId
+                    key={viewer.driverPublicId}
+                    code={viewer.driverPublicId}
+                  />
+                )}
                 <button
                   className="primary"
                   onClick={() => {
@@ -840,6 +885,16 @@ export function RealPortal() {
                     </button>
                   </>
                 )}
+                <Link
+                  className="secondary real-freight-link"
+                  href={
+                    role === "motorista"
+                      ? "/empresa?visao=motorista"
+                      : "/empresa"
+                  }
+                >
+                  Empresas e equipe
+                </Link>
                 {admin && (
                   <a className="secondary" href="/admin">
                     Painel administrativo
@@ -865,7 +920,7 @@ export function RealPortal() {
                 </button>
               </section>
             </>
-          ) : (
+          ) : driverHome && viewer?.companyMembership ? null : (
             <section className="panel">
               <h1>Olá, {viewer?.name || session.user.name}</h1>
               <p>

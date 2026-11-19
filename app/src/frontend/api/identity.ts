@@ -10,6 +10,9 @@ export interface IdentityViewer {
   email: string;
   image: string | null;
   emailVerified: boolean;
+  managesCompany?: boolean;
+  driverPublicId?: string | null;
+  companyMembership?: string | null;
   roles: { cliente: boolean; motorista: boolean };
   driverRegistration: {
     status: string | null;

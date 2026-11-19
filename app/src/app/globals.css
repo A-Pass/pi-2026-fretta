@@ -4463,3 +4463,233 @@ main:has(.real-opportunity-action) {
   display: flex;
   margin: 0 auto 12px;
 }
+
+.real-company > .panel,
+.real-company > nav,
+.real-company article {
+  margin-block: 12px;
+}
+.real-company form {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+.real-company form label {
+  width: min(100%, 540px);
+}
+.real-company .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-block: 12px;
+}
+
+.company-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.company-header-actions > button {
+  padding-inline: 0.8rem;
+}
+.company-opportunities,
+.company-registration form,
+.company-review-actions {
+  display: grid;
+  gap: 1rem;
+}
+.company-opportunities {
+  margin-block: 1rem;
+}
+.company-opportunity {
+  border: 1px solid var(--line, #e7ded5);
+  border-radius: 0.9rem;
+  padding: 1rem;
+}
+.company-opportunity summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.company-review-data dt {
+  font-weight: 700;
+}
+.company-review-data dd {
+  margin: 0.25rem 0 0.8rem;
+  overflow-wrap: anywhere;
+}
+.role-grid > .role-grid-company {
+  grid-column: 1 / -1;
+}
+
+.company-registration-status {
+  border-color: #e9d3a6;
+  background: #fff9eb;
+}
+.company-registration-status p {
+  max-width: 56ch;
+}
+
+.company-status-refresh[aria-busy="true"] {
+  display: inline-flex;
+  align-items: center;
+  opacity: 1;
+  color: #a33b22;
+}
+.company-status-spinner {
+  flex: none;
+  animation: driver-status-spin 1s linear infinite;
+}
+
+.admin-review-nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: min(100%, 22rem);
+  margin-block: 0.75rem 1.25rem;
+}
+.admin-review-nav a {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d9cec6;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #30241f;
+  font-weight: 700;
+  text-decoration: none;
+}
+.admin-review-nav a:hover {
+  background: #fff3ec;
+}
+.admin-review-nav a[aria-current="page"] {
+  background: #a33b22;
+  border-color: #a33b22;
+  color: #fff;
+}
+
+button.company-brand-home {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.admin-case-list-compact article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+}
+.admin-case-list-compact h2 {
+  overflow-wrap: anywhere;
+}
+.admin-case-list-compact button {
+  width: auto;
+}
+@media (max-width: 560px) {
+  .admin-case-list-compact article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .admin-case-list-compact h2 {
+    grid-column: 1 / -1;
+  }
+  .admin-case-list-compact .admin-status {
+    justify-self: start;
+  }
+}
+
+.admin-status[data-status="EM_ANALISE"] {
+  background: #fff0bf;
+  color: #684800;
+}
+
+.admin-review > .panel {
+  margin-block: 12px;
+}
+
+.admin-review-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.company-with-navigation > main {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+.company-bottom-nav {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: #fff;
+  border-top: 1px solid var(--line);
+  padding: 8px max(4px, calc((100vw - 660px) / 2)) calc(8px + env(safe-area-inset-bottom));
+}
+.company-bottom-nav button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  min-height: 46px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: clamp(9px, 2.7vw, 13px);
+}
+.company-bottom-nav button[aria-current="page"] {
+  color: #b33d22;
+  font-weight: 700;
+}
+.company-area input[type="range"] {
+  width: 100%;
+  accent-color: var(--orange);
+}
+
+.company-freight-search {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 1rem;
+}
+.company-freight-search > :is(input, select) {
+  width: 100%;
+}
+.company-assignment {
+  border-top: 1px solid var(--line);
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+}
+.company-assignment > .secondary {
+  margin-top: 0.75rem;
+}
+
+.driver-public-id {
+  width: min(100%, 30rem);
+  margin-inline: auto;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  text-align: center;
+}
+.driver-public-id input {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.driver-home-assigned {
+  margin-block: 1rem;
+}
+.driver-home-assigned article + article {
+  margin-top: 0.75rem;
+}
+.driver-home-assigned .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}

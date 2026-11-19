@@ -21,14 +21,17 @@ export class UploadError extends Error {
   }
 }
 
-export type FinalidadeUpload = "freight" | "profile" | "company";
+export type FinalidadeUpload =
+  "freight" | "profile" | "company" | "company-proof";
 
 export async function salvarUpload(
   usuarioId: string,
   bytes: Buffer,
   finalidade: FinalidadeUpload,
 ) {
-  if (!["freight", "profile", "company"].includes(finalidade)) {
+  if (
+    !["freight", "profile", "company", "company-proof"].includes(finalidade)
+  ) {
     throw new UploadError(
       "INVALID_UPLOAD_PURPOSE",
       "Finalidade de upload inválida.",
@@ -43,8 +46,64 @@ export async function salvarUpload(
     );
   }
 
-  let imagemNormalizada: Buffer;
+  const pdf =
+    finalidade === "company-proof" &&
+    /^%PDF-[12]\.\d[\r\n]/.test(bytes.subarray(0, 16).toString("ascii")) &&
+    /%%EOF[\x00\t\r\n ]*$/.test(bytes.subarray(-1024).toString("ascii"));
+  const conteudo = pdf ? bytes : await normalizarImagem(bytes, finalidade);
+  const mimeType = pdf ? "application/pdf" : "image/jpeg";
 
+  const arquivoId = randomUUID();
+  const chaveArmazenamento = `${arquivoId}.${pdf ? "pdf" : "jpg"}`;
+
+  await mkdir(DIRETORIO_UPLOADS, { recursive: true });
+
+  const caminho = path.join(DIRETORIO_UPLOADS, chaveArmazenamento);
+
+  const arquivo = await open(caminho, "wx", 0o600);
+
+  let gravacaoConcluida = false;
+
+  try {
+    await arquivo.writeFile(conteudo);
+    gravacaoConcluida = true;
+  } finally {
+    await arquivo.close();
+
+    if (!gravacaoConcluida) {
+      await unlink(caminho).catch(() => {});
+    }
+  }
+
+  try {
+    const registro = await prisma.arquivoUpload.create({
+      data: {
+        id: arquivoId,
+        usuarioId,
+        finalidade,
+        chaveArmazenamento,
+        mimeType,
+        tamanhoBytes: conteudo.length,
+      },
+    });
+
+    return {
+      id: registro.id,
+      mimeType: registro.mimeType,
+      size: registro.tamanhoBytes,
+      createdAt: registro.criadoEm.toISOString(),
+    };
+  } catch (error) {
+    // Se o banco falhar, remover o arquivo salvo.
+    await unlink(caminho).catch((erroLimpeza) => {
+      console.error("Falha ao limpar upload após erro no banco:", erroLimpeza);
+    });
+
+    throw error;
+  }
+}
+
+async function normalizarImagem(bytes: Buffer, finalidade: FinalidadeUpload) {
   try {
     const imagem = sharp(bytes, {
       limitInputPixels: DIMENSAO_MAXIMA * DIMENSAO_MAXIMA,
@@ -64,75 +123,29 @@ export async function salvarUpload(
       throw new Error("INVALID_IMAGE");
     }
 
-    imagemNormalizada = await imagem
+    const resultado = await imagem
       .rotate()
       .jpeg({
         quality: 85,
         mozjpeg: true,
       })
       .toBuffer();
-  } catch {
+    if (resultado.length > TAMANHO_MAXIMO)
+      throw new UploadError(
+        "INVALID_FILE_SIZE",
+        "A imagem processada ultrapassou 5 MB.",
+        422,
+      );
+    return resultado;
+  } catch (error) {
+    if (error instanceof UploadError) throw error;
     throw new UploadError(
       "INVALID_FILE_TYPE",
-      "Envie uma imagem JPEG ou PNG válida.",
+      finalidade === "company-proof"
+        ? "Envie um comprovante em PDF ou uma imagem válida."
+        : "Envie uma imagem JPEG ou PNG válida.",
       422,
     );
-  }
-  if (imagemNormalizada.length > TAMANHO_MAXIMO) {
-    throw new UploadError(
-      "INVALID_FILE_SIZE",
-      "A imagem processada ultrapassou 5 MB.",
-      422,
-    );
-  }
-
-  const arquivoId = randomUUID();
-  const chaveArmazenamento = `${arquivoId}.jpg`;
-
-  await mkdir(DIRETORIO_UPLOADS, { recursive: true });
-
-  const caminho = path.join(DIRETORIO_UPLOADS, chaveArmazenamento);
-
-  const arquivo = await open(caminho, "wx", 0o600);
-
-  let gravacaoConcluida = false;
-
-  try {
-    await arquivo.writeFile(imagemNormalizada);
-    gravacaoConcluida = true;
-  } finally {
-    await arquivo.close();
-
-    if (!gravacaoConcluida) {
-      await unlink(caminho).catch(() => {});
-    }
-  }
-
-  try {
-    const registro = await prisma.arquivoUpload.create({
-      data: {
-        id: arquivoId,
-        usuarioId,
-        finalidade,
-        chaveArmazenamento,
-        mimeType: "image/jpeg",
-        tamanhoBytes: imagemNormalizada.length,
-      },
-    });
-
-    return {
-      id: registro.id,
-      mimeType: registro.mimeType,
-      size: registro.tamanhoBytes,
-      createdAt: registro.criadoEm.toISOString(),
-    };
-  } catch (error) {
-    // Se o banco falhar, remover o arquivo salvo.
-    await unlink(caminho).catch((erroLimpeza) => {
-      console.error("Falha ao limpar upload após erro no banco:", erroLimpeza);
-    });
-
-    throw error;
   }
 }
 
@@ -212,7 +225,7 @@ export async function obterUpload(arquivoId: string, usuarioId: string) {
 
   // Aceitar somente chaves geradas pelo serviço.
   const chaveValida =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/i;
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|pdf)$/i;
 
   if (!chaveValida.test(registro.chaveArmazenamento)) {
     throw new UploadError("INVALID_STORAGE_KEY", "Arquivo inválido.", 500);

@@ -24,6 +24,7 @@ model User {
   accounts Account[]
 
   // Perfis
+  empresas Empresa[]
   cliente   Cliente?
   motorista Motorista?
   pessoa    Pessoa?
@@ -109,6 +110,10 @@ enum StatusCadastroMotorista {
 
 model Motorista {
   userId       String              @id
+  codigoPublico String @unique @default(uuid())
+  vinculoEmpresa VinculoEmpresa?
+  convitesEmpresa ConviteEmpresa[]
+  atribuicoesEmpresa AtribuicaoEmpresa[]
   disponivel   Boolean             @default(true)
   criadoEm     DateTime            @default(now())
   atualizadoEm DateTime            @updatedAt
@@ -143,6 +148,7 @@ model Veiculo {
   descricao    String   @default("")
   ativo        Boolean  @default(true)
   ofertas      Oferta[]
+  atribuicoesEmpresa AtribuicaoEmpresa[]
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -263,6 +269,7 @@ model Frete {
   cliente Cliente @relation(fields: [clienteId], references: [userId], onDelete: Restrict)
 
   // Relacionamentos
+  atribuicoesEmpresa AtribuicaoEmpresa[]
   fotos      FreteFoto[]
   propostas  Proposta[]
   avaliacoes Avaliacao[]
@@ -298,6 +305,9 @@ model Proposta {
   freteId         String
   motoristaId     String
   status          StatusProposta @default(PENDENTE)
+  empresaId String?
+  empresa Empresa? @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  atribuicao AtribuicaoEmpresa?
   ofertas         Oferta[]
   conversa        Conversa?
   freteQueAceitou Frete?         @relation("PropostaAceita")
@@ -472,4 +482,90 @@ model EventoWebhook {
 
   @@unique([provedor, eventoId])
   @@index([processadoEm])
+}
+
+enum StatusCadastroEmpresa {
+  EM_ANALISE
+  AJUSTES_SOLICITADOS
+  APROVADO
+}
+
+model Empresa {
+  id String @id @default(uuid())
+  gestorId String @unique
+  nome String
+  cnpj String @unique
+  vagas Int @default(0)
+  planoAte DateTime?
+  criadoEm DateTime @default(now())
+  razaoSocial String @default("")
+  responsavelNome String @default("")
+  responsavelEmail String @default("")
+  cadastroStatus StatusCadastroEmpresa @default(EM_ANALISE)
+  motivoAjuste String?
+  logoId String?
+  documentoCnpjId String?
+  pixDemoId String?
+  pixDemoVagas Int?
+  atualizadoEm DateTime @updatedAt
+  gestor User @relation(fields: [gestorId], references: [id], onDelete: Restrict)
+  vinculos VinculoEmpresa[]
+  convites ConviteEmpresa[]
+  atribuicoes AtribuicaoEmpresa[]
+  propostas Proposta[]
+}
+
+model VinculoEmpresa {
+  motoristaId String @id
+  empresaId String
+  criadoEm DateTime @default(now())
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Restrict)
+  @@index([empresaId])
+}
+
+enum StatusConviteEmpresa {
+  PENDENTE
+  ACEITO
+  RECUSADO
+  CANCELADO
+}
+
+model ConviteEmpresa {
+  id String @id @default(uuid())
+  empresaId String
+  motoristaId String
+  status StatusConviteEmpresa @default(PENDENTE)
+  expiraEm DateTime
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Restrict)
+  @@unique([empresaId, motoristaId])
+  @@index([motoristaId, status])
+}
+
+enum StatusAtribuicaoEmpresa {
+  PENDENTE
+  CONFIRMADA
+  RECUSADA
+  CANCELADA
+}
+
+model AtribuicaoEmpresa {
+  id String @id @default(uuid())
+  empresaId String
+  motoristaId String
+  freteId String
+  freteVersao DateTime
+  veiculoId String
+  propostaId String? @unique
+  status StatusAtribuicaoEmpresa @default(PENDENTE)
+  atualizadoEm DateTime @updatedAt
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  motorista Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Restrict)
+  frete Frete @relation(fields: [freteId], references: [id], onDelete: Restrict)
+  veiculo Veiculo @relation(fields: [veiculoId, motoristaId], references: [id, motoristaId], onDelete: Restrict)
+  proposta Proposta? @relation(fields: [propostaId, freteId], references: [id, freteId], onDelete: Restrict)
+  @@unique([empresaId, freteId])
+  @@unique([propostaId, freteId])
+  @@index([motoristaId])
 }

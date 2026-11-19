@@ -281,7 +281,7 @@ function Chat({
               );
             }
             const message = value;
-            const own = message.role === role;
+            const own = message.mine ?? message.role === role;
             return (
               <li
                 key={message.id}

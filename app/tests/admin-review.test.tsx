@@ -125,7 +125,7 @@ test("admin workspace clearly labels demo and real mode never renders local reco
   try {
     process.env.NEXT_PUBLIC_API_MODE = "real";
     const markup = renderToStaticMarkup(<AdminApp />);
-    assert.match(markup, /autorização no servidor/);
+    assert.match(markup, /Análise de motoristas/);
     assert.doesNotMatch(markup, /Carlos Almeida|Aprovar cadastro/);
   } finally {
     if (before === undefined) delete process.env.NEXT_PUBLIC_API_MODE;

@@ -120,7 +120,7 @@ export function ProposalFormDialog({
               Veículo
               <select
                 name="vehicle"
-                defaultValue={proposal?.vehicleId || ""}
+                defaultValue={proposal?.vehicleId || (vehicles.length === 1 ? vehicles[0].id : "")}
                 required
               >
                 <option value="" disabled>

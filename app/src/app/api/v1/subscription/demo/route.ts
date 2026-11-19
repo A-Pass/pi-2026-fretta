@@ -38,6 +38,7 @@ export async function POST(request: Request) {
         const eligible = await tx.motorista.findFirst({
           where: {
             userId,
+            vinculoEmpresa: null,
             disponivel: true,
             cadastro: {
               status: "APROVADO",
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
         if (!eligible)
           return {
             error:
-              "O cadastro precisa estar aprovado, com CNH válida e veículo ativo.",
+              "A assinatura pessoal exige cadastro aprovado, CNH válida e veículo ativo, sem vínculo empresarial.",
             status: 422,
           };
         if (body.action === "confirm") {

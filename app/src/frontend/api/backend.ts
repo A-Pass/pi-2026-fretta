@@ -130,7 +130,7 @@ export function createBackendClient(
       ),
     upload: (
       file: File,
-      purpose: "freight" | "profile" | "company" | "license",
+      purpose: "freight" | "profile" | "company" | "company-proof" | "license",
     ) => {
       const form = new FormData();
       form.append("file", file);

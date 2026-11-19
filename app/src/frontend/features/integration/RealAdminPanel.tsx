@@ -1,7 +1,7 @@
 "use client";
+import { AdminReviewHeader } from "./AdminReviewHeader";
+import { AdminReviewNav } from "./AdminReviewNav";
 import { correctionItems } from "@/contracts/driver-corrections";
-import { LogOut } from "lucide-react";
-import { clearRequestDrafts } from "../requests/drafts";
 import { useEffect, useState } from "react";
 import { createHttpTransport } from "../../api/http";
 import { authClient } from "../../api/auth-client";
@@ -52,7 +52,6 @@ const http = createHttpTransport(),
   };
 export function RealAdminPanel() {
   const [allowed, setAllowed] = useState(false),
-    [signingOut, setSigningOut] = useState(false),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [rows, setRows] = useState<Row[]>([]),
@@ -131,58 +130,16 @@ export function RealAdminPanel() {
       setLoading(false);
     }
   }
-  async function signOut() {
-    setSigningOut(true);
-    setError("");
-    try {
-      const result = await authClient.signOut();
-      if (result.error)
-        throw Error(result.error.message || "Não foi possível sair.");
-      try {
-        clearRequestDrafts(sessionStorage);
-      } catch {}
-      location.replace("/");
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : "Não foi possível sair.",
-      );
-      setSigningOut(false);
-    }
-  }
   return (
     <div className="admin-shell">
-      <header className="admin-header real-admin-header">
-        <a
-          className="brand"
-          href="/"
-          onClick={(e) => {
-            e.preventDefault();
-            discard.leave(() => {
-              location.href = "/";
-            });
-          }}
-        >
-          FRETTA<span>•</span>
-        </a>
-        <b>Administração</b>
-        {allowed && (
-          <button
-            type="button"
-            className="secondary admin-sign-out"
-            disabled={signingOut}
-            onClick={() => discard.leave(() => void signOut())}
-          >
-            <LogOut size={17} aria-hidden="true" />{" "}
-            {signingOut ? "Saindo…" : "Sair da conta"}
-          </button>
-        )}
-      </header>
-      <main className="admin-main">
-        <p className="real-mode-note">
-          Área restrita · autorização no servidor. Dados e decisões desta área
-          são reais, sem cadastros fictícios do navegador.
-        </p>
-        <h1>Análise de prestadores</h1>
+      <AdminReviewHeader
+        allowed={allowed}
+        onError={setError}
+        beforeLeaving={discard.leave}
+      />
+      <main className="admin-main admin-review">
+        {allowed && <AdminReviewNav current="drivers" />}
+        <h1>Análise de motoristas</h1>
         {error && (
           <p className="alert" role="alert">
             {error}
@@ -212,73 +169,77 @@ export function RealAdminPanel() {
           </section>
         )}
         {allowed && !detail && (
-          <section className="panel">
-            <div className="admin-filters">
-              <label>
-                Buscar nesta página
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Nome do motorista"
-                />
-              </label>
-              <label>
-                Situação
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
+          <>
+            <section className="panel" aria-label="Filtros de motoristas">
+              <div className="admin-filters">
+                <label>
+                  Buscar nesta página
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Nome do motorista"
+                  />
+                </label>
+                <label>
+                  Situação
+                  <select
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                  >
+                    <option value="TODOS">Todas</option>
+                    {Object.entries(labels).map(([v, l]) => (
+                      <option key={v} value={v}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="secondary"
+                  disabled={loading}
+                  onClick={() => void list()}
                 >
-                  <option value="TODOS">Todas</option>
-                  {Object.entries(labels).map(([v, l]) => (
-                    <option key={v} value={v}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className="secondary"
-                disabled={loading}
-                onClick={() => void list()}
-              >
-                Atualizar
-              </button>
-            </div>
-            <div className="admin-case-list">
-              {rows
-                .filter((r) =>
-                  r.nome.toLowerCase().includes(query.toLowerCase()),
-                )
-                .map((r) => (
-                  <article key={r.id}>
-                    <div>
+                  {loading ? "Atualizando…" : "Atualizar"}
+                </button>
+              </div>
+            </section>
+            <section
+              className="panel"
+              aria-label="Resultados da busca de motoristas"
+            >
+              <div className="admin-case-list admin-case-list-compact">
+                {rows
+                  .filter((r) =>
+                    r.nome.toLowerCase().includes(query.toLowerCase()),
+                  )
+                  .map((r) => (
+                    <article key={r.id}>
                       <h2>{r.nome}</h2>
-                      <p>
-                        {r.tipoPessoa === "PJ" ? "Empresa" : "Pessoa física"} ·{" "}
-                        {dateTime(r.enviadoEm)}
-                      </p>
-                    </div>
-                    <span className="admin-status">{labels[r.status]}</span>
-                    <button
-                      className="secondary"
-                      onClick={() => void open(r.id)}
-                    >
-                      Analisar cadastro de {r.nome}
-                    </button>
-                  </article>
-                ))}
-            </div>
-            {!rows.length && !loading && <p>Nenhum cadastro encontrado.</p>}
-            {cursor && (
-              <button
-                disabled={loading}
-                className="secondary"
-                onClick={() => void list(true)}
-              >
-                Carregar mais cadastros
-              </button>
-            )}
-          </section>
+                      <span className="admin-status" data-status={r.status}>
+                        {labels[r.status]}
+                      </span>
+                      <button
+                        className="secondary"
+                        aria-label={`Ver detalhes de ${r.nome}`}
+                        onClick={() => void open(r.id)}
+                      >
+                        Ver detalhes
+                      </button>
+                    </article>
+                  ))}
+              </div>
+              {!rows.length && !loading && <p>Nenhum cadastro encontrado.</p>}
+              {cursor && (
+                <button
+                  disabled={loading}
+                  className="secondary"
+                  onClick={() => void list(true)}
+                >
+                  Carregar mais cadastros
+                </button>
+              )}
+            </section>
+          </>
         )}
         {allowed && detail && (
           <>
@@ -296,11 +257,16 @@ export function RealAdminPanel() {
             <section className="panel">
               <div className="section-head">
                 <h2>{detail.nomeCompleto}</h2>
-                <span className="admin-status">{labels[detail.status]}</span>
+                <span className="admin-status" data-status={detail.status}>
+                  {labels[detail.status]}
+                </span>
               </div>
               <div className="admin-detail-grid">
                 <div>
                   <h3>Identificação</h3>
+                  <p>
+                    {detail.tipoPessoa === "PJ" ? "Empresa" : "Pessoa física"}
+                  </p>
                   <p>CPF: {detail.cpf || "Não informado"}</p>
                   {detail.cnpj && <p>CNPJ: {detail.cnpj}</p>}
                   {detail.razaoSocial && <p>{detail.razaoSocial}</p>}

@@ -83,6 +83,7 @@ export interface ProposalOffer {
   status: "PENDENTE" | "ACEITA" | "RECUSADA" | "SUBSTITUIDA" | "ENCERRADA";
 }
 export interface Message {
+  mine?: boolean;
   actorId?: string;
   senderName?: string;
   id: string;
@@ -93,6 +94,7 @@ export interface Message {
   createdAt: string;
 }
 export interface AppNotification {
+  event?: string;
   companyInviteId?: string;
   id: string;
   role: Role;

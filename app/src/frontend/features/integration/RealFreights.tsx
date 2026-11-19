@@ -21,7 +21,7 @@ import type {
 } from "@/contracts";
 import { createHttpTransport } from "../../api/http";
 import { createBackendClient } from "../../api/backend";
-import { LocationPicker } from "../../components/LocationPicker";
+import { OperatingAreaPicker } from "./OperatingAreaPicker";
 import { ProposalFormDialog } from "../../components/ProposalFormDialog";
 import { SuccessDialog } from "../../components/SuccessDialog";
 import { scheduleLabel } from "../../lib/dates";
@@ -54,6 +54,7 @@ type Detail = Summary & {
   proposals: {
     id: string;
     driver: string;
+    companyName?: string;
     status: string;
     conversationId?: string;
     offers: {
@@ -331,28 +332,7 @@ export function RealFreights({
             tab === "inicio" &&
             canOffer &&
             areaReady ? (
-            <>
-              <LocationPicker
-                value={base}
-                followMap
-                onChange={(point) => {
-                  if (point) saveArea({ base: point, radius });
-                }}
-                radiusKm={radius}
-              />
-              <label>
-                Raio para buscar retiradas · {radius} km
-                <input
-                  type="range"
-                  min={1}
-                  max={300}
-                  value={radius}
-                  onChange={(e) => {
-                    saveArea({ base, radius: Number(e.target.value) });
-                  }}
-                />
-              </label>
-            </>
+            <OperatingAreaPicker area={area} onChange={saveArea} />
           ) : role === "motorista" && tab === "inicio" ? (
             <p>
               A busca de fretes está indisponível. Confira a situação do seu
@@ -522,7 +502,10 @@ export function RealFreights({
           {detail.proposals.map((p) => (
             <article key={p.id} className="panel">
               <h2>
-                {p.driver} · {p.status}
+                {p.companyName
+                  ? `${p.companyName} · Motorista: ${p.driver}`
+                  : p.driver}{" "}
+                · {p.status}
               </h2>
               {p.offers.map((o) => (
                 <div key={o.id}>

@@ -27,6 +27,7 @@ export async function verificarAcessoConversa(
       proposta: {
         select: {
           motoristaId: true,
+          empresa: { select: { gestorId: true } },
           frete: {
             select: {
               id: true, // Adicione este campo também
@@ -50,7 +51,11 @@ export async function verificarAcessoConversa(
 
   const ehCliente = conversa.proposta.frete.clienteId === usuarioId;
 
-  if (!ehMotorista && !ehCliente) {
+  if (
+    !ehMotorista &&
+    !ehCliente &&
+    conversa.proposta.empresa?.gestorId !== usuarioId
+  ) {
     throw new ChatError(
       "CONVERSATION_NOT_FOUND",
       "Conversa não encontrada.",
@@ -122,6 +127,7 @@ export async function listarMensagens(
             select: {
               freteId: true,
               motoristaId: true,
+              frete: { select: { clienteId: true } },
             },
           },
         },
@@ -139,9 +145,10 @@ export async function listarMensagens(
       freightId: mensagem.conversa.proposta.freteId,
       proposalId: mensagem.conversa.propostaId,
       role:
-        mensagem.autorId === mensagem.conversa.proposta.motoristaId
-          ? "motorista"
-          : "cliente",
+        mensagem.autorId === mensagem.conversa.proposta.frete.clienteId
+          ? "cliente"
+          : "motorista",
+      mine: mensagem.autorId === usuarioId,
       text: mensagem.texto,
       createdAt: mensagem.criadoEm.toISOString(),
     })),
@@ -181,9 +188,10 @@ export async function enviarMensagem(
     freightId: conversa.proposta.frete.id,
     proposalId: conversa.propostaId,
     role:
-      mensagem.autorId === conversa.proposta.motoristaId
-        ? "motorista"
-        : "cliente",
+      mensagem.autorId === conversa.proposta.frete.clienteId
+        ? "cliente"
+        : "motorista",
+    mine: mensagem.autorId === usuarioId,
     text: mensagem.texto,
     createdAt: mensagem.criadoEm.toISOString(),
   });
@@ -220,12 +228,13 @@ export async function enviarMensagem(
   try {
     // Registra a mensagem com o autor autenticado.
 
-    const destinatarioId =
-      conversa.proposta.motoristaId === usuarioId
-        ? conversa.proposta.frete.clienteId
-        : conversa.proposta.motoristaId;
-    const papelDestinatario =
-      conversa.proposta.motoristaId === usuarioId ? "cliente" : "motorista";
+    const recipients = [
+      ...new Set([
+        conversa.proposta.frete.clienteId,
+        conversa.proposta.motoristaId,
+        conversa.proposta.empresa?.gestorId,
+      ]),
+    ].filter((id): id is string => !!id && id !== usuarioId);
 
     const mensagem = await prisma.$transaction(async (tx) => {
       // Salvar a mensagem enviada.
@@ -238,21 +247,22 @@ export async function enviarMensagem(
         },
       });
 
-      // Evitar que o usuário receba notificação de si mesmo.
-      if (destinatarioId !== usuarioId) {
-        await tx.notificacao.create({
-          data: {
+      if (recipients.length)
+        await tx.notificacao.createMany({
+          data: recipients.map((destinatarioId) => ({
             destinatarioId,
-            papelDestinatario,
+            papelDestinatario:
+              destinatarioId === conversa.proposta.frete.clienteId
+                ? "cliente"
+                : "motorista",
             evento: "NOVA_MENSAGEM",
             titulo: "Nova mensagem",
             corpo: "Você recebeu uma nova mensagem sobre um frete.",
             freteId: conversa.proposta.frete.id,
             propostaId: conversa.propostaId,
             conversaId,
-          },
+          })),
         });
-      }
 
       return novaMensagem;
     });

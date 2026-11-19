@@ -1,4 +1,4 @@
-import { Truck, Package, ArrowRight } from "lucide-react";
+import { Truck, Package, ArrowRight, Building2 } from "lucide-react";
 import type { Role } from "@/contracts";
 
 type Props = {
@@ -6,8 +6,17 @@ type Props = {
   setRole: (r: Role) => void;
   onEnter: () => void;
   real?: boolean;
+  companySelected?: boolean;
+  onSelectCompany?: () => void;
 };
-export function WelcomeView({ role, setRole, onEnter, real = false }: Props) {
+export function WelcomeView({
+  role,
+  setRole,
+  onEnter,
+  real = false,
+  companySelected,
+  onSelectCompany,
+}: Props) {
   return (
     <main className="welcome">
       <div className="brand">
@@ -28,7 +37,7 @@ export function WelcomeView({ role, setRole, onEnter, real = false }: Props) {
         <div className="role-grid">
           <button
             onClick={() => setRole("cliente")}
-            className={role === "cliente" ? "chosen" : ""}
+            className={!companySelected && role === "cliente" ? "chosen" : ""}
           >
             <Package />
             <b>Preciso de um frete</b>
@@ -36,12 +45,28 @@ export function WelcomeView({ role, setRole, onEnter, real = false }: Props) {
           </button>
           <button
             onClick={() => setRole("motorista")}
-            className={role === "motorista" ? "chosen" : ""}
+            className={!companySelected && role === "motorista" ? "chosen" : ""}
           >
             <Truck />
             <b>Sou motorista</b>
             <span>Encontre oportunidades</span>
           </button>
+          {onSelectCompany && (
+            <button
+              type="button"
+              onClick={onSelectCompany}
+              aria-pressed={companySelected}
+              className={
+                companySelected
+                  ? "role-grid-company chosen"
+                  : "role-grid-company"
+              }
+            >
+              <Building2 />
+              <b>Sou uma empresa de transporte</b>
+              <span>Gerencie motoristas e fretes</span>
+            </button>
+          )}
         </div>
         <button className="primary" onClick={() => onEnter()}>
           {real ? "Continuar" : "Explorar demonstração"}{" "}

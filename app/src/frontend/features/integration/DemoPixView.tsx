@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { companyPlanPriceCents } from "@/contracts/company-plan";
 import { ArrowLeft, Copy } from "lucide-react";
 import { createHttpTransport } from "../../api/http";
 import { SuccessDialog } from "../../components/SuccessDialog";
@@ -13,10 +14,19 @@ type Invoice =
 export function DemoPixView({
   onBack,
   onActivated,
+  companySeats,
 }: {
   onBack: () => void;
   onActivated: () => Promise<void>;
+  companySeats?: number;
 }) {
+  const isCompany = companySeats !== undefined;
+  const price = isCompany
+    ? new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }).format(companyPlanPriceCents(companySeats) / 100)
+    : "R$ 49,90";
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -26,11 +36,14 @@ export function DemoPixView({
     setBusy(true);
     setError("");
     try {
-      const result = await http.request<Invoice>("/subscription/demo", {
-        method: "POST",
-        body: { action: "create" },
-        signal,
-      });
+      const result = await http.request<Invoice>(
+        isCompany ? "/company/create-plan-payment" : "/subscription/demo",
+        {
+          method: "POST",
+          body: isCompany ? { seats: companySeats } : { action: "create" },
+          signal,
+        },
+      );
       if (!signal?.aborted) setInvoice(result);
     } catch (e) {
       if (!signal?.aborted)
@@ -47,17 +60,20 @@ export function DemoPixView({
     const controller = new AbortController();
     void create(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [companySeats]);
 
   async function confirm() {
     if (busy || !invoice || invoice.active) return;
     setBusy(true);
     setError("");
     try {
-      const updated = await http.request<Invoice>("/subscription/demo", {
-        method: "POST",
-        body: { action: "confirm", id: invoice.id },
-      });
+      const updated = await http.request<Invoice>(
+        isCompany ? "/company/confirm-plan-payment" : "/subscription/demo",
+        {
+          method: "POST",
+          body: { action: "confirm", id: invoice.id },
+        },
+      );
       setInvoice(updated);
       setSuccess(true);
       await onActivated();
@@ -73,12 +89,18 @@ export function DemoPixView({
   return (
     <>
       <button type="button" className="back" onClick={onBack}>
-        <ArrowLeft size={18} /> Voltar ao início
+        <ArrowLeft size={18} />{" "}
+        {isCompany ? "Voltar ao plano" : "Voltar ao início"}
       </button>
       <section className="panel demo-pix">
-        <h1>Ativar acesso</h1>
+        <h1>{isCompany ? "Pagamento do plano da empresa" : "Ativar acesso"}</h1>
         <p className="demo-pix-price">
-          R$ 49,90 <small>por 30 dias</small>
+          {price}{" "}
+          <small>
+            {isCompany
+              ? `${companySeats} ${companySeats === 1 ? "vaga" : "vagas"} · valor mensal`
+              : "por 30 dias"}
+          </small>
         </p>
         <p>
           Pix de demonstração. O QR Code e o código abaixo são ilustrativos e
@@ -144,9 +166,13 @@ export function DemoPixView({
       </section>
       <SuccessDialog
         open={success}
-        title="Acesso ativado!"
-        description="Pagamento de teste confirmado. As solicitações de frete estão disponíveis."
-        actionLabel="Ver solicitações"
+        title={isCompany ? "Plano atualizado!" : "Acesso ativado!"}
+        description={
+          isCompany
+            ? "Pagamento de teste confirmado. As vagas do plano foram atualizadas."
+            : "Pagamento de teste confirmado. As solicitações de frete estão disponíveis."
+        }
+        actionLabel={isCompany ? "Ver meu plano" : "Ver solicitações"}
         onClose={() => setSuccess(false)}
         onAction={onBack}
       />

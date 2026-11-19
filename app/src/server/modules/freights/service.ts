@@ -1,3 +1,5 @@
+import { distanceKm } from "@/contracts/distance";
+import { approvedDriver } from "../companies/service";
 import type { Address } from "@/contracts";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -64,36 +66,16 @@ function region(value: Prisma.JsonValue) {
     .join(", ");
 }
 
-function distance(
-  a: { lat: number; lng: number },
-  b: { lat: number; lng: number },
-) {
-  const radians = Math.PI / 180;
-  const h =
-    Math.sin(((a.lat - b.lat) * radians) / 2) ** 2 +
-    Math.cos(a.lat * radians) *
-      Math.cos(b.lat * radians) *
-      Math.sin(((a.lng - b.lng) * radians) / 2) ** 2;
-  return 12742 * Math.asin(Math.sqrt(Math.min(1, h)));
-}
-
 export async function driverCanOffer(
   tx: Prisma.TransactionClient,
   userId: string,
 ) {
-  const today = new Date().toLocaleDateString("sv-SE", {
-    timeZone: "America/Bahia",
-  });
   return Boolean(
     await tx.motorista.findFirst({
       where: {
         userId,
-        disponivel: true,
-        cadastro: {
-          status: "APROVADO",
-          cnhValidade: { gte: new Date(today) },
-          veiculo: { ativo: true },
-        },
+        ...approvedDriver(),
+        vinculoEmpresa: null,
         assinaturas: {
           some: {
             status: "ATIVA",
@@ -115,6 +97,8 @@ const include = {
     include: {
       motorista: { include: { user: { select: { name: true } } } },
       conversa: { select: { id: true } },
+      empresa: { select: { gestorId: true, nome: true } },
+      atribuicao: { select: { status: true, veiculoId: true } },
       ofertas: { orderBy: [{ criadoEm: "desc" }, { id: "desc" }] },
     },
   },
@@ -162,10 +146,14 @@ function detail(f: Row, userId: string) {
         ? { pickup: f.origemSnapshot, delivery: f.destinoSnapshot }
         : undefined,
     proposals: f.propostas
-      .filter((p) => owner || p.motoristaId === userId)
+      .filter(
+        (p) =>
+          owner || p.motoristaId === userId || p.empresa?.gestorId === userId,
+      )
       .map((p) => ({
         id: p.id,
         driver: p.motorista.user.name,
+        companyName: p.empresa?.nome,
         status: p.status,
         conversationId: p.conversa?.id,
         offers: p.ofertas.map((o) => ({
@@ -273,7 +261,7 @@ export async function freightOperation(
     const items = rows.slice(0, 50).filter((f) => {
       if (!center) return true;
       const pickup = (f.origemSnapshot as unknown as Address)?.point;
-      return pickup && distance(center, pickup) <= radius;
+      return pickup && distanceKm(center, pickup) <= radius;
     });
     return {
       items: items.map((f) => ({
@@ -439,6 +427,13 @@ export async function freightOperation(
       return detail(updated, userId);
     }
     if (previous) {
+      await tx.atribuicaoEmpresa.updateMany({
+        where: {
+          freteId: previous.id,
+          status: { in: ["PENDENTE", "CONFIRMADA"] },
+        },
+        data: { status: "CANCELADA" },
+      });
       await tx.proposta.updateMany({
         where: { freteId: previous.id, status: "PENDENTE" },
         data: { status: "CANCELADA" },
@@ -481,10 +476,28 @@ export async function freightOperation(
   const owner = f.clienteId === userId;
   const own = f.propostas.find((p) => p.motoristaId === userId);
   const hired = Boolean(own && own.id === f.propostaAceitaId);
+  const managed = f.propostas.some((p) => p.empresa?.gestorId === userId);
+  const assigned =
+    method === "GET" &&
+    !owner &&
+    !own &&
+    !managed &&
+    Boolean(
+      await tx.atribuicaoEmpresa.findFirst({
+        where: {
+          freteId: id,
+          OR: [{ motoristaId: userId }, { empresa: { gestorId: userId } }],
+          status: { in: ["PENDENTE", "CONFIRMADA"] },
+        },
+        select: { id: true },
+      }),
+    );
   if (method === "GET" && action === "photo" && proposalId) {
     requireValue(
       owner ||
         own ||
+        managed ||
+        assigned ||
         (f.status === "ABERTO" && (await driverCanOffer(tx, userId))),
       "Foto indisponível.",
       404,
@@ -500,6 +513,8 @@ export async function freightOperation(
     requireValue(
       owner ||
         own ||
+        managed ||
+        assigned ||
         (f.status === "ABERTO" && (await driverCanOffer(tx, userId))),
       "Frete indisponível.",
       404,
@@ -507,11 +522,51 @@ export async function freightOperation(
     return detail(f, userId);
   }
   requireValue(method === "POST", "Operação indisponível.", 404);
-  if (action === "propose" && !proposalId) {
+  if ((action === "propose" || action === "company-propose") && !proposalId) {
+    const assignment =
+      action === "company-propose"
+        ? await tx.atribuicaoEmpresa.findFirst({
+            where: {
+              id: field(body.assignmentId, 100),
+              freteId: id,
+              freteVersao: f.atualizadoEm,
+              status: "CONFIRMADA",
+              empresa: {
+                gestorId: userId,
+                cadastroStatus: "APROVADO",
+                planoAte: { gt: new Date() },
+                vagas: { gt: 0 },
+              },
+              motorista: {
+                ...approvedDriver(),
+                vinculoEmpresa: { empresa: { gestorId: userId } },
+              },
+              veiculo: { ativo: true },
+            },
+            include: { empresa: true },
+          })
+        : null;
     requireValue(
-      !owner && (await driverCanOffer(tx, userId)),
-      "Você não pode enviar propostas.",
+      !owner &&
+        (action === "company-propose"
+          ? assignment
+          : await driverCanOffer(tx, userId)),
+      "Você não pode enviar propostas para este frete.",
       403,
+    );
+    const driverId = assignment?.motoristaId ?? userId;
+    requireValue(
+      f.clienteId !== driverId,
+      "O motorista não pode propor para seu próprio frete.",
+      403,
+    );
+    const existing = f.propostas.find((p) => p.motoristaId === driverId);
+    requireValue(
+      !existing ||
+        (existing.empresaId === (assignment?.empresaId ?? null) &&
+          (!assignment || assignment.propostaId === existing.id)),
+      "Este motorista já tem uma negociação vinculada a outro perfil.",
+      409,
     );
     requireValue(f.status === "ABERTO", "O frete foi encerrado.", 409);
     requireValue(
@@ -546,20 +601,31 @@ export async function freightOperation(
     );
     const vehicle = await tx.veiculo.findFirst({
       where: {
-        id: field(body.vehicleId, 100),
-        motoristaId: userId,
+        id: assignment?.veiculoId ?? field(body.vehicleId, 100),
+        motoristaId: driverId,
         ativo: true,
       },
     });
     requireValue(vehicle, "Escolha um veículo ativo da sua conta.");
-    const proposal = own
+    const proposal = existing
       ? await tx.proposta.update({
-          where: { id: own.id },
+          where: { id: existing.id },
           data: { status: "PENDENTE" },
         })
       : await tx.proposta.create({
-          data: { freteId: id, motoristaId: userId, conversa: { create: {} } },
+          data: {
+            freteId: id,
+            motoristaId: driverId,
+            empresaId: assignment?.empresaId,
+            conversa: { create: {} },
+          },
         });
+    if (assignment && !assignment.propostaId) {
+      await tx.atribuicaoEmpresa.update({
+        where: { id: assignment.id },
+        data: { propostaId: proposal.id },
+      });
+    }
     await tx.oferta.updateMany({
       where: { propostaId: proposal.id, status: "PENDENTE" },
       data: { status: "SUBSTITUIDA" },
@@ -614,7 +680,28 @@ export async function freightOperation(
       action === "decline" ||
         (offer.retiradaEm &&
           +offer.retiradaEm > Date.now() &&
-          (await driverCanOffer(tx, proposal.motoristaId)) &&
+          (proposal.empresaId
+            ? await tx.atribuicaoEmpresa.findFirst({
+                where: {
+                  propostaId: proposal.id,
+                  status: "CONFIRMADA",
+                  empresaId: proposal.empresaId,
+                  freteVersao: f.atualizadoEm,
+                  empresa: {
+                    cadastroStatus: "APROVADO",
+                    planoAte: { gt: new Date() },
+                    vagas: { gt: 0 },
+                  },
+                  motorista: {
+                    ...approvedDriver(),
+                    vinculoEmpresa: { empresaId: proposal.empresaId },
+                  },
+                  veiculoId: offer.veiculoId ?? "",
+                  veiculo: { ativo: true },
+                },
+                select: { id: true },
+              })
+            : await driverCanOffer(tx, proposal.motoristaId)) &&
           (await tx.veiculo.findFirst({
             where: {
               id: offer.veiculoId ?? "",
@@ -661,6 +748,25 @@ export async function freightOperation(
         propostaId: proposalId,
       },
     });
+    if (
+      proposal.empresa &&
+      proposal.empresa.gestorId !== proposal.motoristaId
+    ) {
+      await tx.notificacao.create({
+        data: {
+          destinatarioId: proposal.empresa.gestorId,
+          papelDestinatario: "motorista",
+          evento: action === "accept" ? "ACEITE" : "RECUSA",
+          titulo:
+            action === "accept"
+              ? "Proposta da empresa aceita"
+              : "Proposta da empresa recusada",
+          corpo: f.titulo,
+          freteId: id,
+          propostaId: proposalId,
+        },
+      });
+    }
   } else if (!proposalId && action === "reviews") {
     requireValue(owner || hired, "Somente participantes podem avaliar.", 403);
     requireValue(
@@ -744,19 +850,26 @@ export async function freightOperation(
         data: { status: "SUBSTITUIDA" },
       });
     }
-    const recipients =
-      action === "start"
-        ? [f.clienteId]
-        : action === "complete"
-          ? f.propostas
-              .filter((p) => p.id === f.propostaAceitaId)
-              .map((p) => p.motoristaId)
-          : f.propostas.map((p) => p.motoristaId);
+    const contracted = f.propostas.find((p) => p.id === f.propostaAceitaId);
+    const recipients = [
+      ...new Set(
+        (action === "start"
+          ? [f.clienteId, contracted?.empresa?.gestorId]
+          : action === "complete"
+            ? [contracted?.motoristaId, contracted?.empresa?.gestorId]
+            : f.propostas.flatMap((p) => [p.motoristaId, p.empresa?.gestorId])
+        ).filter(
+          (recipient): recipient is string =>
+            !!recipient && recipient !== userId,
+        ),
+      ),
+    ];
     if (recipients.length)
       await tx.notificacao.createMany({
         data: recipients.map((destinatarioId) => ({
           destinatarioId,
-          papelDestinatario: action === "start" ? "cliente" : "motorista",
+          papelDestinatario:
+            destinatarioId === f.clienteId ? "cliente" : "motorista",
           evento: status,
           titulo: "Situação do frete atualizada",
           corpo: f.titulo,

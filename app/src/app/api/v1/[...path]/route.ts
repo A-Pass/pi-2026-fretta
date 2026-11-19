@@ -405,13 +405,21 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const arquivo = await obterUpload(arquivoId, session.user.id);
+      const attachment = await prisma.empresa.findFirst({
+        where: { documentoCnpjId: arquivoId, gestorId: { not: session.user.id } },
+        select: { gestorId: true },
+      });
+      const reviewer = attachment && await prisma.user.findFirst({
+        where: { id: session.user.id, papel: "ADMIN" }, select: { id: true },
+      });
+      const arquivo = await obterUpload(arquivoId, reviewer ? attachment.gestorId : session.user.id);
 
       return new Response(new Uint8Array(arquivo.bytes), {
         status: 200,
         headers: {
           "Content-Type": arquivo.mimeType,
           "Content-Disposition": "inline",
+          ...(arquivo.mimeType === "application/pdf" && { "Content-Security-Policy": "sandbox" }),
           "Cache-Control": "private, no-store",
           "X-Content-Type-Options": "nosniff",
         },
@@ -500,6 +508,7 @@ export async function GET(request: NextRequest) {
         name: true,
         image: true,
         hideProfilePhoto: true,
+        empresas: { select: { id: true }, take: 1 },
         cliente: {
           select: {
             userId: true,
@@ -508,6 +517,8 @@ export async function GET(request: NextRequest) {
         motorista: {
           select: {
             userId: true,
+            codigoPublico: true,
+            vinculoEmpresa: { select: { empresa: { select: { nome: true } } } },
             cadastro: {
               select: {
                 status: true,
@@ -539,6 +550,9 @@ export async function GET(request: NextRequest) {
       image: user.hideProfilePhoto ? null : user.image,
       emailVerified: session.user.emailVerified,
 
+      driverPublicId: user.motorista?.codigoPublico ?? null,
+      managesCompany: user.empresas.length > 0,
+      companyMembership: user.motorista?.vinculoEmpresa?.empresa.nome ?? null,
       roles: {
         cliente: user.cliente !== null,
         motorista: user.motorista !== null,
@@ -580,6 +594,7 @@ export async function GET(request: NextRequest) {
       },
       include: {
         cadastro: true,
+        vinculoEmpresa: { select: { motoristaId: true } },
       },
     });
 
@@ -605,7 +620,7 @@ export async function GET(request: NextRequest) {
       status: motorista.cadastro.status,
       cadastroCompleto: true,
       podeRealizarFretes: await driverCanOffer(prisma, session.user.id),
-      demoPixDisponivel: process.env.FRETTA_DEMO_PIX === "true" && motorista.cadastro.status === "APROVADO",
+      demoPixDisponivel: process.env.FRETTA_DEMO_PIX === "true" && motorista.cadastro.status === "APROVADO" && !motorista.vinculoEmpresa,
       assinaturaAtiva: (await consultarAssinatura(session.user.id)).active,
       enviadoEm: motorista.cadastro.enviadoEm,
       analisadoEm: motorista.cadastro.analisadoEm,
@@ -716,17 +731,18 @@ export async function GET(request: NextRequest) {
     const userId = session.user.id;
     const motorista = request.nextUrl.searchParams.get("role") === "motorista";
     const rows = await prisma.conversa.findMany({
-      where: { proposta: motorista ? { motoristaId: userId } : { frete: { clienteId: userId } } },
+      where: { proposta: motorista ? { OR: [{ motoristaId: userId }, { empresa: { gestorId: userId } }] } : { frete: { clienteId: userId } } },
       orderBy: [{ atualizadoEm: "desc" }, { id: "desc" }],
       take: 100,
       select: { id: true, proposta: { select: {
+        empresa: { select: { nome: true } },
         motorista: { select: { user: { select: { name: true } } } },
         frete: { select: { id: true, titulo: true, cliente: { select: { user: { select: { name: true } } } } } },
       } } },
     });
     return Response.json(rows.map(({ id, proposta }) => ({
       id,
-      name: motorista ? proposta.frete.cliente.user.name : proposta.motorista.user.name,
+      name: motorista ? proposta.frete.cliente.user.name : proposta.empresa?.nome ?? proposta.motorista.user.name,
       title: proposta.frete.titulo,
       freightId: proposta.frete.id,
     })), { headers: { "Cache-Control": "private, no-store" } });
@@ -913,12 +929,12 @@ export async function POST(request: NextRequest) {
     if (
       purpose !== "freight" &&
       purpose !== "profile" &&
-      purpose !== "company"
+      purpose !== "company" && purpose !== "company-proof"
     ) {
       return Response.json(
         {
           code: "INVALID_UPLOAD_PURPOSE",
-          message: "A finalidade deve ser freight, profile ou company.",
+          message: "Finalidade de upload inválida.",
         },
         { status: 422 },
       );
@@ -929,7 +945,7 @@ export async function POST(request: NextRequest) {
       return Response.json(
         {
           code: "FILE_REQUIRED",
-          message: "Selecione uma imagem para enviar no campo file.",
+          message: "Selecione um arquivo para enviar.",
         },
         { status: 422 },
       );
@@ -941,7 +957,7 @@ export async function POST(request: NextRequest) {
       return Response.json(
         {
           code: "INVALID_FILE_SIZE",
-          message: "A imagem deve ter no máximo 5 MB e não pode estar vazia.",
+          message: "O arquivo deve ter no máximo 5 MB e não pode estar vazio.",
         },
         { status: 422 },
       );

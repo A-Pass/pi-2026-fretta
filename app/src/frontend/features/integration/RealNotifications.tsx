@@ -19,17 +19,27 @@ export function RealNotifications({
 }) {
   const [items, setItems] = useState<Notification[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [updated, setUpdated] = useState(false);
   const [error, setError] = useState("");
-  async function load(after?: string) {
+  async function load(after?: string, manual = false) {
+    setLoading(true);
+    setUpdated(false);
+    setError("");
     try {
       const page = await backend.notifications(after);
       setItems((previous) =>
         after ? [...previous, ...page.items] : page.items,
       );
       setCursor(page.nextCursor);
-      setError("");
+      if (manual) {
+        setUpdated(true);
+        onRead();
+      }
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoading(false);
     }
   }
   useEffect(() => {
@@ -39,9 +49,17 @@ export function RealNotifications({
     <section className="panel">
       <h1>Notificações</h1>
       {error && <p role="alert">{error}</p>}
-      <button className="secondary" onClick={() => void load()}>
-        Atualizar
+      <button
+        className="secondary"
+        disabled={loading}
+        onClick={() => void load(undefined, true)}
+      >
+        {loading ? "Atualizando…" : "Atualizar notificações"}
       </button>
+      {updated && <p role="status">Notificações atualizadas.</p>}
+      {!loading && !error && !items.length && (
+        <p>Você ainda não tem notificações.</p>
+      )}
       <ul className="real-notification-list">
         {items.map((item) => (
           <li
@@ -58,6 +76,41 @@ export function RealNotifications({
             </div>
             <p>{item.body}</p>
             <div className="proposal-actions">
+              {(item.event === "CONVITE_EMPRESA" ||
+                item.event === "ATRIBUICAO_EMPRESA") && (
+                <a
+                  className="secondary real-freight-link"
+                  href={
+                    item.event === "CONVITE_EMPRESA"
+                      ? "/empresa?visao=motorista"
+                      : "/empresa?visao=motorista&aba=servicos"
+                  }
+                >
+                  {item.event === "CONVITE_EMPRESA"
+                    ? "Ver convite"
+                    : "Ver serviço atribuído"}{" "}
+                  <ArrowRight size={16} aria-hidden="true" />
+                </a>
+              )}
+              {(item.event === "VINCULO_EMPRESA" ||
+                item.event === "DISPONIBILIDADE_EMPRESA" ||
+                item.event === "CADASTRO_EMPRESA") && (
+                <a
+                  className="secondary real-freight-link"
+                  href={
+                    item.event === "DISPONIBILIDADE_EMPRESA"
+                      ? "/empresa?aba=servicos"
+                      : "/empresa"
+                  }
+                >
+                  {item.event === "DISPONIBILIDADE_EMPRESA"
+                    ? "Ver serviços"
+                    : item.event === "CADASTRO_EMPRESA"
+                      ? "Ver cadastro"
+                      : "Ver equipe"}{" "}
+                  <ArrowRight size={16} aria-hidden="true" />
+                </a>
+              )}
               {item.freightId && (
                 <Link
                   className="secondary real-freight-link"
@@ -91,7 +144,11 @@ export function RealNotifications({
         ))}
       </ul>
       {cursor && (
-        <button className="secondary" onClick={() => void load(cursor)}>
+        <button
+          className="secondary"
+          disabled={loading}
+          onClick={() => void load(cursor)}
+        >
           Carregar mais
         </button>
       )}
