@@ -22,8 +22,12 @@ export interface RegistrationSummary {
   status: string;
   cadastroCompleto: boolean;
   podeRealizarFretes: boolean;
+  demoPixDisponivel?: boolean;
+  assinaturaAtiva?: boolean;
   enviadoEm?: string;
   analisadoEm?: string;
+  atualizadoEm?: string;
+  itensAjuste?: string[];
   motivoAjuste?: string | null;
 }
 export function createIdentityClient(
@@ -32,13 +36,13 @@ export function createIdentityClient(
   const http = createHttpTransport(options);
   return {
     me: () => http.request<IdentityViewer>("/me"),
-    rename: (name: string) =>
+    rename: (name: string, hideProfilePhoto?: true) =>
       http.request<{
         id: string;
         name: string;
         email: string;
         image: string | null;
-      }>("/me", { method: "PATCH", body: { name } }),
+      }>("/me", { method: "PATCH", body: { name, hideProfilePhoto } }),
     activate: (role: "cliente" | "motorista") =>
       http.request(role === "cliente" ? "/me/client" : "/me/driver", {
         method: "POST",

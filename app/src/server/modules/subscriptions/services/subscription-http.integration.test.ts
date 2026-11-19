@@ -8,6 +8,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 
 import { prisma } from "../../../db/prisma";
+import { POST as demoPix } from "../../../../app/api/v1/subscription/demo/route";
 import { GET } from "../../../../app/api/v1/[...path]/route";
 
 test("protege e consulta assinaturas de motoristas", async () => {
@@ -91,6 +92,91 @@ test("protege e consulta assinaturas de motoristas", async () => {
   try {
     const motorista = await criarMotorista("Motorista Teste");
     const outroMotorista = await criarMotorista("Outro Motorista");
+
+    const pixRequest = (cookie: string, body: object) =>
+      new Request("http://localhost:3002/api/v1/subscription/demo", {
+        method: "POST",
+        headers: {
+          cookie,
+          origin: "http://localhost:3002",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    const previousDemoFlag = process.env.FRETTA_DEMO_PIX;
+    try {
+      delete process.env.FRETTA_DEMO_PIX;
+      assert.equal(
+        (await demoPix(pixRequest(motorista.cookie, { action: "create" })))
+          .status,
+        404,
+      );
+      process.env.FRETTA_DEMO_PIX = "true";
+      assert.equal(
+        (await demoPix(pixRequest(motorista.cookie, { action: "create" })))
+          .status,
+        422,
+      );
+      const vehicle = await prisma.veiculo.create({
+        data: {
+          motoristaId: motorista.id,
+          categoria: "Utilitário",
+          modelo: "Veículo de teste",
+          placa: randomUUID(),
+        },
+      });
+      await prisma.cadastroMotorista.create({
+        data: {
+          motoristaId: motorista.id,
+          tipoPessoa: "PF",
+          cnhNumero: "teste",
+          cnhCategoria: "B",
+          cnhValidade: new Date("2099-01-01"),
+          fotoPerfilId: randomUUID(),
+          documentoCnhId: randomUUID(),
+          veiculoId: vehicle.id,
+          status: "APROVADO",
+        },
+      });
+      const response = await demoPix(
+        pixRequest(motorista.cookie, { action: "create" }),
+      );
+      assert.equal(response.status, 200);
+      const invoice = await response.json();
+      assert.equal(invoice.active, false);
+      assert.match(invoice.qr, /^data:image\/png;base64,/);
+      assert.equal(
+        (await (await GET(requisicao(motorista.cookie))).json()).active,
+        false,
+      );
+      const confirmation = { action: "confirm", id: invoice.id };
+      assert.equal(
+        (await demoPix(pixRequest(outroMotorista.cookie, confirmation))).status,
+        422,
+      );
+      const confirmed = await demoPix(
+        pixRequest(motorista.cookie, confirmation),
+      );
+      assert.equal(confirmed.status, 200);
+      const first = await confirmed.json();
+      const second = await (
+        await demoPix(pixRequest(motorista.cookie, confirmation))
+      ).json();
+      assert.deepEqual(second, first);
+      assert.equal(
+        (await (await GET(requisicao(motorista.cookie))).json()).active,
+        true,
+      );
+    } finally {
+      if (previousDemoFlag === undefined) delete process.env.FRETTA_DEMO_PIX;
+      else process.env.FRETTA_DEMO_PIX = previousDemoFlag;
+      await prisma.vinculoAssinatura.deleteMany({
+        where: { motoristaId: motorista.id, id: { startsWith: "pix-demo-" } },
+      });
+      await prisma.cadastroMotorista.deleteMany({
+        where: { motoristaId: motorista.id },
+      });
+    }
 
     const agora = Date.now();
     const dia = 24 * 60 * 60 * 1000;

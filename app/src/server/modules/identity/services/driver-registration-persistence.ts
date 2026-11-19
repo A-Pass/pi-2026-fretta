@@ -1,3 +1,4 @@
+import { correctionItems } from "@/contracts/driver-corrections";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "../../../db/prisma";
 import { podeAlterarStatusCadastro } from "./registration-status";
@@ -11,6 +12,7 @@ type DadosCadastroCompleto = CadastroMotoristaInput & {
 export async function salvarCadastroMotorista(
   motoristaId: string,
   dados: DadosCadastroCompleto,
+  correctionVersion?: Date,
 ) {
   return prisma.$transaction(
     async (tx) => {
@@ -28,6 +30,15 @@ export async function salvarCadastroMotorista(
       ) {
         throw new Error("REGISTRATION_NOT_EDITABLE");
       }
+
+      if (
+        correctionVersion &&
+        cadastroExistente?.atualizadoEm.getTime() !==
+          correctionVersion.getTime()
+      )
+        throw new Error("REGISTRATION_NOT_EDITABLE");
+      if (cadastroExistente?.itensAjuste.length && !correctionVersion)
+        throw new Error("REGISTRATION_NOT_EDITABLE");
 
       await tx.pessoa.upsert({
         where: { userId: motoristaId },
@@ -60,6 +71,15 @@ export async function salvarCadastroMotorista(
         veiculoId: dados.veiculoId,
         status: "EM_ANALISE" as const,
         motivoAjuste: null,
+        itensAjuste: [],
+        itensConferidos:
+          correctionVersion && cadastroExistente
+            ? correctionItems
+                .filter(
+                  (item) => !cadastroExistente.itensAjuste.includes(item.id),
+                )
+                .map((item) => item.id)
+            : [],
         analisadoEm: null,
         enviadoEm: new Date(),
       };

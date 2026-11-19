@@ -27,6 +27,15 @@ export type DriverOnboardingDraft = {
 export const licenseCategories = ["B", "AB", "C", "AC", "D", "AD", "E", "AE"];
 const compact = (value: string) => value.replace(/[\s.\/-]/g, "").toUpperCase();
 const digit = (sum: number) => (sum % 11 < 2 ? 0 : 11 - (sum % 11));
+export function formatCpf(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return (
+    [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 9)]
+      .filter(Boolean)
+      .join(".") + (digits.length > 9 ? "-" + digits.slice(9) : "")
+  );
+}
+
 /** Check digits catch typing errors; they do not confirm identity or government registration. */
 export function validCpf(value: string): boolean {
   const cpf = compact(value);
@@ -95,8 +104,9 @@ export function onboardingError(
       draft.fullName.trim().length > 120
     )
       return "Informe seu nome completo, como aparece no documento.";
+    if (compact(draft.cpf).length !== 11) return "Digite os 11 números do CPF.";
     if (!validCpf(draft.cpf))
-      return "Confira o CPF: os números informados não passaram na validação.";
+      return "CPF inválido. Confira os 11 números no seu documento.";
     if (
       draft.personType === "pj" &&
       (!validCnpj(draft.cnpj) || !draft.companyName.trim())

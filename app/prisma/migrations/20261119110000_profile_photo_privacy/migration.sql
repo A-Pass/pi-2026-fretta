@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "hideProfilePhoto" BOOLEAN NOT NULL DEFAULT false;

@@ -3769,7 +3769,12 @@ a {
 }
 .wizard-footer {
   flex-wrap: wrap;
+  align-items: stretch;
   gap: 10px;
+}
+.wizard-footer > .secondary {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .request-summary dd {
   overflow-wrap: anywhere;
@@ -3786,8 +3791,8 @@ a {
     grid-template-columns: 1fr 1fr;
     gap: 20px 12px;
   }
-  .wizard-footer > button {
-    flex: 1 1 140px;
+  .wizard-footer > .primary {
+    flex: 1 0 100%;
   }
   .freight-progress li {
     font-size: 11px;
@@ -3952,4 +3957,509 @@ a {
   }
 }
 .real-mode-note{background:#eaf4ee;color:#245b39;border:1px solid #c4ddcc;padding:14px 18px;border-radius:12px;font-size:13px;}
-.real-role-choice{display:flex;justify-content:center;gap:12px;padding:18px;}
+
+.real-freight-list {
+  display: grid;
+  gap: 14px;
+  margin-block: 16px;
+}
+.real-freight-card h2 {
+  font-size: 1.2rem;
+  margin-block: 12px 8px;
+}
+.real-freight-route {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.real-freight-route svg {
+  flex-shrink: 0;
+  color: var(--orange);
+}
+.real-freight-link,
+.real-freight-link:visited {
+  color: #a33b22;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+.real-freight-back {
+  margin-block-end: 16px;
+}
+@media (max-width: 640px) {
+  .real-freight-card .real-freight-link {
+    width: 100%;
+  }
+}
+
+.real-freight-link:hover {
+  background: #fff0e8;
+  border-color: #e9b49f;
+}
+.real-freight-cancel {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-block: 20px 8px;
+  background: #b42318;
+  color: white;
+}
+.real-freight-cancel:hover:not(:disabled) {
+  background: #912018;
+}
+
+.real-cancel-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.real-cancel-actions button {
+  justify-content: center;
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-inline: 10px;
+}
+.real-cancel-actions .real-cancel-confirm {
+  background: #b42318;
+  color: white;
+}
+.real-cancel-actions .real-cancel-confirm:hover:not(:disabled) {
+  background: #912018;
+}
+
+.real-profile-layout {
+  gap: 18px;
+  padding-block: 28px;
+}
+.real-profile-layout > h2,
+.real-profile-layout > p {
+  margin: 0;
+}
+.real-profile-layout > button,
+.real-profile-layout > .secondary {
+  min-height: 44px;
+}
+.real-profile-editor {
+  display: grid;
+  justify-items: center;
+  gap: 24px;
+  margin-top: 8px;
+  width: min(100%, 360px);
+}
+.real-profile-editor label,
+.real-profile-editor input {
+  width: 100%;
+  text-align: center;
+}
+
+.real-profile-editor label {
+  display: grid;
+  gap: 10px;
+}
+
+.vehicle-category-options {
+  display: grid;
+  gap: 8px;
+  margin-block: 0 16px;
+}
+.vehicle-category-options legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.vehicle-category-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.vehicle-category-options label:has(input:checked) {
+  background: #fff0e8;
+  border-color: var(--orange);
+}
+.vehicle-category-options input[type="radio"] {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  accent-color: #a33b22;
+}
+.driver-review-pending {
+  display: inline-block;
+  margin-inline-start: 4px;
+  padding: 5px 12px;
+  border: 1px solid #ebc86c;
+  border-radius: 999px;
+  background: #fff2c2;
+  color: #6b4b00;
+}
+
+.primary + .driver-status-refresh {
+  margin-block-start: 12px;
+  margin-inline-start: 12px;
+}
+@media (max-width: 640px) {
+  .primary + .driver-status-refresh {
+    margin-inline-start: 0;
+  }
+}
+.driver-status-refresh {
+  min-inline-size: 185px;
+  justify-content: center;
+  gap: 8px;
+}
+.driver-status-spinner {
+  display: none;
+  width: 15px;
+  height: 15px;
+  border: 2px solid #e9c5b9;
+  border-top-color: #a33b22;
+  border-radius: 50%;
+}
+.driver-status-refresh[aria-busy="true"] .driver-status-spinner {
+  display: inline-block;
+  animation: driver-status-spin 0.75s linear infinite;
+}
+@keyframes driver-status-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .driver-status-refresh[aria-busy="true"] .driver-status-spinner {
+    animation: none;
+  }
+}
+
+.real-admin-header {
+  gap: clamp(8px, 2vw, 18px);
+}
+.admin-sign-out {
+  flex-shrink: 0;
+  gap: 7px;
+  min-height: 44px;
+  padding-inline: clamp(9px, 2vw, 16px);
+  border-color: #e9b7ad;
+  color: #a62218;
+}
+.admin-sign-out:hover:not(:disabled) {
+  background: #fff1ee;
+}
+
+.driver-review-approved {
+  display: inline-block;
+  margin-inline-start: 4px;
+  padding: 5px 12px;
+  border: 1px solid #a7d6b4;
+  border-radius: 999px;
+  background: #eaf8ee;
+  color: #216137;
+}
+
+.demo-pix {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  max-width: 540px;
+  margin-inline: auto;
+  text-align: center;
+}
+.demo-pix-price {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+.demo-pix-price small {
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+.demo-pix label {
+  width: 100%;
+}
+.demo-pix img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
+main:has(.real-opportunity-action) {
+  padding-bottom: calc(130px + env(safe-area-inset-bottom));
+}
+
+.freight-card-status,
+.proposal-actions,
+.real-notification-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.proposal-count,
+.notification-new-label {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eaf8ee;
+  color: #216137;
+  font-size: 12px;
+  font-weight: 700;
+}
+.proposal-actions {
+  margin-block: 12px;
+}
+.proposal-chat-link {
+  margin-top: 12px;
+}
+.notification-bell {
+  position: relative;
+}
+.notification-unread-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  background: #23864c;
+  border: 2px solid white;
+  border-radius: 50%;
+}
+.real-notification-list {
+  display: grid;
+  list-style: none;
+  padding: 0;
+  gap: 12px;
+}
+.real-notification-card[data-unread="true"] {
+  border-color: #b8dfc4;
+  background: #f8fdf9;
+}
+.real-notification-heading svg,
+.real-conversation-link svg {
+  color: var(--orange);
+  flex-shrink: 0;
+}
+.real-conversation-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+.real-conversation-link span {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.real-chat-screen {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #fff;
+}
+.real-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.real-chat-back {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  flex-shrink: 0;
+  color: #9c3825;
+}
+.real-chat-contact {
+  min-width: 0;
+}
+.real-chat-contact h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+.real-chat-freight {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #9c3825;
+  text-decoration: none;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.real-chat-freight svg {
+  flex-shrink: 0;
+}
+.real-chat-timeline {
+  height: clamp(240px, 55dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  background: #f8f5ef;
+}
+.real-chat-messages {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+}
+.real-chat-bubble {
+  max-width: min(84%, 580px);
+  padding: 9px 12px 6px;
+  background: #fff;
+  border: 1px solid #e8e0d4;
+  border-radius: 4px 16px 16px 16px;
+  box-shadow: 0 1px 2px #4c382011;
+}
+.real-chat-bubble-own {
+  align-self: flex-end;
+  background: #ffeadf;
+  border-color: #ecc9b9;
+  border-radius: 16px 4px 16px 16px;
+}
+.real-chat-text {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.real-chat-bubble time {
+  display: block;
+  text-align: right;
+  color: #655850;
+  font-size: 0.7rem;
+  margin-top: 4px;
+}
+.real-chat-empty {
+  text-align: center;
+  color: #655850;
+}
+.real-chat-composer {
+  display: grid;
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+}
+.real-chat-composer textarea {
+  min-height: 44px;
+  max-height: 110px;
+  padding: 10px 13px;
+  border-radius: 18px;
+  resize: vertical;
+  width: 100%;
+}
+.real-chat-composer button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+}
+.real-chat-error {
+  margin: 8px 10px;
+}
+
+.content:has(.real-chat-screen) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+.content:has(.real-chat-screen) > header {
+  flex: 0 0 auto;
+}
+.content > main:has(.real-chat-screen) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  padding-block: 20px;
+}
+.real-chat-screen,
+.real-chat {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.real-chat-header,
+.real-chat-composer {
+  flex-shrink: 0;
+}
+.real-chat-timeline {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+@media (max-width: 640px) {
+  .content:has(.real-chat-screen) {
+    height: calc(100dvh - 75px);
+  }
+  .content > main:has(.real-chat-screen) {
+    padding: 10px 12px 8px;
+  }
+  .real-chat-header,
+  .real-chat-timeline {
+    padding: 10px;
+  }
+}
+
+.real-chat-contact {
+  flex: 1;
+}
+.real-chat-active-offer {
+  flex-shrink: 0;
+  color: #9c3825;
+  background: #fff4ed;
+  border-color: #edc9b9;
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.real-chat-offer-card {
+  align-self: center;
+  width: min(100%, 360px);
+  padding: 12px 14px;
+  border: 1px solid #ecc9b9;
+  border-radius: 14px;
+  background: #fff8f3;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.real-chat-offer-card > strong {
+  display: block;
+  margin-top: 6px;
+}
+.real-chat-offer-card p {
+  margin: 4px 0;
+}
+.real-chat-offer-card button {
+  margin-top: 7px;
+}
+.real-chat-new-offer {
+  flex: 0 0 auto;
+  max-width: 48%;
+  min-height: 40px;
+  padding: 7px 10px;
+  text-align: center;
+  white-space: normal;
+  font-size: 12px;
+}
+
+.real-chat-load-older {
+  display: flex;
+  margin: 0 auto 12px;
+}

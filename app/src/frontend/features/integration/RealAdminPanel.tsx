@@ -1,4 +1,7 @@
 "use client";
+import { correctionItems } from "@/contracts/driver-corrections";
+import { LogOut } from "lucide-react";
+import { clearRequestDrafts } from "../requests/drafts";
 import { useEffect, useState } from "react";
 import { createHttpTransport } from "../../api/http";
 import { authClient } from "../../api/auth-client";
@@ -35,6 +38,8 @@ type Detail = {
   } | null;
   status: Status;
   motivoAjuste: string | null;
+  itensAjuste: string[];
+  itensConferidos: string[];
   enviadoEm: string;
   analisadoEm: string | null;
   atualizadoEm: string;
@@ -47,6 +52,7 @@ const http = createHttpTransport(),
   };
 export function RealAdminPanel() {
   const [allowed, setAllowed] = useState(false),
+    [signingOut, setSigningOut] = useState(false),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [rows, setRows] = useState<Row[]>([]),
@@ -64,7 +70,9 @@ export function RealAdminPanel() {
   const discard = useDiscardChanges(
     !!detail &&
       detail.status === "EM_ANALISE" &&
-      (checks.length > 0 || !!reason),
+      (checks.length !== detail.itensConferidos.length ||
+        checks.some((check) => !detail.itensConferidos.includes(check)) ||
+        !!reason),
   );
   async function list(append = false) {
     setLoading(true);
@@ -113,17 +121,37 @@ export function RealAdminPanel() {
         `/admin/driver-registrations/${encodeURIComponent(id)}`,
       );
       setDetail(data);
-      setChecks([]);
-      setReason("");
+      setChecks(data.itensConferidos);
+      setReason(
+        data.status === "AJUSTES_SOLICITADOS" ? (data.motivoAjuste ?? "") : "",
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível abrir.");
     } finally {
       setLoading(false);
     }
   }
+  async function signOut() {
+    setSigningOut(true);
+    setError("");
+    try {
+      const result = await authClient.signOut();
+      if (result.error)
+        throw Error(result.error.message || "Não foi possível sair.");
+      try {
+        clearRequestDrafts(sessionStorage);
+      } catch {}
+      location.replace("/");
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Não foi possível sair.",
+      );
+      setSigningOut(false);
+    }
+  }
   return (
     <div className="admin-shell">
-      <header className="admin-header">
+      <header className="admin-header real-admin-header">
         <a
           className="brand"
           href="/"
@@ -137,17 +165,17 @@ export function RealAdminPanel() {
           FRETTA<span>•</span>
         </a>
         <b>Administração</b>
-        <a
-          href="/cliente/perfil"
-          onClick={(e) => {
-            e.preventDefault();
-            discard.leave(() => {
-              location.href = "/cliente/perfil";
-            });
-          }}
-        >
-          Voltar ao aplicativo
-        </a>
+        {allowed && (
+          <button
+            type="button"
+            className="secondary admin-sign-out"
+            disabled={signingOut}
+            onClick={() => discard.leave(() => void signOut())}
+          >
+            <LogOut size={17} aria-hidden="true" />{" "}
+            {signingOut ? "Saindo…" : "Sair da conta"}
+          </button>
+        )}
       </header>
       <main className="admin-main">
         <p className="real-mode-note">
@@ -329,32 +357,29 @@ export function RealAdminPanel() {
                 </p>
               )}
             </section>
-            {detail.status === "EM_ANALISE" && (
+            {(detail.status === "EM_ANALISE" ||
+              (detail.status === "AJUSTES_SOLICITADOS" &&
+                !detail.itensAjuste.length)) && (
               <section className="panel admin-review-panel">
                 <h2>Conferência do cadastro</h2>
                 <p>
-                  Revise as imagens, a identificação e o veículo antes de
-                  decidir.
+                  Marque os itens conferidos. Os itens desmarcados serão
+                  solicitados ao motorista.
                 </p>
                 <div className="admin-checks">
-                  {[
-                    "Identificação conferida",
-                    "Foto conferida",
-                    "CNH e validade conferidas",
-                    "Veículo e habilitação compatíveis",
-                  ].map((label) => (
+                  {correctionItems.map(({ id, label }) => (
                     <label
-                      className={`admin-check-card ${checks.includes(label) ? "is-checked" : ""}`}
-                      key={label}
+                      className={`admin-check-card ${checks.includes(id) ? "is-checked" : ""}`}
+                      key={id}
                     >
                       <input
                         type="checkbox"
-                        checked={checks.includes(label)}
+                        checked={checks.includes(id)}
                         onChange={(e) =>
                           setChecks((c) =>
                             e.target.checked
-                              ? [...c, label]
-                              : c.filter((x) => x !== label),
+                              ? [...c, id]
+                              : c.filter((x) => x !== id),
                           )
                         }
                       />
@@ -373,7 +398,11 @@ export function RealAdminPanel() {
                 <div className="actions">
                   <button
                     className="secondary"
-                    disabled={reason.trim().length < 10 || loading}
+                    disabled={
+                      reason.trim().length < 10 ||
+                      checks.length === correctionItems.length ||
+                      loading
+                    }
                     onClick={() => setDecision("AJUSTES_SOLICITADOS")}
                   >
                     Solicitar correções
@@ -381,6 +410,7 @@ export function RealAdminPanel() {
                   <button
                     className="primary"
                     disabled={
+                      detail.status !== "EM_ANALISE" ||
                       checks.length !== 4 ||
                       loading ||
                       !detail.documentos.documentoCnhId ||
@@ -424,13 +454,17 @@ export function RealAdminPanel() {
               status: decision,
               motivoAjuste:
                 decision === "AJUSTES_SOLICITADOS" ? reason : undefined,
+              itensAjuste:
+                decision === "AJUSTES_SOLICITADOS"
+                  ? correctionItems
+                      .filter((item) => !checks.includes(item.id))
+                      .map((item) => item.id)
+                  : undefined,
               expectedUpdatedAt: detail.atualizadoEm,
             },
           });
           setDecision(null);
           setSuccess("Decisão registrada no servidor.");
-          setChecks([]);
-          setReason("");
           await open(detail.id);
           await list();
           return true;

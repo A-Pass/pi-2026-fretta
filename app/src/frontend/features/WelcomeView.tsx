@@ -1,28 +1,13 @@
-import type { FormEvent } from "react";
-import {
-  Truck,
-  Home,
-  Package,
-  MessageCircle,
-  User,
-  ArrowRight,
-  ArrowLeft,
-  MapPin,
-  Plus,
-  Star,
-  Bell,
-  Check,
-  Search,
-  X,
-} from "lucide-react";
-import type { Role, Store, Freight, Proposal } from "@/contracts";
-import { resetDemo } from "../api/client";
-import { acceptProposal, money } from "./freights/rules";
-import { statusLabels as labels, StatusBadge } from "../components/StatusBadge";
-import { EmptyState } from "../components/EmptyState";
+import { Truck, Package, ArrowRight } from "lucide-react";
+import type { Role } from "@/contracts";
 
-type Props = { role: Role; setRole: (r: Role) => void; onEnter: () => void };
-export function WelcomeView({ role, setRole, onEnter }: Props) {
+type Props = {
+  role: Role;
+  setRole: (r: Role) => void;
+  onEnter: () => void;
+  real?: boolean;
+};
+export function WelcomeView({ role, setRole, onEnter, real = false }: Props) {
   return (
     <main className="welcome">
       <div className="brand">
@@ -59,9 +44,12 @@ export function WelcomeView({ role, setRole, onEnter }: Props) {
           </button>
         </div>
         <button className="primary" onClick={() => onEnter()}>
-          Explorar demonstração <ArrowRight size={18} />
+          {real ? "Continuar" : "Explorar demonstração"}{" "}
+          <ArrowRight size={18} />
         </button>
-        <small>Ambiente demonstrativo · sem cadastro ou cobrança real</small>
+        {!real && (
+          <small>Ambiente demonstrativo · sem cadastro ou cobrança real</small>
+        )}
       </div>
       <div className="road-art">
         <Truck size={170} strokeWidth={1} />

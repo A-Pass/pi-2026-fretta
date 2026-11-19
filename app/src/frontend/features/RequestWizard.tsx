@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Camera, Truck, X } from "lucide-react";
 import type { FreightRequestDraft, SavedAddress, Schedule } from "@/contracts";
-import { prepareOnboardingPhoto } from "./onboarding/images";
+import { prepareFreightPhoto } from "./onboarding/images";
 import { useDiscardChanges } from "../components/useDiscardChanges";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { scheduleLabel } from "../lib/dates";
@@ -10,6 +10,7 @@ import {
   decodeDraft,
   draftKey,
   type SavedDraft,
+  type RequestWizardDraft,
 } from "./requests/drafts";
 import { AddressFields } from "./addresses/AddressFields";
 import {
@@ -32,16 +33,18 @@ export function RequestWizard({
   initialDraft,
   editId,
   revision = 0,
+  draftScope,
 }: {
   addresses: SavedAddress[];
   initialDraft?: FreightRequestDraft;
   editId?: string;
   revision?: number;
+  draftScope?: string;
   onClose: () => void;
   onSubmit: (draft: FreightRequestDraft) => Promise<boolean>;
 }) {
   const [step, setStep] = useState(0),
-    [draft, setDraft] = useState<FreightRequestDraft>(() =>
+    [draft, setDraft] = useState<RequestWizardDraft>(() =>
       structuredClone(initialDraft || emptyRequest()),
     ),
     [error, setError] = useState(""),
@@ -62,9 +65,9 @@ export function RequestWizard({
         draft.delivery.street ||
         draft.delivery.city ||
         draft.delivery.neighborhood ||
-        draft.schedule.kind !== "combinar"
+        draft.schedule !== null
       );
-  const key = draftKey(editId, revision);
+  const key = draftKey(editId, revision) + (draftScope ? `:${draftScope}` : "");
   const [recovery, setRecovery] = useState<SavedDraft | null>(null),
     [draftReady, setDraftReady] = useState(false),
     [draftNotice, setDraftNotice] = useState("");
@@ -157,7 +160,7 @@ export function RequestWizard({
     heading.current?.focus();
     body.current?.scrollTo({ top: 0 });
   }, [step]);
-  function update(p: Partial<FreightRequestDraft>) {
+  function update(p: Partial<RequestWizardDraft>) {
     setDraft((d) => ({ ...d, ...p }));
     setError("");
   }
@@ -185,7 +188,10 @@ export function RequestWizard({
     setBusy(true);
     setError("");
     try {
-      if (await onSubmit(draft)) {
+      if (
+        draft.schedule &&
+        (await onSubmit({ ...draft, schedule: draft.schedule }))
+      ) {
         skipSave.current = true;
         try {
           sessionStorage.removeItem(key);
@@ -194,8 +200,12 @@ export function RequestWizard({
         setError(
           "Não foi possível salvar a solicitação. Confira o espaço disponível no navegador e tente novamente.",
         );
-    } catch {
-      setError("Não foi possível publicar. Tente novamente.");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível publicar. Tente novamente.",
+      );
     } finally {
       setBusy(false);
     }
@@ -312,9 +322,9 @@ export function RequestWizard({
                   "Onde vamos entregar?",
                   "Qual veículo você precisa?",
                   "Quando você quer seu frete?",
-                  draft.schedule.kind === "combinar"
+                  draft.schedule?.kind === "combinar"
                     ? "Tudo pronto para combinar"
-                    : draft.schedule.kind === "fixa"
+                    : draft.schedule?.kind === "fixa"
                       ? "Escolha a data do frete"
                       : "Escolha o início e o fim",
                 ][step]
@@ -350,48 +360,48 @@ export function RequestWizard({
                 <label className="item-photo-upload">
                   <Camera size={24} />
                   <b>Adicionar fotos dos itens</b>
-                  <span>Até 4 fotos JPG, PNG ou WebP de 1 MB cada</span>
+                  <span>Até 4 imagens de 30 MB cada</span>
                   <input
                     type="file"
-                    accept="image/jpeg,image/png,image/webp"
+                    accept="image/*,.heic,.heif,.tif,.tiff"
                     multiple
                     disabled={reading}
                     onChange={async (e) => {
                       const files = Array.from(e.target.files || []);
                       e.target.value = "";
                       if (!files.length) return;
-                      if (
-                        files.length + draft.photos.length > 4 ||
-                        files.some(
-                          (f) =>
-                            f.size > 1000000 ||
-                            !["image/jpeg", "image/png", "image/webp"].includes(
-                              f.type,
-                            ),
-                        )
-                      ) {
+                      const available = 4 - draft.photos.length;
+                      if (available <= 0) {
                         setError(
-                          "Adicione até 4 fotos de até 1 MB cada, em JPG, PNG ou WebP.",
+                          "Você já adicionou 4 fotos. Remova uma para escolher outra.",
                         );
                         return;
                       }
                       setReading(true);
                       setError("");
-                      try {
-                        const photos = await Promise.all(
-                          files.map(
-                            async (file) =>
-                              (await prepareOnboardingPhoto(file)).dataUrl,
-                          ),
+                      const photos: string[] = [];
+                      const errors: string[] = [];
+                      if (files.length > available)
+                        errors.push(
+                          `Só há espaço para mais ${available} foto(s).`,
                         );
+                      try {
+                        for (const file of files.slice(0, available)) {
+                          try {
+                            photos.push(
+                              (await prepareFreightPhoto(file)).dataUrl,
+                            );
+                          } catch (error) {
+                            errors.push(
+                              `${file.name}: ${error instanceof Error ? error.message : "Não foi possível ler a imagem."}`,
+                            );
+                          }
+                        }
                         setDraft((d) => ({
                           ...d,
                           photos: [...d.photos, ...photos],
                         }));
-                      } catch {
-                        setError(
-                          "Não foi possível ler uma das fotos. Tente outra imagem.",
-                        );
+                        setError(errors.join(" "));
                       } finally {
                         setReading(false);
                       }
@@ -489,7 +499,7 @@ export function RequestWizard({
                 ).map(([kind, label, help]) => (
                   <label
                     className={
-                      draft.schedule.kind === kind
+                      draft.schedule?.kind === kind
                         ? "option selected"
                         : "option"
                     }
@@ -498,7 +508,7 @@ export function RequestWizard({
                     <input
                       type="radio"
                       name="schedule"
-                      checked={draft.schedule.kind === kind}
+                      checked={draft.schedule?.kind === kind}
                       onChange={() => update({ schedule: { kind } })}
                     />
                     <span>
@@ -511,7 +521,7 @@ export function RequestWizard({
             )}
             {step === 5 && (
               <>
-                {draft.schedule.kind === "combinar" ? (
+                {draft.schedule?.kind === "combinar" ? (
                   <p className="muted">
                     A data será negociada com o motorista. Não é necessário
                     escolher um dia agora.
@@ -519,36 +529,36 @@ export function RequestWizard({
                 ) : (
                   <div className="form-grid">
                     <label>
-                      {draft.schedule.kind === "fixa"
+                      {draft.schedule?.kind === "fixa"
                         ? "Data do frete"
                         : "Início do intervalo"}
                       <input
                         type="date"
                         required
                         min={todayLocal()}
-                        value={draft.schedule.start || ""}
+                        value={draft.schedule?.start || ""}
                         onChange={(e) =>
                           update({
                             schedule: {
-                              ...draft.schedule,
+                              ...draft.schedule!,
                               start: e.target.value,
                             },
                           })
                         }
                       />
                     </label>
-                    {draft.schedule.kind === "intervalo" && (
+                    {draft.schedule?.kind === "intervalo" && (
                       <label>
                         Fim do intervalo
                         <input
                           type="date"
                           required
-                          min={draft.schedule.start || todayLocal()}
-                          value={draft.schedule.end || ""}
+                          min={draft.schedule?.start || todayLocal()}
+                          value={draft.schedule?.end || ""}
                           onChange={(e) =>
                             update({
                               schedule: {
-                                ...draft.schedule,
+                                ...draft.schedule!,
                                 end: e.target.value,
                               },
                             })
@@ -596,7 +606,9 @@ export function RequestWizard({
                     </div>
                     <div>
                       <dt>Quando</dt>
-                      <dd>{scheduleLabel(draft.schedule)}</dd>
+                      <dd>
+                        {draft.schedule ? scheduleLabel(draft.schedule) : ""}
+                      </dd>
                     </div>
                     <div>
                       <dt>Fotos</dt>
@@ -617,16 +629,6 @@ export function RequestWizard({
             )}
           </div>
           <footer className="wizard-footer">
-            {dirty && !recovery && (
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy || reading}
-                onClick={keepDraft}
-              >
-                Salvar e continuar depois
-              </button>
-            )}
             <button
               type="button"
               className="secondary"
@@ -642,6 +644,16 @@ export function RequestWizard({
               <ArrowLeft size={17} />
               {step === 0 ? "Fechar" : "Voltar"}
             </button>
+            {dirty && !recovery && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || reading}
+                onClick={keepDraft}
+              >
+                Salvar e continuar depois
+              </button>
+            )}
             <button
               className="primary"
               disabled={busy || reading || !!recovery}

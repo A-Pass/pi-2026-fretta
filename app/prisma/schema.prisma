@@ -13,6 +13,7 @@ model User {
   email         String
   emailVerified Boolean  @default(false)
   image         String?
+  hideProfilePhoto Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -171,6 +172,8 @@ model CadastroMotorista {
   documentoCnhId String
   veiculoId      String
   status         StatusCadastroMotorista @default(EM_ANALISE)
+  itensAjuste    String[] @default([])
+  itensConferidos String[] @default([])
   motivoAjuste   String?
   enviadoEm      DateTime                @default(now())
   analisadoEm    DateTime?
@@ -231,6 +234,7 @@ model Frete {
   descricao        String?
   status           StatusFrete @default(ABERTO)
   propostaAceitaId String?     @unique
+  cancelamento     Json?
 
   propostaAceita Proposta? @relation("PropostaAceita", fields: [propostaAceitaId, id], references: [id, freteId], onDelete: Restrict)
 
@@ -326,6 +330,7 @@ model Oferta {
   retiradaEm DateTime?
   entregaEm  DateTime?
   comentario String?
+  veiculoSnapshot String?
   status     StatusOferta @default(PENDENTE)
 
   criadoEm DateTime @default(now())

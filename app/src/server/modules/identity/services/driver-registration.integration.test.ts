@@ -446,7 +446,8 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
         where: { motoristaId: usuarioId! },
         data: {
           status: "AJUSTES_SOLICITADOS",
-          motivoAjuste: "Atualizar os dados da CNH.",
+          motivoAjuste: "Enviar uma foto mais nítida.",
+          itensAjuste: ["foto"],
           analisadoEm: new Date(),
         },
       });
@@ -467,66 +468,65 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       assert.equal(dadosConsultaAjustes.status, "AJUSTES_SOLICITADOS");
       assert.equal(
         dadosConsultaAjustes.motivoAjuste,
-        "Atualizar os dados da CNH.",
+        "Enviar uma foto mais nítida.",
       );
       assert.ok(dadosConsultaAjustes.analisadoEm);
       assert.equal(dadosConsultaAjustes.podeRealizarFretes, false);
 
       console.log("Consulta dos ajustes solicitados - OK");
 
-      // Motorista corrige os dados e reenvia o cadastro.
-      const respostaAjustes = await POST(
-        new NextRequest("http://localhost:3002/api/v1/driver/registration", {
-          method: "POST",
-          headers: {
-            cookie: cookies,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            tipoPessoa: "PF",
-            nomeCompleto: "Motorista de Teste Atualizado",
-            cpf: "529.982.247-25",
-            cnhNumero: "12345678901",
-            cnhCategoria: "B",
-            cnhValidade: "2099-12-31",
-            veiculoId: veiculoProprio.id,
-            fotoPerfilId: foto.id,
-            documentoCnhId: cnh.id,
+      assert.deepEqual(dadosConsultaAjustes.itensAjuste, ["foto"]);
+      const novaFoto = await prisma.arquivoPrivado.create({
+        data: {
+          motoristaId: usuarioId!,
+          tipo: "FOTO_PERFIL",
+          chaveArmazenamento: `${randomUUID()}.jpg`,
+          mimeType: "image/jpeg",
+          tamanhoBytes: 32,
+        },
+      });
+      const reenviarFoto = (body: Record<string, unknown>) =>
+        POST(
+          new NextRequest("http://localhost:3002/api/v1/driver/registration", {
+            method: "POST",
+            headers: { cookie: cookies, "content-type": "application/json" },
+            body: JSON.stringify(body),
           }),
-        }),
+        );
+      const update = {
+        expectedUpdatedAt: dadosConsultaAjustes.atualizadoEm,
+        fotoPerfilId: novaFoto.id,
+      };
+      assert.equal(
+        (await reenviarFoto({ ...update, cpf: "52998224725" })).status,
+        422,
       );
-
+      assert.equal(
+        (await reenviarFoto({ ...update, expectedUpdatedAt: "2000-01-01" }))
+          .status,
+        409,
+      );
+      assert.equal(
+        (await reenviarFoto({ ...update, fotoPerfilId: foto.id })).status,
+        422,
+      );
+      const respostaAjustes = await reenviarFoto(update);
       const dadosAjustes = await respostaAjustes.json();
-
       assert.equal(respostaAjustes.status, 201, JSON.stringify(dadosAjustes));
       assert.equal(dadosAjustes.status, "EM_ANALISE");
-
       const cadastroReenviado =
         await prisma.cadastroMotorista.findUniqueOrThrow({
           where: { motoristaId: usuarioId! },
         });
-
-      assert.equal(cadastroReenviado.status, "EM_ANALISE");
-      assert.equal(cadastroReenviado.motivoAjuste, null);
-      assert.equal(cadastroReenviado.analisadoEm, null);
-
-      const pessoaAtualizada = await prisma.pessoa.findUniqueOrThrow({
+      assert.equal(cadastroReenviado.fotoPerfilId, novaFoto.id);
+      assert.equal(cadastroReenviado.documentoCnhId, cnh.id);
+      assert.equal(cadastroReenviado.veiculoId, veiculoProprio.id);
+      assert.deepEqual(cadastroReenviado.itensAjuste, []);
+      assert.deepEqual(cadastroReenviado.itensConferidos, ["dados", "cnh", "veiculo"]);
+      const pessoa = await prisma.pessoa.findUniqueOrThrow({
         where: { userId: usuarioId! },
       });
-
-      assert.equal(
-        pessoaAtualizada.nomeCompleto,
-        "Motorista de Teste Atualizado",
-      );
-
-      assert.equal(
-        await prisma.cadastroMotorista.count({
-          where: { motoristaId: usuarioId! },
-        }),
-        1,
-      );
-
-      console.log("Reenvio após solicitação de ajustes aprovado - OK");
+      assert.equal(pessoa.cpf, "52998224725");
 
       // Simular a aprovação administrativa.
       await prisma.cadastroMotorista.update({
@@ -578,7 +578,7 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
 
       assert.equal(
         pessoaAprovada.nomeCompleto,
-        "Motorista de Teste Atualizado",
+        "Motorista de Teste",
       );
 
       console.log("Reenvio de cadastro aprovado bloqueado - OK");

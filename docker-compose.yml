@@ -34,6 +34,7 @@ services:
       DATABASE_URL: postgresql://fretta:${DB_PASSWORD}@database:5432/fretta
       BETTER_AUTH_URL: http://localhost:${APP_PORT:-3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Defina BETTER_AUTH_SECRET no .env}
+      FRETTA_DEMO_PIX: ${FRETTA_DEMO_PIX:-false}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     volumes:

@@ -51,14 +51,31 @@ export async function prepareOnboardingPhoto(
     throw new Error(
       "O conteúdo do arquivo não corresponde a uma imagem aceita. Escolha outra foto.",
     );
+  return normalizePhoto(file, true);
+}
+
+/** Freight photos may use any format the browser can decode. */
+export async function prepareFreightPhoto(file: File): Promise<PreparedPhoto> {
+  if (file.size === 0 || file.size > 30 * 1024 * 1024)
+    throw new Error("Escolha uma imagem de até 30 MB que não esteja vazia.");
+  return normalizePhoto(file, false);
+}
+
+async function normalizePhoto(
+  file: File,
+  documentPhoto: boolean,
+): Promise<PreparedPhoto> {
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
     img.src = url;
     await withImageDeadline(img.decode());
-    if (img.naturalWidth < 200 || img.naturalHeight < 200)
+    if (documentPhoto && (img.naturalWidth < 200 || img.naturalHeight < 200))
       throw new Error("Escolha uma imagem de pelo menos 200 × 200 pixels.");
-    if (img.naturalWidth * img.naturalHeight > 25_000_000)
+    if (
+      img.naturalWidth * img.naturalHeight >
+      (documentPhoto ? 25_000_000 : 80_000_000)
+    )
       throw new Error(
         "A imagem é muito grande. Reduza a resolução antes de enviar.",
       );
@@ -67,16 +84,19 @@ export async function prepareOnboardingPhoto(
       1600 / Math.max(img.naturalWidth, img.naturalHeight),
     );
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(img.naturalWidth * scale);
-    canvas.height = Math.round(img.naturalHeight * scale);
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
     const ctx = canvas.getContext("2d");
     if (!ctx)
       throw new Error("Não foi possível preparar a imagem neste navegador.");
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    if (!dataUrl.startsWith("data:image/jpeg;"))
+      throw new Error("Não foi possível converter a imagem em JPEG.");
     return {
-      dataUrl: canvas.toDataURL("image/jpeg", 0.85),
+      dataUrl,
       name: file.name,
       type: "image/jpeg",
       size: file.size,
@@ -87,7 +107,7 @@ export async function prepareOnboardingPhoto(
     throw new Error(
       e instanceof Error && !(e instanceof DOMException)
         ? e.message
-        : "Não foi possível abrir essa imagem. Escolha outra foto.",
+        : "O navegador não conseguiu abrir a imagem. Confira se ela abre no seu aparelho ou exporte como JPG.",
     );
   } finally {
     URL.revokeObjectURL(url);

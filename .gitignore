@@ -21,3 +21,6 @@ _storage_
 
 # Imagens enviadas pelos usuarios
 /app/storage/uploads/
+
+# Cópia privada da apresentação
+/backup-fretta/

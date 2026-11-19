@@ -5,8 +5,17 @@ type Props = {
   title: string;
   description: string;
   onClose: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
 };
-export function SuccessDialog({ open, title, description, onClose }: Props) {
+export function SuccessDialog({
+  open,
+  title,
+  description,
+  onClose,
+  actionLabel = "Entendi",
+  onAction,
+}: Props) {
   const titleId = useId(),
     descriptionId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -45,9 +54,9 @@ export function SuccessDialog({ open, title, description, onClose }: Props) {
         ref={confirmButton}
         autoFocus
         className="success-button"
-        onClick={onClose}
+        onClick={onAction ?? onClose}
       >
-        Entendi
+        {actionLabel}
       </button>
     </dialog>
   );

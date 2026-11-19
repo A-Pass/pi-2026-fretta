@@ -3,12 +3,15 @@ import { emptyAddress } from "../addresses/rules";
 const prefix = "fretta-request-draft:";
 export const draftKey = (id = "new", revision = 0) =>
   `${prefix}${id}:${revision}`;
+export type RequestWizardDraft = Omit<FreightRequestDraft, "schedule"> & {
+  schedule: FreightRequestDraft["schedule"] | null;
+};
 export type SavedDraft = {
-  draft: FreightRequestDraft;
+  draft: RequestWizardDraft;
   step: number;
   at: number;
 };
-export function emptyRequest(): FreightRequestDraft {
+export function emptyRequest(): RequestWizardDraft {
   return {
     title: "",
     description: "",
@@ -18,7 +21,7 @@ export function emptyRequest(): FreightRequestDraft {
     savePickup: false,
     saveDelivery: false,
     vehicle: "",
-    schedule: { kind: "combinar" },
+    schedule: null,
   };
 }
 export function decodeDraft(
@@ -70,11 +73,12 @@ export function decodeDraft(
           typeof x !== "string" ||
           !/^data:image\/(jpeg|png|webp);base64,/.test(x),
       ) ||
-      !v.schedule ||
-      !["fixa", "intervalo", "combinar"].includes(v.schedule.kind) ||
-      [v.schedule.start, v.schedule.end].some(
-        (x) => x !== undefined && typeof x !== "string",
-      )
+      (v.schedule !== null &&
+        (!v.schedule ||
+          !["fixa", "intervalo", "combinar"].includes(v.schedule.kind) ||
+          [v.schedule.start, v.schedule.end].some(
+            (x) => x !== undefined && typeof x !== "string",
+          )))
     )
       return null;
     return d;

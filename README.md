@@ -1,172 +1,33 @@
 # FRETTA
 
-Este repositório contém o código e a documentação técnica da aplicação.
+Aplicação do IFBA Eunápolis para conectar clientes e motoristas de frete. O modo real roda localmente com Next.js, Better Auth, Prisma e PostgreSQL. O pagamento da apresentação usa Pix simulado.
 
-Aplicação Next.js + TypeScript do IFBA Eunápolis. Interface demonstrativa com perfis de cliente/motorista, pedidos, propostas, aceite, conversa local, avaliação e perfil. Servidor, contas reais e pagamentos são trabalho pendente do grupo.
+## Apresentação local
 
-## Executar
+Siga o [guia da apresentação](docs/apresentacao-local.md) para configurar o Google, preparar duas contas, demonstrar o Pix e ensaiar da publicação à avaliação. O guia também cobre migrações, backup e restauração do banco e das imagens.
 
-Node.js 20.9+ e npm:
-Docker Engine
+Para uma instalação Docker nova, copie o `.env.example` da raiz para `.env`, preencha os valores locais e execute `docker compose up --build`. O servidor fica em http://localhost:3000 por padrão. A configuração do Google deve usar o mesmo endereço e a mesma porta. Para instalar sem Docker, siga a alternativa no guia.
 
-Executar localmente (precisa de um banco de dados configurado)
-```sh
-cd app
-npm ci
-npm run dev
-```
+O modo real usa contas, permissões e registros do banco. O modo demonstrativo separado (`NEXT_PUBLIC_API_MODE=demo`) usa exemplos do navegador. O Pix de teste no modo real depende de `FRETTA_DEMO_PIX=true`. A confirmação de teste libera o acesso no banco e não movimenta dinheiro.
 
-### Via Docker
+## Código e testes
 
-Executa a aplicação em um container com debug ativado - <small>executa a aplicação, banco de dados e inicializa banco de dados automaticamente)</small>.
+- `app/src/frontend` contém telas, componentes e clientes da API.
+- `app/src/app` contém as páginas e rotas HTTP.
+- `app/src/server` contém serviços, permissões e regras de negócio.
+- `app/prisma` contém o esquema oficial e as migrações. O SQL legado em `database` não é usado na instalação atual.
+- `app/storage` contém os arquivos enviados. No Docker, eles ficam em volume separado do PostgreSQL.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --rm --build --force-recreate --remove-orphans
-```
+Na pasta `app`, instale com `npm ci` e use `npm run generate` para gerar o cliente Prisma. Execute `npm test`, `npm run typecheck` e `npm run build`. Para `npm run test:server`, use um banco PostgreSQL local separado chamado `fretta_test`, aplique as migrações e configure a sessão conforme o modelo de ambiente. Os testes do servidor criam e removem registros fictícios.
 
-Abra http://localhost:3000. Os exemplos são compartilhados pelos perfis e persistem apenas neste navegador. Use Meu perfil → Restaurar demonstração para recomeçar. Nenhuma mensagem é enviada a terceiros e nenhuma assinatura é cobrada.
+## Escopo da entrega
 
-Verificações: `npm run typecheck`, `npm test`, `npm run build` dentro de app.
+O roteiro cobre publicar e localizar uma solicitação, propor, negociar no chat, contratar, iniciar, concluir e avaliar. No cadastro do motorista, o administrador pode aprovar ou pedir correções específicas. Gateway real, equipes de empresas e perfil público com avaliações estão fora da apresentação local. Google e o carregamento do mapa precisam de internet.
 
-## Estrutura
+## Versão anterior
 
-`app/src/frontend`: componentes, funcionalidades, cliente HTTP e mocks.
-`app/src/contracts`: tipos compartilhados sem dependências do banco.
-`app/src/server`: módulos reservados para implementação pelos colegas.
-`app/src/app`: páginas, estilos, manifest e entradas HTTP.
-`app/prisma`: espaço para o esquema e migrações oficiais.
-`docs`: regras, contratos e tarefas do grupo.
-
-O protótipo final não pôde ser aberto como projeto navegável. A interface interpreta a identidade e os fluxos recuperados do histórico do Figma; não promete reprodução exata das telas.
-
-## Versão anterior e retorno
-
-A tag `backup/homeclean-before-fretta-2026-10-28` preserva o commit anterior 0561e8e. A nova base está na branch `feat/fretta-rebuild`. A main permanece preservada.
-
-Para consultar a antiga em outra pasta:
+A tag `backup/homeclean-before-fretta-2026-10-28` preserva a base anterior. A versão de trabalho fica em `feat/fretta-rebuild`. Para consultar a base anterior em outra pasta:
 
 ```sh
 git worktree add ../fretta-versao-anterior backup/homeclean-before-fretta-2026-10-28
-```
-
-Para executar main: faça commit de seu trabalho e use `git switch main`. Não use reset destrutivo.
-
-## Estado do front-end
-
-A demonstração tem veículos, perfil persistente, negociação com histórico de ofertas no chat, notificações locais, acordo após aceite e avaliação com comentário. As telas usam segmentos do App Router (`/motorista/veiculos`, `/cliente/fretes/{id}` e `/cliente/chat/{id}`); links antigos com parâmetros de consulta são redirecionados para as rotas equivalentes. Voltar/Avançar e recarregar preservam o contexto; a sessão demonstrativa é mantida somente nesta aba até sair. Meus veículos e Minha assinatura ficam no perfil do motorista.
-
-No primeiro uso do perfil motorista, um cadastro guiado solicita dados, foto de perfil, CNH e veículo. O envio fica em análise; a aprovação só pode ser simulada nos controles identificados como demonstração. Use dados fictícios: números completos e imagem da CNH não são persistidos no protótipo. Serviços/conversas anteriores continuam acessíveis enquanto há pendência, mas novas propostas exigem aprovação simulada e assinatura ativa.
-
-Confira a entrega e as pendências em [docs/frontend-checklist.md](docs/frontend-checklist.md).
-
-## Limites conhecidos
-
-Contas, autenticação Google, autorização, upload remoto, comunicação entre dispositivos e cobrança continuam pendentes dos módulos do servidor. A API provisória retorna 501; não há fallback silencioso para mocks. Os dados locais não oferecem privacidade entre contas. A interface só exibe endereços após aceite aos participantes simulados, mas a autorização real deve ocorrer no backend.
-
-PWA: manifest e ícones preparados; em produção (`npm run build` e `npm start`) o service worker fornece apenas um aviso offline. APIs, dados privados e mapas não são cacheados. O sistema não funciona integralmente offline. A homologação em Android/iPhone físicos e em HTTPS publicado permanece pendente. Use `http://localhost:3000` em desenvolvimento; outros hosts podem ser bloqueados pela proteção de origem do Next.js.
-
-## Solicitações e endereços
-
-Novo fluxo: Itens e fotos → Retirada → Entrega → Veículo → Quando → Datas/confirmação. A opção A combinar dispensa datas na etapa final. Endereços salvos em Meu perfil → Meus Endereços podem ser reutilizados, editados e excluídos. A caixa Salvar este endereço só grava quando o pedido é publicado. Os dados permanecem locais neste navegador, sem contas reais. O mapa online Leaflet/OpenStreetMap permite zoom, marcação e consulta pontual de GPS mediante permissão. Não há pesquisa automática de endereço. O Início do motorista filtra oportunidades por raio da retirada e permite alterar a base para buscar fretes de retorno; Meus serviços lista apenas suas propostas e serviços. O filtro atual usa os dados locais da demonstração. Consulte docs/domain.md para os limites de privacidade e integração.
-
-
-## Backend e banco de dados
-
-O backend do FRETTA utiliza Next.js, TypeScript, Prisma 7,
-PostgreSQL e Better Auth.
-
-### Requisitos
-
-- Node.js 20.9 ou superior
-- npm
-- PostgreSQL
-
-### Configuração local
-
-1. Acesse a pasta `app`.
-2. Instale as dependências com `npm ci`.
-3. Crie um banco PostgreSQL chamado `fretta_dev`.
-4. Configure o arquivo `.env` na pasta `app`.
-
-Exemplo de variáveis necessárias:
-
-```env
-DATABASE_URL="postgresql://USUARIO:SENHA@localhost:5432/fretta_dev"
-BETTER_AUTH_SECRET="SUBSTITUIR_POR_SEGREDO_ALEATORIO_FORTE"
-BETTER_AUTH_URL="http://localhost:3001"
-GOOGLE_CLIENT_ID="CONFIGURAR_CREDENCIAL_GOOGLE"
-GOOGLE_CLIENT_SECRET="CONFIGURAR_CREDENCIAL_GOOGLE"
-```
-
-Nunca compartilhe o `.env` nem envie credenciais ao Git.
-
-### Preparar o banco
-
-Execute na pasta `app`:
-
-```sh
-npx prisma migrate deploy
-npx prisma generate
-```
-
-O primeiro comando aplica as migrações pendentes.
-O segundo gera o Prisma Client.
-
-### Dados de desenvolvimento
-
-Para inserir dados fictícios no banco local:
-
-```sh
-npm run seed
-```
-
-O seed é limitado ao banco local `fretta_dev`.
-
-Ele cria um usuário fictício, um perfil de cliente,
-um endereço e um frete de exemplo.
-
-O script utiliza identificadores fixos para evitar
-registros duplicados em execuções repetidas.
-
-### Executar o servidor
-
-```sh
-npm run dev -- -p 3001
-```
-
-Servidor local:
-
-http://localhost:3001
-
-### Verificações
-
-```sh
-npm run typecheck
-npx prisma validate
-npx prisma migrate status
-```
-
-### Funcionalidades implementadas
-
-- Autenticação real com Google pelo Better Auth.
-- Sessões de usuários.
-- Perfis de cliente e motorista.
-- Cadastro e listagem de veículos.
-- Atualização e desativação lógica de veículos.
-- Validação de CPF, CNPJ e CNH.
-- Autorização administrativa.
-- Estrutura das tabelas de fretes, propostas, ofertas,
-  mensagens, avaliações e assinaturas.
-
-### Funcionalidades pendentes
-
-- Integração do frontend com as APIs reais.
-- Armazenamento privado dos documentos dos motoristas.
-- Fluxo completo de aprovação administrativa.
-- APIs de fretes, negociação, chat e avaliações.
-- Integração de pagamentos e assinaturas.
-- Configuração de produção, backups e deploy.
-
-O frontend demonstrativo continua utilizando dados
-simulados em funcionalidades ainda não integradas.
 ```

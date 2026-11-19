@@ -1,3 +1,4 @@
+import { formatCpf } from "./rules";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
@@ -336,10 +337,9 @@ export function DriverOnboardingView({
                         inputMode="numeric"
                         autoComplete="off"
                         value={draft.cpf}
-                        maxLength={14}
                         onChange={(e) =>
                           update({
-                            cpf: e.target.value.replace(/[^\d.\-]/g, ""),
+                            cpf: formatCpf(e.target.value),
                           })
                         }
                         required
@@ -501,24 +501,25 @@ export function DriverOnboardingView({
                       </div>
                     ) : (
                       <>
-                        <label>
-                          Tipo de veículo
-                          <select
-                            value={draft.vehicle.category}
-                            onChange={(e) =>
-                              update({
-                                vehicle: {
-                                  ...draft.vehicle,
-                                  category: e.target.value,
-                                },
-                              })
-                            }
-                          >
-                            {vehicleCategories.map((v) => (
-                              <option key={v}>{v}</option>
-                            ))}
-                          </select>
-                        </label>
+                        <fieldset className="plain-fieldset vehicle-category-options">
+                          <legend>Tipo de veículo</legend>
+                          {vehicleCategories.map((category) => (
+                            <label key={category}>
+                              <input
+                                type="radio"
+                                name="vehicle-category"
+                                value={category}
+                                checked={draft.vehicle.category === category}
+                                onChange={() =>
+                                  update({
+                                    vehicle: { ...draft.vehicle, category },
+                                  })
+                                }
+                              />
+                              <span>{category}</span>
+                            </label>
+                          ))}
+                        </fieldset>
                         <div className="form-grid">
                           <label>
                             Marca e modelo

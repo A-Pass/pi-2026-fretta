@@ -180,6 +180,20 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
       },
     });
 
+    await prisma.arquivoPrivado.createMany({
+      data: [
+        { id: identificador + "-foto", tipo: "FOTO_PERFIL" },
+        { id: identificador + "-cnh", tipo: "CNH" },
+      ].map((doc) => ({
+        ...doc,
+        tipo: doc.tipo as "FOTO_PERFIL" | "CNH",
+        motoristaId,
+        chaveArmazenamento: doc.id + ".jpg",
+        mimeType: "image/jpeg",
+        tamanhoBytes: 10,
+      })),
+    });
+
     await prisma.cadastroMotorista.create({
       data: {
         motoristaId,
@@ -187,8 +201,8 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
         cnhNumero: "DOCUMENTO_FICTICIO",
         cnhCategoria: "B",
         cnhValidade: new Date("2030-12-31T12:00:00Z"),
-        fotoPerfilId: "foto-ficticia",
-        documentoCnhId: "cnh-ficticia",
+        fotoPerfilId: identificador + "-foto",
+        documentoCnhId: identificador + "-cnh",
         veiculoId: veiculo.id,
         status: "EM_ANALISE",
       },

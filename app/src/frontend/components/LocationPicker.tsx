@@ -9,9 +9,11 @@ export function LocationPicker({
   value,
   onChange,
   radiusKm,
+  followMap = false,
 }: {
   value: MapPoint | null;
   radiusKm?: number;
+  followMap?: boolean;
   onChange: (p: MapPoint | null) => void;
 }) {
   const instructionsId = useId();
@@ -30,7 +32,8 @@ export function LocationPicker({
   const circle = useRef<Circle | null>(null);
   const radius = useRef(radiusKm);
   radius.current = radiusKm;
-  change.current = onChange;
+  change.current = (point) =>
+    onChange(point ?? (followMap ? draftRef.current : null));
   const placeRef = useRef<(p: MapPoint) => void>(() => {});
   useEffect(() => {
     let disposed = false;
@@ -107,6 +110,12 @@ export function LocationPicker({
           place({ lat: e.latlng.lat, lng: e.latlng.lng });
           change.current(null);
         });
+        if (followMap)
+          m.on("dragend", () => {
+            const center = m.getCenter();
+            place({ lat: center.lat, lng: center.lng });
+            change.current(null);
+          });
         setMapReady(true);
         requestAnimationFrame(() => {
           if (!disposed) m.invalidateSize();
@@ -175,9 +184,11 @@ export function LocationPicker({
     <div className="location-picker">
       <div className="section-head">
         <p className="muted" id={instructionsId}>
-          Toque no mapa ou arraste o marcador. No teclado, use as setas para
-          mover o mapa e o botão “Selecionar centro do mapa”. Use + e − para
-          ajustar o zoom.
+          {followMap
+            ? "Arraste o mapa ou mova o marcador para atualizar a busca."
+            : "Toque no mapa ou arraste o marcador para escolher o ponto."}{" "}
+          No teclado, use as setas e o botão “Selecionar centro do mapa”. Use +
+          e − para ajustar o zoom.
         </p>
         <button
           type="button"
@@ -233,31 +244,33 @@ export function LocationPicker({
       >
         <MapPin size={16} /> Selecionar centro do mapa
       </button>
-      <div className="map-confirm">
-        <span>
-          {value ? (
-            <>
-              <Check size={16} /> Ponto confirmado
-            </>
-          ) : draft ? (
-            <>
-              <MapPin size={16} /> Confira o marcador e confirme o ponto
-            </>
-          ) : (
-            "Nenhum ponto selecionado"
-          )}
-        </span>
-        <button
-          className="primary"
-          type="button"
-          disabled={!draft || !mapReady || loading}
-          onClick={() => {
-            if (draft) onChange({ ...draft });
-          }}
-        >
-          {value ? "Confirmado" : "Confirmar ponto"}
-        </button>
-      </div>
+      {!followMap && (
+        <div className="map-confirm">
+          <span>
+            {value ? (
+              <>
+                <Check size={16} /> Ponto confirmado
+              </>
+            ) : draft ? (
+              <>
+                <MapPin size={16} /> Confira o marcador e confirme o ponto
+              </>
+            ) : (
+              "Nenhum ponto selecionado"
+            )}
+          </span>
+          <button
+            className="primary"
+            type="button"
+            disabled={!draft || !mapReady || loading}
+            onClick={() => {
+              if (draft) onChange({ ...draft });
+            }}
+          >
+            {value ? "Confirmado" : "Confirmar ponto"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
