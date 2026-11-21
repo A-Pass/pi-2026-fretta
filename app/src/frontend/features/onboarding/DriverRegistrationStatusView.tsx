@@ -47,7 +47,7 @@ export function DriverRegistrationStatusView({
   const rejected = registration.status === "AJUSTES_SOLICITADOS";
   const needsUpdate = registration.status === "APROVADO" && !approved;
   const title = approved
-    ? "Seu cadastro está aprovado na demonstração"
+    ? "Seu cadastro está aprovado"
     : pending
       ? "Cadastro recebido. Agora vem a análise."
       : rejected
@@ -137,9 +137,9 @@ export function DriverRegistrationStatusView({
                   {pending
                     ? "Em análise simulada"
                     : rejected
-                      ? "Ajustes solicitados na demonstração"
+                      ? "Ajustes solicitados"
                       : approved
-                        ? "Aprovado na demonstração"
+                        ? "Aprovado"
                         : "Atualização necessária"}
                 </dd>
               </div>
@@ -205,20 +205,16 @@ export function DriverRegistrationStatusView({
           <div className="onboarding-demo-note">
             <ShieldCheck size={20} />
             <span>
-              <b>Análise de demonstração</b> · Não houve consulta a órgãos
-              oficiais nem conferência real dos documentos. A CNH e os números
-              completos não foram guardados. A foto de perfil e este resumo
-              ficam salvos neste navegador.
+              <b>Análise do cadastro</b> · Os documentos são tratados por um fluxo privado e só podem ser revisados por pessoas autorizadas.
             </span>
           </div>
-          {process.env.NEXT_PUBLIC_API_MODE !== "real" && pending && (
+          {pending && (
             <div className="onboarding-demo-controls">
               <p>
-                A análise agora pode ser feita pelo painel administrativo de
-                demonstração, com motivo e histórico da decisão.
+                O resultado da análise será disponibilizado pelo painel administrativo autorizado.
               </p>
               <Link className="secondary" href="/admin">
-                Abrir painel administrativo · demonstração
+                Consultar painel administrativo
               </Link>
             </div>
           )}

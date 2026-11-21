@@ -8,7 +8,7 @@ import { ownProposal } from "../driver/rules";
 export function providerId(p: Proposal) {
   return (
     p.driverId ||
-    (ownProposal(p, "Cleiton") ? "demo-driver" : `legacy:${p.driver}`)
+    (ownProposal(p, "Cleiton") ? "provider-current" : `provider:${p.driver}`)
   );
 }
 export function providerName(p: Proposal) {
@@ -27,7 +27,7 @@ export function publicProvider(
   id: string,
 ): PublicProviderProfile | null {
   const matches = store.proposals.filter((p) => providerId(p) === id);
-  const self = id === "demo-driver";
+  const self = id === "provider-current" || id === "demo-driver";
   if (!self && !matches.length) return null;
   const proposal = matches.at(-1);
   const company = self && store.driverRegistration?.personType === "pj";

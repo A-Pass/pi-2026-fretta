@@ -1,19 +1,25 @@
 services:
   app:
     build:
-      context: ./app
-      dockerfile: Dockerfile
-      target: prod
-    image: app-fretta:prod
+      context: app
+      target: production
+    image: fretta-app:prod
+    container_name: fretta-app
     ports:
       - "127.0.0.1:${APP_PORT}:3000"
     environment:
       NODE_ENV: ${APP_NODE_ENV}
       DATABASE_URL: ${DB_URL}
+      BETTER_AUTH_URL: ${APP_BETTER_AUTH_URL:-}
+      BETTER_AUTH_SECRET: ${APP_BETTER_AUTH_SECRET:-}
+      GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${APP_GOOGLE_CLIENT_SECRET:-}
     depends_on:
-      - database
+      database:
+        condition: service_healthy
 
   database:
+    container_name: fretta-db
     image: postgres:17
     ports:
       - "127.0.0.1:${DB_PORT}:5432"
@@ -23,8 +29,6 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - ./_storage_/db:/var/lib/postgres/data
-      - ./database/migration.sql:/docker-entrypoint-initdb.d/01-migration.sql:ro
-      - ./database/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres}"]
       interval: 5s

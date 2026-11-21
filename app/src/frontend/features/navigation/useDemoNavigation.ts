@@ -8,7 +8,7 @@ import {
   type DemoRoute,
   type Tab,
 } from "./routes";
-const sessionKey = "fretta-demo-session";
+const sessionKey = "fretta-session";
 
 export function useDemoNavigation() {
   const pathname = usePathname();

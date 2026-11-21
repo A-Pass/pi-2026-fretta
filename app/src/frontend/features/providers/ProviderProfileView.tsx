@@ -67,8 +67,7 @@ export function ProviderProfileView({
           <h1>{provider.name}</h1>
           {provider.city && <p className="muted">{provider.city}</p>}
           <p className="muted">
-            Perfil de demonstração. As informações e avaliações refletem os
-            exemplos deste navegador.
+            Perfil público com informações e avaliações recebidas em serviços concluídos.
           </p>
         </div>
         {onConversation && (
@@ -176,7 +175,6 @@ export function ProviderProfileView({
         {!provider.reviews.length && (
           <p className="muted">
             Este prestador ainda não recebeu avaliações de fretes concluídos
-            nesta demonstração.
           </p>
         )}
         {visible < provider.reviews.length && (

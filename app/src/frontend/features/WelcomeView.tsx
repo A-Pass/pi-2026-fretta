@@ -16,7 +16,6 @@ import {
   X,
 } from "lucide-react";
 import type { Role, Store, Freight, Proposal } from "@/contracts";
-import { resetDemo } from "../api/client";
 import { acceptProposal, money } from "./freights/rules";
 import { statusLabels as labels, StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
@@ -59,9 +58,8 @@ export function WelcomeView({ role, setRole, onEnter }: Props) {
           </button>
         </div>
         <button className="primary" onClick={() => onEnter()}>
-          Explorar demonstração <ArrowRight size={18} />
+          Entrar na FRETTA <ArrowRight size={18} />
         </button>
-        <small>Ambiente demonstrativo · sem cadastro ou cobrança real</small>
       </div>
       <div className="road-art">
         <Truck size={170} strokeWidth={1} />

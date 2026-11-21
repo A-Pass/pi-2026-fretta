@@ -18,7 +18,6 @@ import { vehicleCategories, vehicleLabel } from "../vehicles/rules";
 import { todayLocal } from "../addresses/rules";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { OnboardingPhotoField } from "./OnboardingPhotoField";
-import { demoPhoto } from "./images";
 import {
   licenseCategories,
   maskDocument,
@@ -75,32 +74,6 @@ export function DriverOnboardingView({
   function update(patch: Partial<DriverOnboardingDraft>) {
     setDraft((d) => ({ ...d, ...patch, confirmed: false }));
     setError("");
-  }
-  function sample() {
-    const date = new Date(`${todayLocal()}T12:00:00Z`);
-    date.setUTCFullYear(date.getUTCFullYear() + 5);
-    update({
-      fullName: "Motorista Demonstração",
-      personType: "pf",
-      cpf: "12345678909",
-      cnpj: "12ABC34501DE35",
-      companyName: "Empresa de Exemplo",
-      profilePhoto: demoPhoto("profile"),
-      licenseNumber: "12345678901",
-      licenseCategory: "B",
-      licenseExpiresOn: date.toISOString().slice(0, 10),
-      licensePhoto: demoPhoto("license"),
-      vehicleId: store.vehicles?.[0]?.id || "",
-      vehicle: {
-        id: crypto.randomUUID(),
-        category: "Utilitário",
-        model: "Fiorino de demonstração",
-        plate: "TST1A23",
-        capacityKg: 600,
-        description: "Veículo fictício para apresentação do projeto.",
-      },
-    });
-    setStep(1);
   }
   async function advance(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -161,9 +134,7 @@ export function DriverOnboardingView({
         <div className="onboarding-demo-note">
           <ShieldCheck size={20} />
           <span>
-            <b>Cadastro de demonstração</b> · Use dados fictícios. Não envie
-            documentos reais. As imagens da CNH e os números completos ficam
-            apenas nesta tela e não são guardados ao finalizar ou sair.
+            <b>Cadastro do motorista</b> · Informe dados reais somente em um ambiente seguro. Os documentos serão analisados por uma operação autorizada.
           </span>
         </div>
         {step === 0 ? (
@@ -223,9 +194,6 @@ export function DriverOnboardingView({
             <div className="onboarding-intro-actions">
               <button className="primary" onClick={() => setStep(1)}>
                 Começar cadastro <ArrowRight size={18} />
-              </button>
-              <button className="secondary" onClick={sample}>
-                <Sparkles size={17} /> Preencher exemplo fictício
               </button>
             </div>
             <button className="back" onClick={onClient}>
@@ -671,10 +639,7 @@ export function DriverOnboardingView({
                       Conferi os dados e as imagens deste cadastro.
                     </label>
                     <p className="muted">
-                      Nesta demonstração, apenas a foto de perfil e o resumo com
-                      números ocultos ficam salvos no navegador. Ao retomar um
-                      envio incompleto, os documentos precisarão ser
-                      selecionados novamente.
+                      Apenas os dados autorizados pelo fluxo de cadastro são persistidos. Ao retomar um envio incompleto, os documentos precisarão ser enviados novamente.
                     </p>
                   </>
                 )}

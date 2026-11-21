@@ -57,7 +57,7 @@ export function ChatView({
       ? conversation
         ? providerName(conversation)
         : "Motorista"
-      : freight?.clientName || "Cliente de demonstração";
+      : freight?.clientName || "Cliente";
   async function submitMessage(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (sending || !draftText.trim()) return;
@@ -421,7 +421,7 @@ export function ChatView({
             role === "cliente"
               ? providerName(p)
               : store.freights.find((f) => f.id === p.freightId)?.clientName ||
-                "Cliente de demonstração";
+                "Cliente";
           return (
             <button key={p.id} onClick={() => setChatId(p.id)}>
               <span className="avatar">{contactName.slice(0, 2)}</span>

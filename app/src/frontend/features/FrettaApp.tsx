@@ -17,7 +17,7 @@ import type {
   ProposalOffer,
   Store,
 } from "@/contracts";
-import { api, resetDemo } from "../api/client";
+import { api } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SuccessDialog } from "../components/SuccessDialog";
 import { ProposalFormDialog } from "../components/ProposalFormDialog";
@@ -51,6 +51,7 @@ import {
   publicProvider,
 } from "./providers/rules";
 import { InstallApp } from "../components/InstallApp";
+import { authClient } from "../auth/client";
 
 export function FrettaApp() {
   const navigation = useDemoNavigation();
@@ -60,7 +61,6 @@ export function FrettaApp() {
     selected,
     chatId,
     providerId,
-    entered,
     ready,
     loginRequested,
     setRole,
@@ -71,7 +71,9 @@ export function FrettaApp() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [googleSignInPending, setGoogleSignInPending] = useState(false);
+  const [googleSignInError, setGoogleSignInError] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
   const [updatingDriver, setUpdatingDriver] = useState(false);
   const [modal, setModal] = useState(""),
     [success, setSuccess] = useState<"proposal" | "request" | null>(null);
@@ -84,6 +86,16 @@ export function FrettaApp() {
     profilePhoto = store?.profile?.photo || "",
     subscription = store?.subscriptionActive ?? true;
   useEffect(() => {
+    let active = true;
+    void authClient.getSession().then(({ data }) => {
+      if (active) setAuthenticated(Boolean(data));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!authenticated) return;
     let active = true;
     const load = () =>
       api
@@ -102,21 +114,16 @@ export function FrettaApp() {
           }
         });
     void load();
-    const sync = (e: StorageEvent) => {
-      if (e.key === "fretta-demo-v1" && !saving.current) void load();
-    };
-    window.addEventListener("storage", sync);
     return () => {
       active = false;
-      window.removeEventListener("storage", sync);
     };
-  }, []);
+  }, [authenticated]);
   useEffect(() => {
     setModal("");
     setUpdatingDriver(false);
     setError("");
-    if (entered && !chatId) main.current?.focus({ preventScroll: true });
-  }, [role, tab, selected, chatId, providerId, entered]);
+    if (authenticated && !chatId) main.current?.focus({ preventScroll: true });
+  }, [role, tab, selected, chatId, providerId, authenticated]);
   async function save(next: Store): Promise<boolean> {
     if (saving.current) return false;
     saving.current = true;
@@ -186,10 +193,10 @@ export function FrettaApp() {
         id: crypto.randomUUID(),
         freightId: f.id,
         driver: name,
-        driverId: "demo-driver",
-        rating: publicProvider(store, "demo-driver")?.rating || 0,
-        providerName: publicProvider(store, "demo-driver")?.name || name,
-        providerKind: publicProvider(store, "demo-driver")?.kind || "autonomo",
+        driverId: "provider-current",
+        rating: publicProvider(store, "provider-current")?.rating || 0,
+        providerName: publicProvider(store, "provider-current")?.name || name,
+        providerKind: publicProvider(store, "provider-current")?.kind || "autonomo",
         providerLogo:
           store.driverRegistration?.personType === "pj"
             ? store.companyProfile?.logo
@@ -235,25 +242,50 @@ export function FrettaApp() {
     if (n.proposalId) setChatId(n.proposalId);
     else setSelected(n.freightId);
   }
+  async function signInWithGoogle() {
+    setGoogleSignInError("");
+    setGoogleSignInPending(true);
+    try {
+      const { error: signInError } = await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/auth/complete",
+      });
+      if (signInError) {
+        setGoogleSignInError(
+          "Não foi possível iniciar o login Google. Confira a configuração do servidor e tente novamente.",
+        );
+      }
+    } catch {
+      setGoogleSignInError(
+        "Não foi possível iniciar o login Google. Confira a configuração do servidor e tente novamente.",
+      );
+    } finally {
+      setGoogleSignInPending(false);
+    }
+  }
+  async function signOut() {
+    await authClient.signOut().catch(() => undefined);
+    setAuthenticated(false);
+    navigation.logout();
+  }
   if (!ready)
     return (
       <main className="loading" role="status">
         Preparando seu caminho…
       </main>
     );
-  if (!entered && loginRequested)
+  if (!authenticated && loginRequested)
     return (
       <LoginView
         role={role}
         onBack={() => navigation.setLoginRequested(false)}
-        onContinue={() => {
-          navigation.login();
-          if (role === "motorista" && !store?.driverRegistration)
-            navigation.nav("cadastro-motorista");
-        }}
+        onGoogleSignIn={() => void signInWithGoogle()}
+        googleSignInPending={googleSignInPending}
+        googleSignInError={googleSignInError}
+        onContinue={() => void signInWithGoogle()}
       />
     );
-  if (!entered)
+  if (!authenticated)
     return (
       <WelcomeView
         role={role}
@@ -274,26 +306,11 @@ export function FrettaApp() {
             <button className="secondary" onClick={() => location.reload()}>
               Tentar novamente
             </button>
-            <button className="danger" onClick={() => setRestoreOpen(true)}>
-              Restaurar demonstração
-            </button>
             <button className="secondary" onClick={() => navigation.logout()}>
               Voltar ao início
             </button>
           </>
         )}
-        <ConfirmDialog
-          open={restoreOpen}
-          onClose={() => setRestoreOpen(false)}
-          title="Restaurar demonstração?"
-          description="Os dados locais deste navegador serão apagados e substituídos pelos exemplos iniciais."
-          confirmLabel="Restaurar demonstração"
-          cancelLabel="Manter meus dados"
-          onConfirm={async () => {
-            resetDemo();
-            return true;
-          }}
-        />
       </main>
     );
   if (
@@ -425,7 +442,6 @@ export function FrettaApp() {
             </button>
           )}
           <div>
-            <span className="demo">DEMONSTRAÇÃO</span>
             <button
               className="notification-bell"
               aria-label={`Notificações${unread ? `, ${unread} ${unread === 1 ? "não lida" : "não lidas"}` : ""}`}
@@ -481,7 +497,7 @@ export function FrettaApp() {
             <ProviderProfileView
               key={providerId}
               provider={publicProvider(store, providerId)}
-              preview={role === "motorista" && providerId === "demo-driver"}
+              preview={role === "motorista" && providerId === "provider-current"}
               onBack={() => navigation.back("fretes")}
               onConversation={
                 role === "cliente" &&
@@ -504,7 +520,7 @@ export function FrettaApp() {
             />
           ) : selected && !f ? (
             <EmptyState title="Solicitação não encontrada">
-              Ela pode ter sido removida da demonstração.
+              Ela não está mais disponível.
               <button className="primary" onClick={() => nav("fretes")}>
                 Ver meus fretes
               </button>
@@ -541,7 +557,7 @@ export function FrettaApp() {
               store={store}
               save={save}
               onBack={() => nav("perfil")}
-              onPreview={() => navigation.openProvider("demo-driver")}
+              onPreview={() => navigation.openProvider("provider-current")}
             />
           ) : tab === "veiculos" && role === "motorista" ? (
             <VehicleBookView
@@ -601,20 +617,20 @@ export function FrettaApp() {
                   if (ok)
                     setNotice(
                       photoChanged
-                        ? "Foto atualizada. Seu cadastro voltou para análise de demonstração."
+                        ? "Foto atualizada. Seu cadastro foi enviado para revisão."
                         : "Perfil atualizado.",
                     );
                   return ok;
                 }}
                 onAddresses={() => nav("enderecos")}
                 onVehicles={() => nav("veiculos")}
-                onPublicProfile={() => navigation.openProvider("demo-driver")}
+                onPublicProfile={() => navigation.openProvider("provider-current")}
                 onCompany={() => nav("empresa")}
                 onSubscription={() => nav("assinatura")}
                 role={role}
                 subscription={subscription}
                 setEntered={() => {
-                  navigation.logout();
+                  void signOut();
                   setModal("");
                 }}
               />

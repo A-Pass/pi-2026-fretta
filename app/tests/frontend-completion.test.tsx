@@ -20,6 +20,7 @@ import {
   routeUrl,
 } from "../src/frontend/features/navigation/routes";
 import { FreightDetailsView } from "../src/frontend/features/FreightDetailsView";
+import { LoginView } from "../src/frontend/features/LoginView";
 import type { Address, Store, Vehicle } from "../src/contracts";
 
 const vehicle: Vehicle = {
@@ -30,6 +31,20 @@ const vehicle: Vehicle = {
   description: "Fechado",
   capacityKg: 600,
 };
+test("tela de acesso oferece os campos e ações de autenticação sem simular credenciais reais", () => {
+  const html = renderToStaticMarkup(
+    <LoginView
+      role="cliente"
+      onBack={() => {}}
+      onContinue={() => {}}
+      onGoogleSignIn={() => {}}
+      googleSignInPending={false}
+      googleSignInError=""
+    />,
+  );
+  assert.match(html, /Continuar com Google/);
+  assert.match(html, /sessão/);
+});
 test("veículos rejeitam placa duplicada, categoria inválida e capacidade negativa", () => {
   assert.equal(validateVehicle(vehicle, []), "");
   assert.notEqual(validateVehicle({ ...vehicle, id: "v2" }, [vehicle]), "");
@@ -67,10 +82,7 @@ test("rotas usam segmentos do App Router e preservam IDs escapados", () => {
   );
   assert.equal(isAppRoute("/motorista/tela-desconhecida"), false);
   assert.equal(isAppRoute("/cliente/prestador/provider-1/unknown/p1"), false);
-  assert.equal(
-    parseLegacyRoute("?perfil=motorista&frete=f1").selected,
-    "f1",
-  );
+  assert.equal(parseLegacyRoute("?perfil=motorista&frete=f1").selected, "f1");
   assert.equal(parseLegacyRoute("?tela=desconhecida").tab, "inicio");
 });
 test("aceite registra snapshot e rejeita confirmação de oferta substituída", () => {

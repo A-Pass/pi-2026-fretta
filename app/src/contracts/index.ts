@@ -91,7 +91,7 @@ export interface AppNotification {
   proposalId?: string;
 }
 export interface DriverRegistration {
-  mode: "demo";
+  mode?: "demo" | "real";
   status: "EM_ANALISE" | "AJUSTES_SOLICITADOS" | "APROVADO";
   fullName: string;
   personType: "pf" | "pj";
