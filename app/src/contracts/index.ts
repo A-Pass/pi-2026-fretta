@@ -91,7 +91,6 @@ export interface AppNotification {
   proposalId?: string;
 }
 export interface DriverRegistration {
-  mode?: "demo" | "real";
   status: "EM_ANALISE" | "AJUSTES_SOLICITADOS" | "APROVADO";
   fullName: string;
   personType: "pf" | "pj";
@@ -99,6 +98,7 @@ export interface DriverRegistration {
   cnpjMasked?: string;
   companyName?: string;
   license: { numberMasked: string; category: string; expiresOn: string };
+  licensePhotoDataUrl?: string;
   documentsSubmitted: boolean;
   submittedAt: string;
   reviewedAt?: string;
@@ -131,13 +131,11 @@ export interface PublicProviderProfile {
 }
 export interface Store {
   accountSetupComplete?: boolean;
-  adminDemoCases?: AdminCase[];
   adminReviews?: AdminReview[];
   companyProfile?: CompanyProfile;
   driverRegistration?: DriverRegistration;
   vehicles?: Vehicle[];
-  profile?: { name: string; photo: string };
-  subscriptionActive?: boolean;
+  profile?: { id: string; name: string; photo: string };
   notifications?: AppNotification[];
   operatingArea?: OperatingArea;
   addresses?: SavedAddress[];
@@ -194,7 +192,6 @@ export interface OperatingArea {
 export type AdminCase = {
   id: string;
   registration: DriverRegistration;
-  photo: string;
   vehicles: Vehicle[];
 };
 export type AdminReview = {

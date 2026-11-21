@@ -3,36 +3,51 @@ services:
     build:
       context: app
       target: production
+      args:
+        APP_PORT: ${APP_PORT}
     image: fretta-app:prod
     container_name: fretta-app
-    ports:
-      - "127.0.0.1:${APP_PORT}:3000"
+    labels:
+      - traefik.enable=true
+      - 'traefik.http.routers.fretta-app.rule=Host(`${APP_HOST}`)'
+      - traefik.http.routers.fretta-app.tls=true
+      - traefik.http.services.fretta-app.loadbalancer.server.port=${APP_PORT}
     environment:
       NODE_ENV: ${APP_NODE_ENV}
       DATABASE_URL: ${DB_URL}
-      BETTER_AUTH_URL: ${APP_BETTER_AUTH_URL:-}
-      BETTER_AUTH_SECRET: ${APP_BETTER_AUTH_SECRET:-}
-      GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${APP_GOOGLE_CLIENT_SECRET:-}
+      BETTER_AUTH_URL: ${APP_URL}
+      BETTER_AUTH_SECRET: ${APP_BETTER_AUTH_SECRET}
+      GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${APP_GOOGLE_CLIENT_SECRET}
     depends_on:
       database:
         condition: service_healthy
+    networks:
+      - fretta_network
 
   database:
     container_name: fretta-db
-    image: postgres:17
-    ports:
-      - "127.0.0.1:${DB_PORT}:5432"
+    image: postgres:17-trixie
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./_storage_/db:/var/lib/postgres/data
+      - fretta_db_data:/var/lib/postgres/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - fretta_network
 
+volumes:
+  fretta_db_data:
+    name: fretta-db-data
+
+networks:
+  fretta_network:
+    name: fretta-network
+    driver: bridge

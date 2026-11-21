@@ -30,6 +30,29 @@ test("cliente HTTP envia cookie de mesma origem, preserva cursores e não repete
   );
   assert.equal(attempts, 1);
 });
+test("busca de fretes envia texto, área e raio ao feed", async () => {
+  let requestUrl = "";
+  const api = createBackendClient({
+    fetcher: async (url) => {
+      requestUrl = String(url);
+      return json({ items: [], nextCursor: null });
+    },
+  });
+  await api.freights(undefined, undefined, {
+    q: "geladeira",
+    lat: -16.377,
+    lng: -39.58,
+    radiusKm: 20,
+    limit: 100,
+  });
+  const url = new URL(requestUrl, "http://localhost");
+  assert.equal(url.pathname, "/api/v1/freights");
+  assert.equal(url.searchParams.get("q"), "geladeira");
+  assert.equal(url.searchParams.get("lat"), "-16.377");
+  assert.equal(url.searchParams.get("lng"), "-39.58");
+  assert.equal(url.searchParams.get("radiusKm"), "20");
+  assert.equal(url.searchParams.get("limit"), "100");
+});
 test("aceite envia apenas oferta esperada, IDs escapados e nenhum valor informado pelo cliente", async () => {
   let payload: unknown;
   let requestUrl = "";

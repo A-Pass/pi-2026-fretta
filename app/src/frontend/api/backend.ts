@@ -17,7 +17,7 @@ export type Viewer = {
   name: string;
   photo: string;
   roles: Role[];
-  driverRegistration?: Omit<DriverRegistration, "mode">;
+  driverRegistration?: DriverRegistration;
 };
 export type FreightFeedItem = Pick<
   Freight,
@@ -29,7 +29,7 @@ export type FreightFeedItem = Pick<
   | "vehicle"
   | "schedule"
   | "status"
->;
+> & { pickupDistanceKm?: number };
 export type PrivateFreightDetail = {
   freight: Freight;
   addresses?: { pickup: Address; delivery: Address };
@@ -37,7 +37,13 @@ export type PrivateFreightDetail = {
 export type NewFreight = Pick<
   Freight,
   "title" | "description" | "vehicle" | "schedule"
-> & { pickup: Address; delivery: Address; photoIds: string[] };
+> & {
+  pickup: Address;
+  delivery: Address;
+  photoIds: string[];
+  savePickup?: boolean;
+  saveDelivery?: boolean;
+};
 export type NewOffer = {
   priceCents: number;
   vehicleId: string;
@@ -56,12 +62,30 @@ export function createBackendClient(
     me: (signal?: AbortSignal) => http.request<Viewer>("/me", { signal }),
     updateProfile: (profile: { name: string; photoId?: string }) =>
       http.request<Viewer>("/me", { method: "PATCH", body: profile }),
-    freights: (cursor?: string, signal?: AbortSignal) =>
-      http.page<FreightFeedItem>("/freights", cursor, signal),
+    freights: (
+      cursor?: string,
+      signal?: AbortSignal,
+      filters?: {
+        q?: string;
+        lat?: number;
+        lng?: number;
+        radiusKm?: number;
+        limit?: number;
+      },
+    ) =>
+      http.page<FreightFeedItem>(
+        "/freights",
+        cursor,
+        signal,
+        filters,
+      ),
     freight: (value: string, signal?: AbortSignal) =>
       http.request<PrivateFreightDetail>(`/freights/${id(value)}`, { signal }),
     createFreight: (payload: NewFreight) =>
-      post<PrivateFreightDetail>("/freights", payload),
+        post<PrivateFreightDetail & { savedAddresses: SavedAddress[] }>(
+          "/freights",
+          payload,
+        ),
     cancelFreight: (value: string) =>
       post<PrivateFreightDetail>(`/freights/${id(value)}/cancel`),
     startFreight: (value: string) =>
@@ -124,8 +148,6 @@ export function createBackendClient(
       http.request<PublicProviderProfile>(`/providers/${id(value)}`, {
         signal,
       }),
-    subscription: () =>
-      http.request<{ active: boolean; expiresAt?: string }>("/subscription"),
     upload: (
       file: File,
       purpose: "freight" | "profile" | "company" | "license",

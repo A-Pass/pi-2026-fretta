@@ -19,7 +19,6 @@ type Props = {
   onSubscription: () => void;
   photo: string;
   role: Role;
-  subscription: boolean;
   setEntered: (b: boolean) => void;
 };
 export function ProfileView({
@@ -37,7 +36,6 @@ export function ProfileView({
   onSubscription,
   photo,
   role,
-  subscription,
   setEntered,
 }: Props) {
   const [saving, setSaving] = useState(false);
@@ -239,7 +237,7 @@ export function ProfileView({
               <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
             </button>
             <button className="secondary" onClick={onSubscription}>
-              Minha assinatura · {subscription ? "Ativa" : "Inativa"}{" "}
+              Minha assinatura · Demonstração{" "}
               <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
             </button>
           </div>

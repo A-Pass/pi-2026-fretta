@@ -32,6 +32,7 @@ model User {
   //     no better-auth, para trafegarem no signup/sessão) ---
   documento     String?  @unique // CPF ou CNPJ
   telefone      String?
+  accountSetupComplete Boolean @default(false) @map("account_setup_complete")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -41,20 +42,18 @@ model User {
 
   cliente   Cliente?
   motorista Motorista?
-  appState  AppState?
+  companyProfile DriverCompanyProfile?
+  operatingArea  OperatingArea?
+  savedAddresses SavedAddress[]
+  notifications  AppNotification[]
+  messagesSent   Mensagem[] @relation("MensagemRemetente")
+  messagesReceived Mensagem[] @relation("MensagemDestinatario")
+  reviewsGiven   Avaliacao[] @relation("AvaliacaoAvaliador")
+  reviewsReceived Avaliacao[] @relation("AvaliacaoAvaliado")
+  adminReviews   AdminReview[]
+  freightAgreements AcordoFrete[] @relation("AcordoMotorista")
 
   @@map("user")
-}
-
-model AppState {
-  userId String   @id @map("user_id")
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  data   Json
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("app_states")
 }
 
 model Session {
@@ -197,12 +196,24 @@ model Motorista {
   userId String @id @map("usuario_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  cnhNumero        String   @unique @map("cnh_numero")
-  cnhCategoria     String   @map("cnh_categoria")
-  cnhValidade      DateTime @map("cnh_validade") @db.Date
+  cnhNumero        String?  @unique @map("cnh_numero")
+  cnhNumeroMascarado String? @map("cnh_numero_mascarado")
+  cnhCategoria     String?  @map("cnh_categoria")
+  cnhValidade      DateTime? @map("cnh_validade") @db.Date
   avaliacaoMedia   Decimal  @default(0) @map("avaliacao_media") @db.Decimal(3, 2)
   totalAvaliacoes  Int      @default(0) @map("total_avaliacoes")
   disponivel       Boolean  @default(true)
+  cadastroStatus   String?  @map("cadastro_status")
+  nomeCompleto     String?  @map("nome_completo")
+  tipoPessoa       String?  @map("tipo_pessoa")
+  documentoMascarado String? @map("documento_mascarado")
+  cnpjMascarado    String?  @map("cnpj_mascarado")
+  nomeEmpresa      String?  @map("nome_empresa")
+  cnhFotoDataUrl   String?  @map("cnh_foto_data_url") @db.Text
+  documentosEnviados Boolean @default(false) @map("documentos_enviados")
+  enviadoEm        DateTime? @map("enviado_em")
+  revisadoEm       DateTime? @map("revisado_em")
+  feedback         String?  @db.Text
 
   createdAt DateTime @default(now()) @map("criado_em")
 
@@ -222,6 +233,7 @@ model Veiculo {
   id           String @id @default(cuid())
   motoristaId  String @map("motorista_id")
   motorista    Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
+  ofertas      OfertaProposta[]
 
   placa              String  @unique
   modelo             String
@@ -230,6 +242,7 @@ model Veiculo {
   categoriaPorte     Porte   @map("categoria_porte")
   carroceriaFechada  Boolean @default(false) @map("carroceria_fechada")
   capacidadeKg       Decimal? @map("capacidade_kg") @db.Decimal(10, 2)
+  descricao          String   @default("")
   ativo              Boolean @default(true)
 
   createdAt DateTime @default(now()) @map("criado_em")
@@ -267,6 +280,7 @@ model Frete {
 
   motoristaSelecionadoId String?    @map("motorista_selecionado_id")
   motoristaSelecionado   Motorista? @relation("FreteMotoristaSelecionado", fields: [motoristaSelecionadoId], references: [userId])
+  acordo                 AcordoFrete?
 
   createdAt DateTime @default(now()) @map("criado_em")
   updatedAt DateTime @updatedAt @map("atualizado_em")
@@ -316,6 +330,9 @@ model Proposta {
   valorProposto  Decimal        @map("valor_proposto") @db.Decimal(10, 2)
   mensagem       String?
   statusProposta StatusProposta @default(PENDENTE) @map("status_proposta")
+  ofertas        OfertaProposta[]
+  mensagens      Mensagem[]
+  acordos        AcordoFrete[]
 
   createdAt DateTime @default(now()) @map("criado_em")
   updatedAt DateTime @updatedAt @map("atualizado_em")
@@ -337,9 +354,13 @@ model Avaliacao {
 
   avaliadorId String @map("avaliador_id")
   avaliadoId  String @map("avaliado_id")
+  avaliador   User   @relation("AvaliacaoAvaliador", fields: [avaliadorId], references: [id], onDelete: Cascade)
+  avaliado    User   @relation("AvaliacaoAvaliado", fields: [avaliadoId], references: [id], onDelete: Cascade)
 
   nota       Int
   comentario String?
+  publica    Boolean @default(false)
+  perfilAvaliador String @default("cliente") @map("perfil_avaliador")
 
   createdAt DateTime @default(now()) @map("criado_em")
 
@@ -360,6 +381,11 @@ model Mensagem {
 
   remetenteId    String  @map("remetente_id")
   destinatarioId String  @map("destinatario_id")
+  remetente      User    @relation("MensagemRemetente", fields: [remetenteId], references: [id], onDelete: Cascade)
+  destinatario   User    @relation("MensagemDestinatario", fields: [destinatarioId], references: [id], onDelete: Cascade)
+  propostaId     String? @map("proposta_id")
+  proposta       Proposta? @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  perfilRemetente String @default("cliente") @map("perfil_remetente")
   conteudo       String
   lida           Boolean @default(false)
 
@@ -367,4 +393,117 @@ model Mensagem {
 
   @@index([freteId, createdAt])
   @@map("mensagens")
+}
+
+model SavedAddress {
+  id          String @id @default(cuid())
+  userId      String @map("usuario_id")
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String
+  logradouro  String
+  numero      String
+  complemento String
+  bairro      String
+  cidade      String
+  estado      String @db.Char(2)
+  cep         String?
+  latitude    Decimal? @db.Decimal(10, 7)
+  longitude   Decimal? @db.Decimal(10, 7)
+  createdAt   DateTime @default(now()) @map("criado_em")
+  updatedAt   DateTime @updatedAt @map("atualizado_em")
+
+  @@index([userId])
+  @@map("enderecos_salvos")
+}
+
+model DriverCompanyProfile {
+  userId    String @id @map("usuario_id")
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tradeName String @map("nome_fantasia")
+  logo      String @db.Text
+  about     String @db.Text
+  city      String
+  updatedAt DateTime @updatedAt @map("atualizado_em")
+
+  @@map("perfis_empresa")
+}
+
+model OperatingArea {
+  userId   String @id @map("usuario_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  latitude Decimal @db.Decimal(10, 7)
+  longitude Decimal @db.Decimal(10, 7)
+  radiusKm Decimal @map("raio_km") @db.Decimal(8, 2)
+  label    String
+  updatedAt DateTime @updatedAt @map("atualizado_em")
+
+  @@map("areas_atuacao")
+}
+
+model OfertaProposta {
+  id            String @id
+  propostaId    String @map("proposta_id")
+  proposta      Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  veiculoId     String? @map("veiculo_id")
+  veiculo       Veiculo? @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
+  veiculoLabel  String @map("veiculo_label")
+  valorCentavos Int @map("valor_centavos")
+  disponivelEm  DateTime @map("disponivel_em")
+  mensagem     String @db.Text
+  status       String
+  createdAt    DateTime @default(now()) @map("criado_em")
+
+  @@index([propostaId, createdAt])
+  @@map("ofertas_proposta")
+}
+
+model AcordoFrete {
+  freteId       String @id @map("frete_id")
+  frete         Frete @relation(fields: [freteId], references: [id], onDelete: Cascade)
+  propostaId    String @map("proposta_id")
+  proposta      Proposta @relation(fields: [propostaId], references: [id], onDelete: Restrict)
+  ofertaId      String @map("oferta_id")
+  motoristaId   String @map("motorista_id")
+  motorista     User @relation("AcordoMotorista", fields: [motoristaId], references: [id], onDelete: Restrict)
+  nomeMotorista String @map("nome_motorista")
+  nomePrestador String? @map("nome_prestador")
+  tipoPrestador String? @map("tipo_prestador")
+  valorCentavos Int @map("valor_centavos")
+  veiculo       String
+  disponivelEm  DateTime @map("disponivel_em")
+  mensagem      String @db.Text
+  aceitoEm      DateTime @map("aceito_em")
+
+  @@map("acordos_frete")
+}
+
+model AppNotification {
+  id         String
+  userId     String @map("usuario_id")
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String @map("perfil")
+  title      String @map("titulo")
+  body       String @db.Text
+  createdAt  DateTime @map("criado_em")
+  read       Boolean @default(false) @map("lida")
+  freightId  String @map("frete_id")
+  proposalId String? @map("proposta_id")
+
+  @@id([userId, id])
+  @@index([userId, createdAt])
+  @@map("notificacoes")
+}
+
+model AdminReview {
+  id        String @id
+  caseUserId String @map("usuario_caso_id")
+  caseUser  User   @relation(fields: [caseUserId], references: [id], onDelete: Cascade)
+  version   String
+  actor     String
+  at        DateTime
+  decision  String
+  reason    String @db.Text
+
+  @@index([caseUserId, at])
+  @@map("revisoes_cadastro")
 }

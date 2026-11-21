@@ -8,26 +8,29 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import type { Store } from "@/contracts";
-import { api } from "../../api/client";
+import type { AdminCase, AdminReview } from "@/contracts";
 import { createHttpTransport } from "../../api/http";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { dateTime } from "../../lib/dates";
-import {
-  demoCases,
-  reviewDemo,
-  reviewVersion,
-  type AdminCase,
-  type AdminReview,
-} from "./rules";
+import { reviewVersion } from "./rules";
 const labels = {
   EM_ANALISE: "Em análise",
   APROVADO: "Aprovado",
   AJUSTES_SOLICITADOS: "Ajustes solicitados",
 };
 export function AdminApp() {
-  const real = true;
-  const [store, setStore] = useState<Store | null>(null),
+  const [authenticated, setAuthenticated] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [cases, setCases] = useState<AdminCase[]>([]),
+    [reviews, setReviews] = useState<AdminReview[]>([]),
+    [privateDocuments, setPrivateDocuments] = useState<{
+      profilePhoto: string | null;
+      licensePhoto: string | null;
+    } | null>(null),
+    [privateDocumentsLoading, setPrivateDocumentsLoading] = useState(false),
+    [loaded, setLoaded] = useState(false),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("EM_ANALISE"),
@@ -38,31 +41,40 @@ export function AdminApp() {
     [checks, setChecks] = useState<string[]>([]),
     [decision, setDecision] = useState<AdminReview["decision"] | null>(null),
     [success, setSuccess] = useState("");
-  async function load() {
+  async function load(): Promise<boolean> {
     setLoading(true);
     setError("");
     try {
-      if (real) {
-        // No local capability, URL parameter or e-mail can grant real administrative access.
-        await createHttpTransport().request("/admin/me");
-        throw Error(
-          "O painel real aguarda a integração da sessão, permissões e API administrativa.",
-        );
-      }
-      setStore(await api.load());
+      const result = await createHttpTransport().request<{
+        cases: AdminCase[];
+        reviews: AdminReview[];
+      }>("/admin/registrations");
+      setCases(result.cases);
+      setReviews(result.reviews);
+      setLoaded(true);
+      return true;
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Não foi possível carregar o painel.",
       );
+      return false;
     } finally {
       setLoading(false);
     }
   }
   useEffect(() => {
-    void load();
+    void createHttpTransport()
+      .request<{ authenticated: boolean }>("/admin/me")
+      .then(() => setAuthenticated(true))
+      .catch(() => setAuthenticated(false))
+      .finally(() => setLoading(false));
   }, []);
   useEffect(() => {
-    if (real) return;
+    if (!authenticated) return;
+    void load();
+  }, [authenticated]);
+  useEffect(() => {
+    if (!authenticated) return;
     const refresh = () => {
       void load();
     };
@@ -72,9 +84,39 @@ export function AdminApp() {
       window.removeEventListener("focus", refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, [real]);
-  const cases = store ? demoCases(store) : [];
+  }, [authenticated]);
   const current = cases.find((c) => c.id === selected);
+  useEffect(() => {
+    if (!authenticated || !current) {
+      setPrivateDocuments(null);
+      setPrivateDocumentsLoading(false);
+      return;
+    }
+    let active = true;
+    setPrivateDocuments(null);
+    setPrivateDocumentsLoading(true);
+    createHttpTransport()
+      .request<{ profilePhoto: string | null; licensePhoto: string | null }>(
+        `/admin/registrations/${encodeURIComponent(current.id)}/documents`,
+      )
+      .then((documents) => {
+        if (active) setPrivateDocuments(documents);
+      })
+      .catch((failure) => {
+        if (active)
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "Não foi possível carregar os documentos privados.",
+          );
+      })
+      .finally(() => {
+        if (active) setPrivateDocumentsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authenticated, current?.id]);
   const filtered = cases.filter(
     (c) =>
       (filter === "TODOS" || c.registration.status === filter) &&
@@ -89,6 +131,46 @@ export function AdminApp() {
     setSuccess("");
     setError("");
   }
+  async function login(event: React.FormEvent) {
+    event.preventDefault();
+    setLoginLoading(true);
+    setError("");
+    try {
+      await createHttpTransport().request("/admin/login", {
+        method: "POST",
+        body: {
+          username: loginUsername,
+          password: loginPassword,
+        },
+      });
+      setLoginPassword("");
+      setAuthenticated(true);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível entrar no painel.",
+      );
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+  async function logout() {
+    try {
+      await createHttpTransport().request("/admin/logout", { method: "POST" });
+      setAuthenticated(false);
+      setCases([]);
+      setReviews([]);
+      setLoaded(false);
+      setSelected(null);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Não foi possível encerrar a sessão administrativa.",
+      );
+    }
+  }
   return (
     <div className="admin-shell">
       <header className="admin-header">
@@ -98,13 +180,62 @@ export function AdminApp() {
         <span>
           <ShieldCheck size={19} /> Administração
         </span>
-        <Link href="/cliente/perfil">Voltar ao aplicativo</Link>
+        {authenticated ? (
+          <button className="admin-logout" type="button" onClick={() => void logout()}>
+            Sair
+          </button>
+        ) : (
+          <Link href="/cliente/perfil">Voltar ao aplicativo</Link>
+        )}
       </header>
       <main className="admin-main">
-        <p className="admin-demo-note">
-          {real
-            ? "Área restrita · Acesso depende de autorização no servidor."
-            : "Acesso administrativo restrito."}
+        {!authenticated && (
+          <section className="admin-login panel" aria-labelledby="admin-login-title">
+            <div className="admin-login-icon">
+              <ShieldCheck size={28} />
+            </div>
+            <span className="eyebrow">ÁREA RESTRITA</span>
+            <h1 id="admin-login-title">Login administrativo</h1>
+            <p className="muted">
+              Entre com usuário e senha. Esta área não possui cadastro público.
+            </p>
+            {error && (
+              <p className="alert" role="alert">
+                {error}
+              </p>
+            )}
+            <form onSubmit={login}>
+              <label>
+                Usuário
+                <input
+                  name="username"
+                  autoComplete="username"
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Senha
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  required
+                />
+              </label>
+              <button className="primary" disabled={loginLoading}>
+                {loginLoading ? "Entrando…" : "Entrar"}
+              </button>
+            </form>
+          </section>
+        )}
+        {authenticated && (
+        <>
+        <p className="admin-access-note">
+          Área restrita · cadastros e decisões são carregados e salvos no banco de dados.
         </p>
         {error && (
           <p className="alert" role="alert">
@@ -112,19 +243,18 @@ export function AdminApp() {
           </p>
         )}
         {loading && <p role="status">Carregando cadastros…</p>}
-        {!loading && !store && (
+        {!loading && !loaded && (
           <section className="panel">
             <h1>Painel indisponível</h1>
             <p>
-              A sessão administrativa real ainda não está integrada. Nenhum
-              documento foi carregado.
+              Não foi possível carregar os cadastros do banco de dados.
             </p>
             <button className="secondary" onClick={() => void load()}>
               Tentar novamente
             </button>
           </section>
         )}
-        {store && (
+        {loaded && (
           <>
             <span className="eyebrow">CUIDADO EM CADA CADASTRO</span>
             <h1>Análise de prestadores</h1>
@@ -255,14 +385,16 @@ export function AdminApp() {
                       <p>
                         Enviado em {dateTime(current.registration.submittedAt)}
                       </p>
-                      {current.photo ? (
+                      {privateDocuments?.profilePhoto ? (
                         <img
                           className="admin-face"
-                          src={current.photo}
+                          src={privateDocuments.profilePhoto}
                           alt={`Foto de ${current.registration.fullName}`}
                         />
+                      ) : privateDocumentsLoading ? (
+                        <p>Carregando foto privada…</p>
                       ) : (
-                        <p>Foto fictícia não incluída neste exemplo.</p>
+                        <p>Foto de perfil não cadastrada.</p>
                       )}
                     </div>
                     <div>
@@ -280,12 +412,23 @@ export function AdminApp() {
                       </p>
                       <div className="admin-document">
                         <ClipboardList />
-                        <p>Imagem privada da CNH</p>
-                        <small>
-                          A imagem da CNH não é exibida por esta interface.
-                          visualização real depende de upload privado e
-                          autorização do servidor.
-                        </small>
+                        {privateDocuments?.licensePhoto ? (
+                          <img
+                            className="admin-license-preview"
+                            src={privateDocuments.licensePhoto}
+                            alt={`Imagem da CNH de ${current.registration.fullName}`}
+                          />
+                        ) : privateDocumentsLoading ? (
+                          <p>Carregando documento privado…</p>
+                        ) : (
+                          <>
+                            <p>Imagem da CNH não cadastrada.</p>
+                            <small>
+                              A aprovação exige o envio e a conferência deste
+                              documento.
+                            </small>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -316,8 +459,8 @@ export function AdminApp() {
                   <section className="panel">
                     <h2>Conferência do cadastro</h2>
                     <p>
-                      Marque os itens para testar a aprovação. Isso não confirma
-                      autenticidade documental.
+                      Marque os itens conferidos. A aprovação não substitui a
+                      verificação de autenticidade documental.
                     </p>
                     <div className="admin-checks">
                       {[
@@ -365,7 +508,11 @@ export function AdminApp() {
                       </button>
                       <button
                         className="primary"
-                        disabled={checks.length !== 4}
+                        disabled={
+                          checks.length !== 4 ||
+                          !privateDocuments?.licensePhoto ||
+                          privateDocumentsLoading
+                        }
                         onClick={() => setDecision("APROVADO")}
                       >
                         <CheckCircle2 size={18} />
@@ -381,11 +528,11 @@ export function AdminApp() {
                 )}
                 <section className="panel">
                   <h2>Histórico de análises</h2>
-                  {!(store.adminReviews || []).some(
-                    (r) => r.caseId === current.id,
-                  ) && <p>Nenhuma decisão registrada pelo painel.</p>}
+                  {!reviews.some((r) => r.caseId === current.id) && (
+                    <p>Nenhuma decisão registrada pelo painel.</p>
+                  )}
                   <ol className="admin-history">
-                    {(store.adminReviews || [])
+                    {reviews
                       .filter((r) => r.caseId === current.id)
                       .slice()
                       .reverse()
@@ -403,6 +550,8 @@ export function AdminApp() {
               </>
             )}
           </>
+        )}
+        </>
         )}
       </main>
       <ConfirmDialog
@@ -426,24 +575,38 @@ export function AdminApp() {
         cancelLabel="Voltar à análise"
         destructive={false}
         onConfirm={async () => {
-          if (!current || !decision || real) return false;
-          const latest = await api.load();
-          const updated = reviewDemo(
-            latest,
-            current.id,
-            reviewVersion(current),
-            decision,
-            reason,
-          );
-          await api.save(updated);
-          setStore(updated);
-          setSuccess(
-            decision === "APROVADO"
-              ? "Cadastro aprovado."
-              : "Correções solicitadas. O motivo está disponível no cadastro do prestador.",
-          );
-          setDecision(null);
-          return true;
+          if (!current || !decision) return false;
+          try {
+            await createHttpTransport().request(
+              `/admin/registrations/${encodeURIComponent(current.id)}/review`,
+              {
+                method: "POST",
+                body: {
+                  expectedVersion: reviewVersion(current),
+                  decision,
+                  reason,
+                  checks,
+                },
+              },
+            );
+            const refreshed = await load();
+            setSuccess(
+              refreshed
+                ? decision === "APROVADO"
+                  ? "Cadastro aprovado."
+                  : "Correções solicitadas. O motivo está disponível no cadastro do prestador."
+                : "Decisão registrada no banco de dados. Atualize o painel para carregar os dados mais recentes.",
+            );
+            setDecision(null);
+            return true;
+          } catch (failure) {
+            setError(
+              failure instanceof Error
+                ? failure.message
+                : "Não foi possível registrar a decisão.",
+            );
+            return false;
+          }
         }}
       />
     </div>

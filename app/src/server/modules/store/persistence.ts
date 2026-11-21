@@ -1,0 +1,1820 @@
+import { randomUUID } from "node:crypto";
+import type {
+  Address,
+  AdminCase,
+  AdminReview,
+  DriverRegistration,
+  Freight,
+  Proposal,
+  ProposalOffer,
+  Role,
+  SavedAddress,
+  Store,
+  Vehicle,
+} from "@/contracts";
+import { Prisma, type PrismaClient } from "@/server/generated/prisma/client";
+
+type Transaction = Prisma.TransactionClient;
+type Database = PrismaClient | Transaction;
+type RecordValue = Record<string, unknown>;
+
+export class StorePersistenceError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+function record(value: unknown): RecordValue | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as RecordValue)
+    : null;
+}
+
+function string(value: unknown, maxLength: number) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function categoryFromPorte(value: string) {
+  if (value === "PEQUENO") return "Caminhão pequeno";
+  if (value === "MEDIO") return "Caminhão médio";
+  return "Caminhão grande";
+}
+
+function porteFromCategory(value: unknown): "PEQUENO" | "MEDIO" | "GRANDE" {
+  if (value === "Utilitário" || value === "Caminhão pequeno") return "PEQUENO";
+  if (value === "Caminhão médio") return "MEDIO";
+  if (value === "Caminhão grande") return "GRANDE";
+  throw new StorePersistenceError(
+    "INVALID_VEHICLE",
+    "A categoria do veículo é inválida.",
+    422,
+  );
+}
+
+function moneyToCents(value: Prisma.Decimal | number) {
+  return Math.round(Number(value) * 100);
+}
+
+function offerStatus(value: string): ProposalOffer["status"] {
+  if (
+    value === "ACEITA" ||
+    value === "RECUSADA" ||
+    value === "SUBSTITUIDA" ||
+    value === "ENCERRADA"
+  )
+    return value;
+  return "PENDENTE";
+}
+
+function proposalStatus(value: string): Proposal["status"] {
+  if (value === "ACEITA") return "ACEITA";
+  if (value === "PENDENTE") return "PENDENTE";
+  return "ENCERRADA";
+}
+
+function freightStatus(
+  value: string,
+): Freight["status"] {
+  if (value === "ACEITO") return "AGENDADO";
+  if (
+    value === "EM_TRANSPORTE" ||
+    value === "CONCLUIDO" ||
+    value === "CANCELADO"
+  )
+    return value;
+  return "ABERTO";
+}
+
+function toAddress(
+  address: {
+    logradouro: string;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string;
+    estado: string;
+    cep: string;
+    latitude: Prisma.Decimal | null;
+    longitude: Prisma.Decimal | null;
+  },
+): Address {
+  return {
+    label: "",
+    street: address.logradouro,
+    number: address.numero ?? "",
+    complement: address.complemento ?? "",
+    neighborhood: address.bairro ?? "",
+    city: address.cidade,
+    state: address.estado,
+    postalCode: address.cep,
+    point:
+      address.latitude == null || address.longitude == null
+        ? null
+        : {
+            lat: Number(address.latitude),
+            lng: Number(address.longitude),
+          },
+  };
+}
+
+function savedAddressFromRow(address: {
+  id: string;
+  label: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string | null;
+  latitude: Prisma.Decimal | null;
+  longitude: Prisma.Decimal | null;
+}): SavedAddress {
+  return {
+    id: address.id,
+    label: address.label,
+    street: address.logradouro,
+    number: address.numero,
+    complement: address.complemento,
+    neighborhood: address.bairro,
+    city: address.cidade,
+    state: address.estado,
+    postalCode: address.cep ?? undefined,
+    point:
+      address.latitude == null || address.longitude == null
+        ? null
+        : {
+            lat: Number(address.latitude),
+            lng: Number(address.longitude),
+          },
+  };
+}
+
+function vehicleFromRow(vehicle: {
+  id: string;
+  categoriaPorte: "PEQUENO" | "MEDIO" | "GRANDE";
+  modelo: string;
+  placa: string;
+  capacidadeKg: Prisma.Decimal | null;
+  descricao: string;
+}): Vehicle {
+  return {
+    id: vehicle.id,
+    category: categoryFromPorte(vehicle.categoriaPorte),
+    model: vehicle.modelo,
+    plate: vehicle.placa,
+    capacityKg:
+      vehicle.capacidadeKg == null ? undefined : Number(vehicle.capacidadeKg),
+    description: vehicle.descricao,
+  };
+}
+
+function registrationFromRow(
+  driver: {
+    cadastroStatus: string | null;
+    nomeCompleto: string | null;
+    tipoPessoa: string | null;
+    documentoMascarado: string | null;
+    cnpjMascarado: string | null;
+    nomeEmpresa: string | null;
+    cnhNumeroMascarado: string | null;
+    cnhCategoria: string | null;
+    cnhValidade: Date | null;
+    cnhFotoDataUrl: string | null;
+    documentosEnviados: boolean;
+    enviadoEm: Date | null;
+    revisadoEm: Date | null;
+    feedback: string | null;
+  }): DriverRegistration | undefined {
+  if (
+    !driver.cadastroStatus ||
+    !driver.nomeCompleto ||
+    !driver.cnhNumeroMascarado ||
+    !driver.cnhCategoria ||
+    !driver.cnhValidade ||
+    !driver.enviadoEm
+  )
+    return undefined;
+  const expiresOn = driver.cnhValidade.toISOString().slice(0, 10);
+  return {
+    status:
+      driver.cadastroStatus === "APROVADO"
+        ? "APROVADO"
+        : driver.cadastroStatus === "AJUSTES_SOLICITADOS"
+          ? "AJUSTES_SOLICITADOS"
+          : "EM_ANALISE",
+    fullName: driver.nomeCompleto,
+    personType: driver.tipoPessoa === "pj" ? "pj" : "pf",
+    cpfMasked: driver.documentoMascarado ?? "",
+    ...(driver.cnpjMascarado ? { cnpjMasked: driver.cnpjMascarado } : {}),
+    ...(driver.nomeEmpresa ? { companyName: driver.nomeEmpresa } : {}),
+    license: {
+      numberMasked: driver.cnhNumeroMascarado,
+      category: driver.cnhCategoria,
+      expiresOn,
+    },
+    ...(driver.cnhFotoDataUrl
+      ? { licensePhotoDataUrl: driver.cnhFotoDataUrl }
+      : {}),
+    documentsSubmitted: driver.documentosEnviados,
+    submittedAt: driver.enviadoEm.toISOString(),
+    ...(driver.revisadoEm
+      ? { reviewedAt: driver.revisadoEm.toISOString() }
+      : {}),
+    ...(driver.feedback ? { feedback: driver.feedback } : {}),
+  };
+}
+
+function proposalFromRow(proposal: {
+  id: string;
+  freteId: string;
+  motoristaId: string;
+  valorProposto: Prisma.Decimal;
+  mensagem: string | null;
+  statusProposta: string;
+  motorista: {
+    avaliacaoMedia: Prisma.Decimal;
+    user: {
+      name: string;
+      companyProfile: {
+        tradeName: string;
+        logo: string;
+      } | null;
+    };
+  };
+  ofertas: {
+    id: string;
+    veiculoId: string | null;
+    veiculoLabel: string;
+    valorCentavos: number;
+    disponivelEm: Date;
+    mensagem: string;
+    status: string;
+    createdAt: Date;
+  }[];
+}): Proposal {
+  const offers: ProposalOffer[] = proposal.ofertas.map((offer) => ({
+    id: offer.id,
+    ...(offer.veiculoId ? { vehicleId: offer.veiculoId } : {}),
+    vehicle: offer.veiculoLabel,
+    priceCents: offer.valorCentavos,
+    availableAt: offer.disponivelEm.toISOString(),
+    message: offer.mensagem,
+    createdAt: offer.createdAt.toISOString(),
+    status: offerStatus(offer.status),
+  }));
+  const latest = offers.at(-1);
+  const company = proposal.motorista.user.companyProfile;
+  return {
+    id: proposal.id,
+    freightId: proposal.freteId,
+    driverId: proposal.motoristaId,
+    driver: proposal.motorista.user.name,
+    rating: Number(proposal.motorista.avaliacaoMedia),
+    ...(company
+      ? {
+          providerKind: "empresa" as const,
+          providerName: company.tradeName,
+          providerLogo: company.logo,
+        }
+      : {
+          providerKind: "autonomo" as const,
+          providerName: proposal.motorista.user.name,
+        }),
+    ...(latest?.vehicleId ? { vehicleId: latest.vehicleId } : {}),
+    vehicle: latest?.vehicle ?? "Veículo cadastrado",
+    priceCents: latest?.priceCents ?? moneyToCents(proposal.valorProposto),
+    availableAt: latest?.availableAt ?? "",
+    message: latest?.message ?? proposal.mensagem ?? "",
+    status: proposalStatus(proposal.statusProposta),
+    offers,
+  };
+}
+
+export async function loadAccountStore(
+  database: Database,
+  userId: string,
+): Promise<Store> {
+  const [
+    user,
+    freightRows,
+    proposalRows,
+    messageRows,
+  ] = await Promise.all([
+    database.user.findUnique({
+      where: { id: userId },
+      include: {
+        motorista: { include: { veiculos: { where: { ativo: true } } } },
+        companyProfile: true,
+        operatingArea: true,
+        savedAddresses: { orderBy: { createdAt: "asc" } },
+        notifications: { orderBy: { createdAt: "desc" } },
+      },
+    }),
+    database.frete.findMany({
+      where: {
+        OR: [{ clienteId: userId }, { motoristaSelecionadoId: userId }],
+      },
+      include: {
+        cliente: { include: { user: true } },
+        enderecoOrigem: true,
+        enderecoDestino: true,
+        fotos: { orderBy: { ordem: "asc" } },
+        avaliacoes: true,
+        acordo: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    database.proposta.findMany({
+      where: {
+        OR: [{ motoristaId: userId }, { frete: { clienteId: userId } }],
+      },
+      include: {
+        motorista: {
+          include: { user: { include: { companyProfile: true } } },
+        },
+        ofertas: { orderBy: { createdAt: "asc" } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    database.mensagem.findMany({
+      where: { OR: [{ remetenteId: userId }, { destinatarioId: userId }] },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+  if (!user)
+    throw new StorePersistenceError(
+      "USER_NOT_FOUND",
+      "A conta autenticada não foi encontrada.",
+      404,
+    );
+
+  const freights: Freight[] = [];
+  const freightAddresses: NonNullable<Store["freightAddresses"]> = {};
+  for (const freight of freightRows) {
+    const agreement = freight.acordo;
+    const reviews: Freight["reviews"] = {};
+    const reviewComments: NonNullable<Freight["reviewComments"]> = {};
+    const reviewPublicComments: NonNullable<
+      Freight["reviewPublicComments"]
+    > = {};
+    const reviewDates: NonNullable<Freight["reviewDates"]> = {};
+    for (const review of freight.avaliacoes) {
+      const role = review.perfilAvaliador as Role;
+      if (role !== "cliente" && role !== "motorista") continue;
+      reviews[role] = review.nota;
+      reviewComments[role] = review.comentario ?? "";
+      reviewPublicComments[role] = review.publica;
+      reviewDates[role] = review.createdAt.toISOString();
+    }
+
+    freights.push({
+      id: freight.id,
+      clientName: freight.cliente.user.name,
+      title: freight.titulo,
+      description: freight.descricao ?? "",
+      origin: approximateRegion(freight.enderecoOrigem),
+      destination: approximateRegion(freight.enderecoDestino),
+      vehicle: categoryFromPorte(freight.categoriaPorte),
+      schedule: freight.dataColetaPrevista
+        ? freight.dataEntregaPrevista
+          ? {
+              kind: "intervalo",
+              start: freight.dataColetaPrevista.toISOString(),
+              end: freight.dataEntregaPrevista.toISOString(),
+            }
+          : {
+              kind: "fixa",
+              start: freight.dataColetaPrevista.toISOString(),
+            }
+        : { kind: "combinar" },
+      status: freightStatus(freight.statusFrete),
+      photos: freight.fotos.map((photo) => photo.url),
+      ...(agreement
+        ? {
+            acceptedProposalId: agreement.propostaId,
+            agreement: {
+              proposalId: agreement.propostaId,
+              offerId: agreement.ofertaId,
+              driver: agreement.nomeMotorista,
+              driverId: agreement.motoristaId,
+              ...(agreement.nomePrestador
+                ? { providerName: agreement.nomePrestador }
+                : {}),
+              ...(agreement.tipoPrestador === "empresa" ||
+              agreement.tipoPrestador === "autonomo"
+                ? { providerKind: agreement.tipoPrestador }
+                : {}),
+              priceCents: agreement.valorCentavos,
+              vehicle: agreement.veiculo,
+              availableAt: agreement.disponivelEm.toISOString(),
+              message: agreement.mensagem,
+              acceptedAt: agreement.aceitoEm.toISOString(),
+            },
+          }
+        : {}),
+      reviews,
+      ...(Object.keys(reviewComments).length ? { reviewComments } : {}),
+      ...(Object.keys(reviewPublicComments).length
+        ? { reviewPublicComments }
+        : {}),
+      ...(Object.keys(reviewDates).length ? { reviewDates } : {}),
+    });
+
+    if (
+      freight.clienteId === userId ||
+      freight.motoristaSelecionadoId === userId
+    ) {
+      freightAddresses[freight.id] = {
+        pickup: toAddress(freight.enderecoOrigem),
+        delivery: toAddress(freight.enderecoDestino),
+      };
+    }
+  }
+
+  const proposals = proposalRows.map(proposalFromRow);
+  const registration = user.motorista
+    ? registrationFromRow(user.motorista)
+    : undefined;
+  return {
+    accountSetupComplete: user.accountSetupComplete,
+    profile: { id: user.id, name: user.name, photo: user.image ?? "" },
+    ...(registration ? { driverRegistration: registration } : {}),
+    vehicles: user.motorista?.veiculos.map(vehicleFromRow) ?? [],
+    ...(user.companyProfile
+      ? {
+          companyProfile: {
+            tradeName: user.companyProfile.tradeName,
+            logo: user.companyProfile.logo,
+            about: user.companyProfile.about,
+            city: user.companyProfile.city,
+          },
+        }
+      : {}),
+    ...(user.operatingArea
+      ? {
+          operatingArea: {
+            center: {
+              lat: Number(user.operatingArea.latitude),
+              lng: Number(user.operatingArea.longitude),
+            },
+            radiusKm: Number(user.operatingArea.radiusKm),
+            label: user.operatingArea.label,
+          },
+        }
+      : {}),
+    addresses: user.savedAddresses.map(savedAddressFromRow),
+    notifications: user.notifications.map((notification) => ({
+      id: notification.id,
+      role: notification.role as Role,
+      title: notification.title,
+      body: notification.body,
+      createdAt: notification.createdAt.toISOString(),
+      read: notification.read,
+      freightId: notification.freightId,
+      ...(notification.proposalId
+        ? { proposalId: notification.proposalId }
+        : {}),
+    })),
+    freightAddresses,
+    freights,
+    proposals,
+    messages: messageRows.map((message) => ({
+      id: message.id,
+      freightId: message.freteId,
+      proposalId: message.propostaId ?? "",
+      role: message.perfilRemetente as Role,
+      text: message.conteudo,
+      createdAt: message.createdAt.toISOString(),
+    })),
+  };
+}
+
+function approximateRegion(address: {
+  bairro: string | null;
+  cidade: string;
+  estado: string;
+}) {
+  return [address.bairro, address.cidade, address.estado]
+    .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index)
+    .join(", ");
+}
+
+function parseCoordinates(address: RecordValue) {
+  const point = record(address.point);
+  const latitude = point?.lat;
+  const longitude = point?.lng;
+  if (
+    typeof latitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180
+  )
+    throw new StorePersistenceError(
+      "INVALID_ADDRESS",
+      "Informe um endereço com ponto de localização válido.",
+      422,
+    );
+  return { latitude, longitude };
+}
+
+function parseSavedAddress(value: unknown) {
+  const address = record(value);
+  if (!address)
+    throw new StorePersistenceError(
+      "INVALID_ADDRESS",
+      "Um dos endereços informados é inválido.",
+      422,
+    );
+  const city = string(address.city, 120);
+  const state = string(address.state, 2).toUpperCase();
+  const street = string(address.street, 200);
+  if (!city || state.length !== 2 || !street)
+    throw new StorePersistenceError(
+      "INVALID_ADDRESS",
+      "Informe rua, cidade e estado para salvar o endereço.",
+      422,
+    );
+  return {
+    id: string(address.id, 120),
+    label: string(address.label, 80),
+    logradouro: street,
+    numero: string(address.number, 20),
+    complemento: string(address.complement, 200),
+    bairro: string(address.neighborhood, 120),
+    cidade: city,
+    estado: state,
+    cep: string(address.postalCode, 20) || null,
+    ...parseCoordinates(address),
+  };
+}
+
+function parseRegistration(value: unknown) {
+  const registration = record(value);
+  const license = record(registration?.license);
+  if (!registration || !license)
+    throw new StorePersistenceError(
+      "INVALID_REGISTRATION",
+      "Os dados do cadastro do motorista são inválidos.",
+      422,
+    );
+  const fullName = string(registration.fullName, 120);
+  const personType = registration.personType;
+  const numberMasked = string(license.numberMasked, 40);
+  const category = string(license.category, 10);
+  const expiresOn = string(license.expiresOn, 10);
+  const submittedAt = string(registration.submittedAt, 40);
+  const submittedDate = new Date(submittedAt);
+  const expiryDate = new Date(`${expiresOn}T00:00:00.000Z`);
+  const photo = registration.licensePhotoDataUrl;
+  const cpfMasked = string(registration.cpfMasked, 30);
+  const cnpjMasked = string(registration.cnpjMasked, 30);
+  const companyName = string(registration.companyName, 160);
+  if (
+    !fullName ||
+    (personType !== "pf" && personType !== "pj") ||
+    !/^\*{3}\.\*{3}\.\*{3}-\d{2}$/.test(cpfMasked) ||
+    (personType === "pj" &&
+      (!/^\*\*\.\*{3}\.\*{3}\/\*{4}-\d{2}$/.test(cnpjMasked) ||
+        !companyName)) ||
+    !numberMasked ||
+    !/^\*{9}\d{2}$/.test(numberMasked) ||
+    !category ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(expiresOn) ||
+    !Number.isFinite(expiryDate.getTime()) ||
+    expiryDate.toISOString().slice(0, 10) !== expiresOn ||
+    !Number.isFinite(submittedDate.getTime()) ||
+    (photo !== undefined &&
+      (typeof photo !== "string" ||
+        photo.length > 7_000_000 ||
+        !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(photo)))
+  )
+    throw new StorePersistenceError(
+      "INVALID_REGISTRATION",
+      "Confira os dados e documentos do cadastro.",
+      422,
+    );
+  return {
+    status: "EM_ANALISE",
+    nomeCompleto: fullName,
+    tipoPessoa: personType,
+    documentoMascarado: cpfMasked,
+    cnpjMascarado: cnpjMasked || null,
+    nomeEmpresa: companyName || null,
+    cnhNumeroMascarado: numberMasked,
+    cnhCategoria: category,
+    cnhValidade: expiryDate,
+    cnhFotoDataUrl: typeof photo === "string" ? photo : null,
+    documentosEnviados: registration.documentsSubmitted === true,
+    enviadoEm: submittedDate,
+  };
+}
+
+function parseVehicle(value: unknown) {
+  const vehicle = record(value);
+  if (!vehicle)
+    throw new StorePersistenceError(
+      "INVALID_VEHICLE",
+      "Um dos veículos informados é inválido.",
+      422,
+    );
+  const id = string(vehicle.id, 120);
+  const model = string(vehicle.model, 80);
+  const plate = string(vehicle.plate, 8).toUpperCase();
+  const description = string(vehicle.description, 600);
+  const capacityKg =
+    typeof vehicle.capacityKg === "number" &&
+    Number.isFinite(vehicle.capacityKg) &&
+    vehicle.capacityKg > 0
+      ? vehicle.capacityKg
+      : null;
+  const hasCapacity = vehicle.capacityKg !== undefined;
+  if (
+    !id ||
+    !model ||
+    !/^[A-Z0-9]{7}$/.test(plate) ||
+    (hasCapacity &&
+      (typeof vehicle.capacityKg !== "number" ||
+        !Number.isFinite(vehicle.capacityKg) ||
+        vehicle.capacityKg <= 0 ||
+        vehicle.capacityKg > 100_000)))
+    throw new StorePersistenceError(
+      "INVALID_VEHICLE",
+      "Informe modelo e placa válidos para cada veículo.",
+      422,
+    );
+  return {
+    id,
+    modelo: model,
+    placa: plate,
+    categoriaPorte: porteFromCategory(vehicle.category),
+    capacidadeKg: capacityKg,
+    descricao: description,
+  };
+}
+
+async function saveAddresses(
+  tx: Transaction,
+  userId: string,
+  values: unknown[],
+) {
+  if (values.length > 50)
+    throw new StorePersistenceError(
+      "INVALID_ADDRESS",
+      "O limite é de 50 endereços salvos.",
+      422,
+    );
+  const addresses = values.map(parseSavedAddress);
+  const ids = new Set<string>();
+  for (const address of addresses) {
+    if (ids.has(address.id))
+      throw new StorePersistenceError(
+        "INVALID_ADDRESS",
+        "Há endereços repetidos na solicitação.",
+        422,
+      );
+    ids.add(address.id);
+    const existing = await tx.savedAddress.findUnique({
+      where: { id: address.id },
+      select: { userId: true },
+    });
+    if (existing && existing.userId !== userId)
+      throw new StorePersistenceError(
+        "FORBIDDEN",
+        "Não é permitido alterar endereços de outra conta.",
+        403,
+      );
+    await tx.savedAddress.upsert({
+      where: { id: address.id },
+      create: { ...address, userId },
+      update: {
+        label: address.label,
+        logradouro: address.logradouro,
+        numero: address.numero,
+        complemento: address.complemento,
+        bairro: address.bairro,
+        cidade: address.cidade,
+        estado: address.estado,
+        cep: address.cep,
+        latitude: address.latitude,
+        longitude: address.longitude,
+      },
+    });
+  }
+  await tx.savedAddress.deleteMany({
+    where: { userId, ...(ids.size ? { id: { notIn: [...ids] } } : {}) },
+  });
+}
+
+async function saveVehicles(
+  tx: Transaction,
+  userId: string,
+  values: unknown[],
+) {
+  if (values.length > 30)
+    throw new StorePersistenceError(
+      "INVALID_VEHICLE",
+      "O limite é de 30 veículos cadastrados.",
+      422,
+    );
+  if (!values.length) {
+    await tx.veiculo.deleteMany({ where: { motoristaId: userId } });
+    return;
+  }
+  const vehicles = values.map(parseVehicle);
+  const ids = new Set<string>();
+  for (const vehicle of vehicles) {
+    if (ids.has(vehicle.id))
+      throw new StorePersistenceError(
+        "INVALID_VEHICLE",
+        "Há veículos repetidos na solicitação.",
+        422,
+      );
+    ids.add(vehicle.id);
+    const existing = await tx.veiculo.findUnique({
+      where: { id: vehicle.id },
+      select: { motoristaId: true },
+    });
+    if (existing && existing.motoristaId !== userId)
+      throw new StorePersistenceError(
+        "FORBIDDEN",
+        "Não é permitido alterar veículos de outra conta.",
+        403,
+      );
+    await tx.veiculo.upsert({
+      where: { id: vehicle.id },
+      create: { ...vehicle, motoristaId: userId },
+      update: vehicle,
+    });
+  }
+  await tx.veiculo.deleteMany({
+    where: { motoristaId: userId, id: { notIn: [...ids] } },
+  });
+}
+
+async function saveDriverRegistration(
+  tx: Transaction,
+  userId: string,
+  incoming: unknown,
+) {
+  if (incoming === undefined) return;
+  const submitted = parseRegistration(incoming);
+  const existing = await tx.motorista.findUnique({
+    where: { userId },
+    select: { cadastroStatus: true, enviadoEm: true },
+  });
+  if (existing?.enviadoEm?.getTime() === submitted.enviadoEm.getTime())
+    return;
+  await tx.motorista.upsert({
+    where: { userId },
+    create: { userId, ...submitted },
+    update: submitted,
+  });
+}
+
+async function saveProposals(
+  tx: Transaction,
+  userId: string,
+  values: unknown[],
+) {
+  for (const item of values) {
+    const input = record(item);
+    if (!input || typeof input.id !== "string") continue;
+    const proposal = await tx.proposta.findUnique({
+      where: { id: input.id },
+      include: { frete: true, ofertas: { orderBy: { createdAt: "asc" } } },
+    });
+    if (!proposal) continue;
+
+    if (proposal.motoristaId === userId) {
+      const offers = Array.isArray(input.offers)
+        ? input.offers.map((offer) => record(offer)).filter(Boolean)
+        : [];
+      const latest = offers.at(-1);
+      if (!latest || proposal.ofertas.some((offer) => offer.id === latest.id))
+        continue;
+      if (
+        (proposal.statusProposta !== "PENDENTE" &&
+          proposal.statusProposta !== "REJEITADA") ||
+        proposal.frete.statusFrete !== "ABERTO"
+      )
+        throw new StorePersistenceError(
+          "PROPOSAL_CLOSED",
+          "Não é possível alterar uma proposta encerrada.",
+          409,
+        );
+      const priceCents =
+        typeof latest.priceCents === "number" ? latest.priceCents : NaN;
+      const availableAt =
+        typeof latest.availableAt === "string"
+          ? new Date(latest.availableAt)
+          : new Date(Number.NaN);
+      const vehicleId = string(latest.vehicleId, 120);
+      const message = string(latest.message, 2000);
+      const vehicle = await tx.veiculo.findFirst({
+        where: { id: vehicleId, motoristaId: userId, ativo: true },
+      });
+      if (
+        !Number.isSafeInteger(priceCents) ||
+        priceCents <= 0 ||
+        priceCents > 100_000_000 ||
+        !Number.isFinite(availableAt.getTime()) ||
+        availableAt.getTime() <= Date.now() ||
+        !vehicle ||
+        !message
+      )
+        throw new StorePersistenceError(
+          "INVALID_PROPOSAL",
+          "Informe valor, veículo, disponibilidade e comentário válidos.",
+          422,
+        );
+      const offerId = string(latest.id, 120);
+      if (!offerId)
+        throw new StorePersistenceError(
+          "INVALID_PROPOSAL",
+          "A oferta não tem um identificador válido.",
+          422,
+        );
+      const label = `${categoryFromPorte(vehicle.categoriaPorte)} · ${vehicle.modelo}`;
+      await tx.ofertaProposta.create({
+        data: {
+          id: offerId,
+          propostaId: proposal.id,
+          veiculoId: vehicle.id,
+          veiculoLabel: label,
+          valorCentavos: priceCents,
+          disponivelEm: availableAt,
+          mensagem: message,
+          status: "PENDENTE",
+        },
+      });
+      await tx.proposta.update({
+        where: { id: proposal.id },
+        data: {
+          valorProposto: (priceCents / 100).toFixed(2),
+          mensagem: message,
+          statusProposta: "PENDENTE",
+        },
+      });
+      continue;
+    }
+
+    if (
+      proposal.frete.clienteId === userId &&
+      input.status === "ENCERRADA" &&
+      proposal.statusProposta === "PENDENTE"
+    ) {
+      const declinedOfferId = Array.isArray(input.offers)
+        ? input.offers
+            .map((offer) => record(offer))
+            .find((offer) => offer?.status === "RECUSADA")?.id
+        : undefined;
+      const latestOffer = proposal.ofertas.at(-1);
+      if (
+        !latestOffer ||
+        declinedOfferId !== latestOffer.id ||
+        latestOffer.status !== "PENDENTE"
+      )
+        throw new StorePersistenceError(
+          "PROPOSAL_CHANGED",
+          "A oferta mudou; atualize a conversa antes de recusá-la.",
+          409,
+        );
+      await tx.proposta.update({
+        where: { id: proposal.id },
+        data: { statusProposta: "REJEITADA" },
+      });
+      await tx.ofertaProposta.update({
+        where: { id: latestOffer.id },
+        data: { status: "RECUSADA" },
+      });
+    }
+  }
+}
+
+async function acceptFreight(
+  tx: Transaction,
+  userId: string,
+  freightId: string,
+  input: RecordValue,
+) {
+  const agreement = record(input.agreement);
+  if (!agreement)
+    throw new StorePersistenceError(
+      "INVALID_ACCEPTANCE",
+      "O aceite precisa identificar a oferta esperada.",
+      422,
+    );
+  const proposalId = string(input.acceptedProposalId, 120);
+  const offerId = string(agreement.offerId, 120);
+  if (
+    !proposalId ||
+    agreement.proposalId !== proposalId ||
+    typeof agreement.acceptedAt !== "string"
+  )
+    throw new StorePersistenceError(
+      "INVALID_ACCEPTANCE",
+      "O aceite não corresponde à proposta informada.",
+      422,
+    );
+  const freight = await tx.frete.findUnique({
+    where: { id: freightId },
+    include: { acordo: true },
+  });
+  if (!freight || freight.clienteId !== userId)
+    throw new StorePersistenceError(
+      "FORBIDDEN",
+      "Não é permitido aceitar propostas neste frete.",
+      403,
+    );
+  if (
+    freight.statusFrete === "ACEITO" &&
+    freight.acordo?.propostaId === proposalId &&
+    freight.acordo.ofertaId === offerId
+  )
+    return;
+  if (freight.statusFrete !== "ABERTO" && freight.statusFrete !== "EM_NEGOCIACAO")
+    throw new StorePersistenceError(
+      "FREIGHT_CLOSED",
+      "Este frete não está mais disponível para aceite.",
+      409,
+    );
+  const proposal = await tx.proposta.findUnique({
+    where: { id: proposalId },
+    include: {
+      motorista: { include: { user: { include: { companyProfile: true } } } },
+      ofertas: true,
+    },
+  });
+  const offer = proposal?.ofertas.find((entry) => entry.id === offerId);
+  if (
+    !proposal ||
+    proposal.freteId !== freightId ||
+    proposal.statusProposta !== "PENDENTE" ||
+    !offer ||
+    offer.status !== "PENDENTE" ||
+    proposal.motorista.cadastroStatus !== "APROVADO"
+  )
+    throw new StorePersistenceError(
+      "PROPOSAL_CHANGED",
+      "A proposta ou a oferta selecionada não está mais pendente.",
+      409,
+    );
+  const acceptedAt = new Date(String(agreement.acceptedAt));
+  if (!Number.isFinite(acceptedAt.getTime()))
+    throw new StorePersistenceError(
+      "INVALID_ACCEPTANCE",
+      "A data do aceite é inválida.",
+      422,
+    );
+  await tx.frete.update({
+    where: { id: freightId },
+    data: {
+      statusFrete: "ACEITO",
+      motoristaSelecionadoId: proposal.motoristaId,
+    },
+  });
+  await tx.proposta.updateMany({
+    where: { freteId: freightId },
+    data: { statusProposta: "CANCELADA" },
+  });
+  await tx.proposta.update({
+    where: { id: proposalId },
+    data: { statusProposta: "ACEITA" },
+  });
+  await tx.ofertaProposta.updateMany({
+    where: { proposta: { freteId: freightId }, status: "PENDENTE" },
+    data: { status: "ENCERRADA" },
+  });
+  await tx.ofertaProposta.update({
+    where: { id: offerId },
+    data: { status: "ACEITA" },
+  });
+  const company = proposal.motorista.user.companyProfile;
+  await tx.acordoFrete.upsert({
+    where: { freteId: freightId },
+    create: {
+      freteId: freightId,
+      propostaId: proposalId,
+      ofertaId: offerId,
+      motoristaId: proposal.motoristaId,
+      nomeMotorista: proposal.motorista.user.name,
+      nomePrestador: company?.tradeName ?? null,
+      tipoPrestador: company ? "empresa" : "autonomo",
+      valorCentavos: offer.valorCentavos,
+      veiculo: offer.veiculoLabel,
+      disponivelEm: offer.disponivelEm,
+      mensagem: offer.mensagem,
+      aceitoEm: acceptedAt,
+    },
+    update: {
+      propostaId: proposalId,
+      ofertaId: offerId,
+      motoristaId: proposal.motoristaId,
+      nomeMotorista: proposal.motorista.user.name,
+      nomePrestador: company?.tradeName ?? null,
+      tipoPrestador: company ? "empresa" : "autonomo",
+      valorCentavos: offer.valorCentavos,
+      veiculo: offer.veiculoLabel,
+      disponivelEm: offer.disponivelEm,
+      mensagem: offer.mensagem,
+      aceitoEm: acceptedAt,
+    },
+  });
+  await tx.appNotification.upsert({
+    where: { userId_id: { userId: proposal.motoristaId, id: `accepted:${offerId}` } },
+    create: {
+      id: `accepted:${offerId}`,
+      userId: proposal.motoristaId,
+      role: "motorista",
+      title: "Sua proposta foi aceita!",
+      body: "Consulte o acordo e os endereços do serviço.",
+      createdAt: acceptedAt,
+      read: false,
+      freightId,
+      proposalId,
+    },
+    update: {},
+  });
+}
+
+async function saveFreights(
+  tx: Transaction,
+  userId: string,
+  values: unknown[],
+  messages: unknown[],
+) {
+  for (const value of values) {
+    const input = record(value);
+    if (!input || typeof input.id !== "string") continue;
+    const freight = await tx.frete.findUnique({
+      where: { id: input.id },
+      include: {
+        avaliacoes: true,
+        acordo: true,
+        propostas: {
+          where: { statusProposta: "PENDENTE" },
+          select: { id: true },
+        },
+      },
+    });
+    if (!freight) continue;
+    if (freight.clienteId !== userId && freight.motoristaSelecionadoId !== userId)
+      continue;
+
+    const requestedStatus = input.status;
+    const isClient = freight.clienteId === userId;
+    const isSelectedDriver = freight.motoristaSelecionadoId === userId;
+    if (
+      isClient &&
+      requestedStatus === "AGENDADO" &&
+      (freight.statusFrete === "ABERTO" ||
+        freight.statusFrete === "EM_NEGOCIACAO")
+    ) {
+      await acceptFreight(tx, userId, freight.id, input);
+    } else if (
+      requestedStatus !== freightStatus(freight.statusFrete) &&
+      isClient
+    ) {
+      if (requestedStatus === "CANCELADO") {
+        if (
+          !["ABERTO", "EM_NEGOCIACAO", "ACEITO", "EM_TRANSPORTE"].includes(
+            freight.statusFrete,
+          )
+        )
+          throw new StorePersistenceError(
+            "INVALID_FREIGHT_TRANSITION",
+            "A situação do frete mudou; atualize os dados antes de tentar novamente.",
+            409,
+          );
+        const proposalIds = freight.acordo
+          ? [freight.acordo.propostaId]
+          : freight.propostas.map((proposal) => proposal.id);
+        requireCancellationMessages(messages, proposalIds, "cliente");
+        await tx.frete.update({
+          where: { id: freight.id },
+          data: { statusFrete: "CANCELADO" },
+        });
+        await tx.proposta.updateMany({
+          where: {
+            freteId: freight.id,
+            statusProposta: { in: ["PENDENTE", "ACEITA"] },
+          },
+          data: { statusProposta: "CANCELADA" },
+        });
+        await tx.ofertaProposta.updateMany({
+          where: {
+            proposta: { freteId: freight.id },
+            status: { in: ["PENDENTE", "ACEITA"] },
+          },
+          data: { status: "ENCERRADA" },
+        });
+      } else if (
+        (freight.statusFrete === "EM_TRANSPORTE" &&
+          requestedStatus === "CONCLUIDO")
+      ) {
+        await tx.frete.update({
+          where: { id: freight.id },
+          data: { statusFrete: "CONCLUIDO" },
+        });
+      } else {
+        throw new StorePersistenceError(
+          "INVALID_FREIGHT_TRANSITION",
+          "A situação do frete mudou; atualize os dados antes de tentar novamente.",
+          409,
+        );
+      }
+    } else if (
+      requestedStatus !== freightStatus(freight.statusFrete) &&
+      isSelectedDriver
+    ) {
+      if (
+        requestedStatus === "EM_TRANSPORTE" &&
+        freight.statusFrete === "ACEITO" &&
+        freight.acordo &&
+        freight.acordo.disponivelEm.getTime() <= Date.now()
+      ) {
+        await tx.frete.update({
+          where: { id: freight.id },
+          data: { statusFrete: "EM_TRANSPORTE" },
+        });
+      } else if (
+        requestedStatus === "ABERTO" &&
+        (freight.statusFrete === "ACEITO" ||
+          freight.statusFrete === "EM_TRANSPORTE") &&
+        freight.acordo
+      ) {
+        requireCancellationMessages(
+          messages,
+          [freight.acordo.propostaId],
+          "motorista",
+        );
+        await tx.acordoFrete.delete({ where: { freteId: freight.id } });
+        await tx.frete.update({
+          where: { id: freight.id },
+          data: { statusFrete: "ABERTO", motoristaSelecionadoId: null },
+        });
+        await tx.proposta.update({
+          where: { id: freight.acordo.propostaId },
+          data: { statusProposta: "CANCELADA" },
+        });
+        await tx.ofertaProposta.updateMany({
+          where: {
+            propostaId: freight.acordo.propostaId,
+            status: { in: ["PENDENTE", "ACEITA"] },
+          },
+          data: { status: "ENCERRADA" },
+        });
+      } else {
+        throw new StorePersistenceError(
+          "INVALID_FREIGHT_TRANSITION",
+          "A situação do frete mudou; atualize os dados antes de tentar novamente.",
+          409,
+        );
+      }
+    } else if (requestedStatus !== freightStatus(freight.statusFrete)) {
+      throw new StorePersistenceError(
+        "INVALID_FREIGHT_TRANSITION",
+        "A situação do frete mudou; atualize os dados antes de tentar novamente.",
+        409,
+      );
+    }
+
+    const reviews = record(input.reviews);
+    const comments = record(input.reviewComments);
+    const publicComments = record(input.reviewPublicComments);
+    const dates = record(input.reviewDates);
+    const role: Role =
+      freight.clienteId === userId ? "cliente" : "motorista";
+    const score = reviews?.[role];
+    if (score !== undefined) {
+      const existing = freight.avaliacoes.find(
+        (review) => review.avaliadorId === userId,
+      );
+      if (existing) continue;
+      const targetId =
+        role === "cliente"
+          ? freight.motoristaSelecionadoId
+          : freight.clienteId;
+      if (
+        freight.statusFrete !== "CONCLUIDO" ||
+        !targetId ||
+        !Number.isInteger(score) ||
+        Number(score) < 1 ||
+        Number(score) > 5
+      )
+        throw new StorePersistenceError(
+          "INVALID_REVIEW",
+          "A avaliação não está disponível.",
+          422,
+        );
+      await tx.avaliacao.create({
+        data: {
+          freteId: freight.id,
+          avaliadorId: userId,
+          avaliadoId: targetId,
+          perfilAvaliador: role,
+          nota: Number(score),
+          comentario: string(comments?.[role], 1000),
+          publica: publicComments?.[role] === true,
+          ...(typeof dates?.[role] === "string"
+            ? { createdAt: new Date(String(dates[role])) }
+            : {}),
+        },
+      });
+    }
+  }
+}
+
+function requireCancellationMessages(
+  values: unknown,
+  proposalIds: string[],
+  role: Role,
+) {
+  if (!proposalIds.length) return;
+  const prefix = `${role === "cliente" ? "Cliente" : "Motorista"} cancelou o frete. Motivo: `;
+  const messages = Array.isArray(values)
+    ? values.map((value) => record(value)).filter(Boolean)
+    : [];
+  const hasMessage = (proposalId: string) =>
+    messages.some(
+      (message) =>
+        message?.proposalId === proposalId &&
+        message.role === role &&
+        typeof message.text === "string" &&
+        message.text.startsWith(prefix) &&
+        message.text.length <= prefix.length + 1000 &&
+        message.text.slice(prefix.length).trim().length >= 3,
+    );
+  if (proposalIds.some((proposalId) => !hasMessage(proposalId)))
+    throw new StorePersistenceError(
+      "CANCELLATION_REASON_REQUIRED",
+      "Informe o motivo do cancelamento para enviar pelo chat.",
+      422,
+    );
+}
+
+async function saveMessages(
+  tx: Transaction,
+  userId: string,
+  values: unknown[],
+) {
+  for (const value of values) {
+    const input = record(value);
+    if (!input) continue;
+    const id = string(input.id, 120);
+    const proposalId = string(input.proposalId, 120);
+    const text = string(input.text, 2000);
+    if (!id || !proposalId || !text) continue;
+    const existing = await tx.mensagem.findUnique({
+      where: { id },
+      select: { remetenteId: true, destinatarioId: true },
+    });
+    if (existing) {
+      if (
+        existing.remetenteId !== userId &&
+        existing.destinatarioId !== userId
+      )
+        throw new StorePersistenceError(
+          "FORBIDDEN",
+          "Não é permitido alterar mensagens de outra conversa.",
+          403,
+        );
+      continue;
+    }
+    const proposal = await tx.proposta.findUnique({
+      where: { id: proposalId },
+      include: { frete: true },
+    });
+    if (
+      !proposal ||
+      input.freightId !== proposal.freteId ||
+      (proposal.frete.clienteId !== userId && proposal.motoristaId !== userId)
+    )
+      throw new StorePersistenceError(
+        "FORBIDDEN",
+        "Não é permitido enviar mensagens nesta conversa.",
+        403,
+      );
+    const role: Role =
+      proposal.frete.clienteId === userId ? "cliente" : "motorista";
+    if (input.role !== role)
+      throw new StorePersistenceError(
+        "INVALID_MESSAGE",
+        "O perfil remetente não corresponde à conta autenticada.",
+        422,
+      );
+    const recipientId =
+      role === "cliente" ? proposal.motoristaId : proposal.frete.clienteId;
+    await tx.mensagem.create({
+      data: {
+        id,
+        freteId: proposal.freteId,
+        propostaId: proposal.id,
+        remetenteId: userId,
+        destinatarioId: recipientId,
+        perfilRemetente: role,
+        conteudo: text,
+      },
+    });
+    await tx.appNotification.upsert({
+      where: {
+        userId_id: {
+          userId: recipientId,
+          id: `message:${id}`,
+        },
+      },
+      create: {
+        id: `message:${id}`,
+        userId: recipientId,
+        role: role === "cliente" ? "motorista" : "cliente",
+        title: "Nova mensagem",
+        body: text.slice(0, 140),
+        createdAt: new Date(),
+        read: false,
+        freightId: proposal.freteId,
+        proposalId,
+      },
+      update: {},
+    });
+  }
+}
+
+async function saveNotifications(
+  tx: Transaction,
+  userId: string,
+  values: unknown[],
+) {
+  if (values.length > 500)
+    throw new StorePersistenceError(
+      "INVALID_NOTIFICATION",
+      "A lista de notificações excede o limite permitido.",
+      422,
+    );
+  const ids = new Set<string>();
+  for (const value of values) {
+    const notification = record(value);
+    if (!notification) continue;
+    const id = string(notification.id, 180);
+    const role = notification.role;
+    const createdAt = new Date(String(notification.createdAt ?? ""));
+    if (
+      !id ||
+      (role !== "cliente" && role !== "motorista") ||
+      !Number.isFinite(createdAt.getTime())
+    )
+      throw new StorePersistenceError(
+        "INVALID_NOTIFICATION",
+        "Uma das notificações é inválida.",
+        422,
+      );
+    if (ids.has(id))
+      throw new StorePersistenceError(
+        "INVALID_NOTIFICATION",
+        "Há notificações repetidas na solicitação.",
+        422,
+      );
+    ids.add(id);
+    await tx.appNotification.upsert({
+      where: { userId_id: { userId, id } },
+      create: {
+        id,
+        userId,
+        role,
+        title: string(notification.title, 160),
+        body: string(notification.body, 1000),
+        createdAt,
+        read: notification.read === true,
+        freightId: string(notification.freightId, 120),
+        proposalId: string(notification.proposalId, 120) || null,
+      },
+      update: notification.read === true ? { read: true } : {},
+    });
+  }
+}
+
+export async function saveAccountStore(
+  database: PrismaClient,
+  userId: string,
+  payload: unknown,
+): Promise<Response | null> {
+  const input = record(payload);
+  if (
+    !input ||
+    !Array.isArray(input.freights) ||
+    !Array.isArray(input.proposals) ||
+    !Array.isArray(input.messages)
+  )
+    return Response.json(
+      { code: "INVALID_BODY", message: "O estado enviado está incompleto." },
+      { status: 422 },
+    );
+  const freights = input.freights;
+  const proposals = input.proposals;
+  const messages = input.messages;
+
+  try {
+    const profile = record(input.profile);
+    const name = string(profile?.name, 120);
+    const photo = profile?.photo;
+    if (
+      !name ||
+      typeof photo !== "string" ||
+      photo.length > 7_000_000 ||
+      (photo !== "" &&
+        !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(
+          photo,
+        ) &&
+        !/^https:\/\/[^ ]{1,2000}$/.test(photo))
+    )
+      throw new StorePersistenceError(
+        "INVALID_PROFILE",
+        "O nome ou a foto de perfil são inválidos.",
+        422,
+      );
+
+    await database.$transaction(
+      async (tx) => {
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { id: true },
+        });
+        if (!user)
+          throw new StorePersistenceError(
+            "USER_NOT_FOUND",
+            "A conta autenticada não foi encontrada.",
+            404,
+          );
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            name,
+            image: photo || null,
+            ...(input.accountSetupComplete === true
+              ? { accountSetupComplete: true }
+              : {}),
+          },
+        });
+        await saveDriverRegistration(tx, userId, input.driverRegistration);
+
+        const driverExists = await tx.motorista.findUnique({
+          where: { userId },
+          select: { userId: true },
+        });
+        if (Array.isArray(input.vehicles)) {
+          if (input.vehicles.length && !driverExists)
+            await tx.motorista.create({ data: { userId } });
+          await saveVehicles(tx, userId, input.vehicles);
+        }
+        if (Array.isArray(input.addresses))
+          await saveAddresses(tx, userId, input.addresses);
+
+        const company = record(input.companyProfile);
+        if (company) {
+          const registration = await tx.motorista.findUnique({
+            where: { userId },
+            select: { tipoPessoa: true },
+          });
+          if (registration?.tipoPessoa !== "pj")
+            throw new StorePersistenceError(
+              "FORBIDDEN",
+              "Perfil de empresa exige cadastro de motorista pessoa jurídica.",
+              403,
+            );
+          await tx.driverCompanyProfile.upsert({
+            where: { userId },
+            create: {
+              userId,
+              tradeName: string(company.tradeName, 160),
+              logo: string(company.logo, 7_000_000),
+              about: string(company.about, 2000),
+              city: string(company.city, 120),
+            },
+            update: {
+              tradeName: string(company.tradeName, 160),
+              logo: string(company.logo, 7_000_000),
+              about: string(company.about, 2000),
+              city: string(company.city, 120),
+            },
+          });
+        }
+
+        const area = record(input.operatingArea);
+        if (area) {
+          const center = record(area.center);
+          const lat = center?.lat;
+          const lng = center?.lng;
+          const radiusKm = area.radiusKm;
+          if (
+            typeof lat !== "number" ||
+            !Number.isFinite(lat) ||
+            lat < -90 ||
+            lat > 90 ||
+            typeof lng !== "number" ||
+            !Number.isFinite(lng) ||
+            lng < -180 ||
+            lng > 180 ||
+            typeof radiusKm !== "number" ||
+            !Number.isFinite(radiusKm) ||
+            radiusKm <= 0 ||
+            radiusKm > 1000
+          )
+            throw new StorePersistenceError(
+              "INVALID_AREA",
+              "A região de atendimento informada é inválida.",
+              422,
+            );
+          await tx.operatingArea.upsert({
+            where: { userId },
+            create: {
+              userId,
+              latitude: lat,
+              longitude: lng,
+              radiusKm,
+              label: string(area.label, 160),
+            },
+            update: {
+              latitude: lat,
+              longitude: lng,
+              radiusKm,
+              label: string(area.label, 160),
+            },
+          });
+        }
+
+        await saveFreights(tx, userId, freights, messages);
+        await saveProposals(tx, userId, proposals);
+        await saveMessages(tx, userId, messages);
+        if (Array.isArray(input.notifications))
+          await saveNotifications(tx, userId, input.notifications);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    return null;
+  } catch (failure) {
+    if (failure instanceof StorePersistenceError)
+      return Response.json(
+        { code: failure.code, message: failure.message },
+        { status: failure.status },
+      );
+    if (
+      failure instanceof Prisma.PrismaClientKnownRequestError &&
+      (failure.code === "P2002" || failure.code === "P2034")
+    )
+      return Response.json(
+        {
+          code: failure.code === "P2034" ? "CONCURRENT_UPDATE" : "CONFLICT",
+          message:
+            failure.code === "P2034"
+              ? "Os dados mudaram durante o salvamento. Atualize e tente novamente."
+              : "Um dado informado já está cadastrado.",
+        },
+        { status: 409 },
+      );
+    throw failure;
+  }
+}
+
+function registrationFromDriver(driver: {
+  cadastroStatus: string | null;
+  nomeCompleto: string | null;
+  tipoPessoa: string | null;
+  documentoMascarado: string | null;
+  cnpjMascarado: string | null;
+  nomeEmpresa: string | null;
+  cnhNumeroMascarado: string | null;
+  cnhCategoria: string | null;
+  cnhValidade: Date | null;
+  cnhFotoDataUrl: string | null;
+  documentosEnviados: boolean;
+  enviadoEm: Date | null;
+  revisadoEm: Date | null;
+  feedback: string | null;
+}): DriverRegistration | undefined {
+  return registrationFromRow(driver);
+}
+
+function registrationVersion(registration: DriverRegistration) {
+  return [
+    registration.submittedAt,
+    registration.reviewedAt || "",
+    registration.status,
+  ].join("|");
+}
+
+export async function loadAdminRegistrations(database: PrismaClient) {
+  const drivers = await database.motorista.findMany({
+    where: { cadastroStatus: { not: null } },
+    include: {
+      user: true,
+      veiculos: { where: { ativo: true } },
+    },
+  });
+  const cases: AdminCase[] = drivers.flatMap((driver) => {
+    const registration = registrationFromDriver(driver);
+    return registration
+      ? [
+          {
+            id: driver.userId,
+            registration: {
+              ...registration,
+              licensePhotoDataUrl: undefined,
+            },
+            vehicles: driver.veiculos.map(vehicleFromRow),
+          },
+        ]
+      : [];
+  });
+  const reviews = await database.adminReview.findMany({
+    orderBy: { at: "desc" },
+  });
+  const adminReviews: AdminReview[] = reviews.map((review) => ({
+    id: review.id,
+    caseId: review.caseUserId,
+    version: review.version,
+    actor: review.actor,
+    at: review.at.toISOString(),
+    decision: review.decision as AdminReview["decision"],
+    reason: review.reason,
+  }));
+  return { cases, reviews: adminReviews };
+}
+
+export async function loadAdminDocuments(
+  database: PrismaClient,
+  userId: string,
+) {
+  const [user, driver] = await Promise.all([
+    database.user.findUnique({ where: { id: userId }, select: { image: true } }),
+    database.motorista.findUnique({
+      where: { userId },
+      select: { cnhFotoDataUrl: true },
+    }),
+  ]);
+  const safeImage = (value: string | null | undefined) =>
+    typeof value === "string" &&
+    value.length <= 7_000_000 &&
+    /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(value)
+      ? value
+      : null;
+  return {
+    profilePhoto: safeImage(user?.image),
+    licensePhoto: safeImage(driver?.cnhFotoDataUrl),
+  };
+}
+
+export async function reviewDriverRegistration(
+  database: PrismaClient,
+  userId: string,
+  actor: string,
+  input: RecordValue,
+): Promise<
+  | { case: AdminCase; review: AdminReview }
+  | { error: Response }
+> {
+  const decision = input.decision;
+  const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+  const checks = input.checks;
+  const requiredChecks = [
+    "Identificação e dados conferidos",
+    "Foto do motorista conferida",
+    "Habilitação e validade conferidas",
+    "Veículo e habilitação compatíveis",
+  ];
+  const validChecks =
+    Array.isArray(checks) &&
+    checks.length === requiredChecks.length &&
+    requiredChecks.every((check) => checks.includes(check));
+  if (
+    (decision !== "APROVADO" && decision !== "AJUSTES_SOLICITADOS") ||
+    typeof input.expectedVersion !== "string" ||
+    reason.length > 1000 ||
+    (decision === "AJUSTES_SOLICITADOS" && reason.length < 10) ||
+    (decision === "APROVADO" && !validChecks)
+  )
+    return {
+      error: Response.json(
+        { code: "INVALID_BODY", message: "Confira a decisão e os dados informados." },
+        { status: 422 },
+      ),
+    };
+
+  const outcome = await database.$transaction(
+    async (tx) => {
+      const driver = await tx.motorista.findUnique({
+        where: { userId },
+        include: {
+          user: true,
+          veiculos: { where: { ativo: true } },
+        },
+      });
+      const registration = driver && registrationFromDriver(driver);
+      if (
+        !driver ||
+        !registration ||
+        registration.status !== "EM_ANALISE" ||
+        registrationVersion(registration) !== input.expectedVersion
+      )
+        return null;
+
+      const todayInBahia = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Bahia",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      const expiresOn = registration.license.expiresOn;
+      if (
+        decision === "APROVADO" &&
+        (!registration.documentsSubmitted ||
+          expiresOn < todayInBahia ||
+          driver.veiculos.length === 0 ||
+          !driver.user.image ||
+          !registration.licensePhotoDataUrl)
+      )
+        return { invalid: true as const };
+
+      const at = new Date();
+      const updatedDriver = await tx.motorista.update({
+        where: { userId },
+        data: {
+          cadastroStatus: decision,
+          revisadoEm: at,
+          feedback: decision === "AJUSTES_SOLICITADOS" ? reason : null,
+        },
+        include: {
+          user: true,
+          veiculos: { where: { ativo: true } },
+        },
+      });
+      const review = await tx.adminReview.create({
+        data: {
+          id: randomUUID(),
+          caseUserId: userId,
+          version: input.expectedVersion as string,
+          actor,
+          at,
+          decision,
+          reason,
+        },
+      });
+      const updatedRegistration = registrationFromDriver(updatedDriver);
+      if (!updatedRegistration) return null;
+      return {
+        registration: updatedRegistration,
+        vehicles: updatedDriver.veiculos.map(vehicleFromRow),
+        review,
+      };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+  if (!outcome)
+    return {
+      error: Response.json(
+        {
+          code: "REGISTRATION_CHANGED",
+          message:
+            "Este cadastro mudou ou já foi analisado. Atualize a lista antes de decidir.",
+        },
+        { status: 409 },
+      ),
+    };
+  if ("invalid" in outcome)
+    return {
+      error: Response.json(
+        {
+          code: "REGISTRATION_INCOMPLETE",
+          message:
+            "Não é possível aprovar: confira os dados, documentação, foto e veículo.",
+        },
+        { status: 422 },
+      ),
+    };
+  const review: AdminReview = {
+    id: outcome.review.id,
+    caseId: outcome.review.caseUserId,
+    version: outcome.review.version,
+    actor: outcome.review.actor,
+    at: outcome.review.at.toISOString(),
+    decision: outcome.review.decision as AdminReview["decision"],
+    reason: outcome.review.reason,
+  };
+  const { licensePhotoDataUrl: _privatePhoto, ...safeRegistration } =
+    outcome.registration;
+  return {
+    case: {
+      id: userId,
+      registration: safeRegistration,
+      vehicles: outcome.vehicles,
+    },
+    review,
+  };
+}

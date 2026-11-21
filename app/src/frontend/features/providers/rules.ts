@@ -6,10 +6,7 @@ import type {
 } from "@/contracts";
 import { ownProposal } from "../driver/rules";
 export function providerId(p: Proposal) {
-  return (
-    p.driverId ||
-    (ownProposal(p, "Cleiton") ? "provider-current" : `provider:${p.driver}`)
-  );
+  return p.driverId || `provider:${p.driver}`;
 }
 export function providerName(p: Proposal) {
   return p.providerName || p.driver;
@@ -27,7 +24,7 @@ export function publicProvider(
   id: string,
 ): PublicProviderProfile | null {
   const matches = store.proposals.filter((p) => providerId(p) === id);
-  const self = id === "provider-current" || id === "demo-driver";
+  const self = id === store.profile?.id;
   if (!self && !matches.length) return null;
   const proposal = matches.at(-1);
   const company = self && store.driverRegistration?.personType === "pj";
@@ -37,7 +34,7 @@ export function publicProvider(
       : "autonomo"
     : proposal?.providerKind || "autonomo";
   const driver = {
-    name: self ? store.profile?.name || "Cleiton" : proposal!.driver,
+    name: self ? store.profile?.name || "" : proposal!.driver,
     photo: self ? store.profile?.photo || "" : "",
   };
   const completed = store.freights.filter(

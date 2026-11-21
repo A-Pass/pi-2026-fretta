@@ -82,7 +82,7 @@ export function DriverRegistrationStatusView({
           </h1>
           <p>
             {approved
-              ? "Você já pode configurar sua área de operação e buscar o próximo frete. Novas propostas também dependem de uma assinatura ativa."
+              ? "Você já pode configurar sua área de operação, buscar oportunidades e enviar propostas sem precisar de assinatura."
               : pending
                 ? "A documentação foi selecionada e os dados foram conferidos no formulário. O envio ainda não significa que sua identidade ou habilitação foram verificadas."
                 : rejected
@@ -135,7 +135,7 @@ export function DriverRegistrationStatusView({
                 <dt>Situação</dt>
                 <dd>
                   {pending
-                    ? "Em análise simulada"
+                    ? "Em análise"
                     : rejected
                       ? "Ajustes solicitados"
                       : approved
@@ -202,14 +202,14 @@ export function DriverRegistrationStatusView({
               Continuar como cliente
             </button>
           </div>
-          <div className="onboarding-demo-note">
+          <div className="onboarding-note">
             <ShieldCheck size={20} />
             <span>
               <b>Análise do cadastro</b> · Os documentos são tratados por um fluxo privado e só podem ser revisados por pessoas autorizadas.
             </span>
           </div>
           {pending && (
-            <div className="onboarding-demo-controls">
+            <div className="onboarding-admin-link">
               <p>
                 O resultado da análise será disponibilizado pelo painel administrativo autorizado.
               </p>

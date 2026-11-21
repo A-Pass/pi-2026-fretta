@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import { seed } from "../src/frontend/mocks/seed";
+import { seed } from "./fixtures/seed";
 import {
   publicProvider,
   providerId,
@@ -21,11 +21,11 @@ import type { Store } from "../src/contracts";
 function companyStore(): Store {
   const store = structuredClone(seed);
   store.profile = {
+    id: "driver-1",
     name: "Motorista Exemplo",
     photo: "data:image/png;base64,PHOTO",
   };
   store.driverRegistration = {
-    mode: "demo",
     status: "APROVADO",
     personType: "pj",
     fullName: "Nome Privado",
@@ -57,7 +57,7 @@ function companyStore(): Store {
   ];
   store.proposals[0] = {
     ...store.proposals[0],
-    driverId: "demo-driver",
+    driverId: "driver-1",
     driver: "Motorista Exemplo",
     providerName: "Empresa no aceite",
     providerKind: "empresa",
@@ -66,7 +66,7 @@ function companyStore(): Store {
 }
 test("perfil público separa logo da empresa e rosto do motorista e não exporta campos privados", () => {
   const store = companyStore();
-  const profile = publicProvider(store, "demo-driver")!;
+  const profile = publicProvider(store, "driver-1")!;
   assert.equal(profile.name, "Reis Transportes de exemplo");
   assert.equal(profile.driver.name, "Motorista Exemplo");
   assert.notEqual(profile.photo, profile.driver.photo);
@@ -88,15 +88,15 @@ test("perfil público separa logo da empresa e rosto do motorista e não exporta
 });
 test("médias só consideram serviço concluído e comentários antigos não são publicados por padrão", () => {
   let store = acceptProposal(companyStore(), "p1");
-  assert.equal(publicProvider(store, "demo-driver")!.rating, null);
+  assert.equal(publicProvider(store, "driver-1")!.rating, null);
   store.freights[0].status = "CONCLUIDO";
   store = submitReview(store, "f1", "cliente", 4, "Comentário reservado");
-  assert.equal(publicProvider(store, "demo-driver")!.rating, 4);
-  assert.equal(publicProvider(store, "demo-driver")!.reviewCount, 1);
-  assert.equal(publicProvider(store, "demo-driver")!.reviews[0].comment, "");
+  assert.equal(publicProvider(store, "driver-1")!.rating, 4);
+  assert.equal(publicProvider(store, "driver-1")!.reviewCount, 1);
+  assert.equal(publicProvider(store, "driver-1")!.reviews[0].comment, "");
   store.freights[0].reviewPublicComments = { cliente: true };
   assert.equal(
-    publicProvider(store, "demo-driver")!.reviews[0].comment,
+    publicProvider(store, "driver-1")!.reviews[0].comment,
     "Comentário reservado",
   );
   assert.equal(store.freights[0].agreement?.providerName, "Empresa no aceite");

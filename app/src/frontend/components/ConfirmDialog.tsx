@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { CircleAlert, X } from "lucide-react";
 type Props = {
   open: boolean;
@@ -9,6 +9,7 @@ type Props = {
   cancelLabel?: string;
   pendingLabel?: string;
   destructive?: boolean;
+  children?: ReactNode;
   onConfirm: () => Promise<boolean>;
 };
 export function ConfirmDialog({
@@ -20,6 +21,7 @@ export function ConfirmDialog({
   cancelLabel = "Manter solicitação",
   pendingLabel = "Processando…",
   destructive = true,
+  children,
   onConfirm,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -62,6 +64,7 @@ export function ConfirmDialog({
       <p id={descriptionId} className="muted">
         {description}
       </p>
+      {children}
       {error && (
         <p role="alert" className="alert">
           {error}
