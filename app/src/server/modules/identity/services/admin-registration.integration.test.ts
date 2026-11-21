@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { prisma } from "../../../db/prisma";
 import { randomUUID } from "node:crypto";
+import { criarNotificacao } from "../../notifications/services/notification-service";
 
 function verificarBancoDeTeste() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -234,6 +235,52 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
       409,
       "Uma análise desatualizada não pode aprovar o cadastro",
     );
+
+    // Verifica rollback quando a notificação falha.
+    await assert.rejects(
+      prisma.$transaction(async (tx) => {
+        await tx.cadastroMotorista.updateMany({
+          where: {
+            motoristaId,
+            status: "EM_ANALISE",
+          },
+          data: {
+            status: "APROVADO",
+            analisadoEm: new Date(),
+          },
+        });
+
+        // Título vazio provoca uma falha de validação.
+        await criarNotificacao(tx, {
+          destinatarioId: motoristaId,
+          papelDestinatario: "motorista",
+          evento: "CADASTRO_APROVADO",
+          titulo: " ",
+          corpo: "Seu cadastro foi aprovado.",
+          autorId: administradorId!,
+        });
+      }),
+      /Os dados da notificação são inválidos/,
+    );
+
+    const cadastroAposFalha = await prisma.cadastroMotorista.findUniqueOrThrow({
+      where: { motoristaId },
+    });
+
+    assert.equal(cadastroAposFalha.status, "EM_ANALISE");
+    assert.equal(cadastroAposFalha.analisadoEm, null);
+
+    const notificacoesAposFalha = await prisma.notificacao.count({
+      where: {
+        destinatarioId: motoristaId,
+        evento: "CADASTRO_APROVADO",
+      },
+    });
+
+    assert.equal(notificacoesAposFalha, 0);
+
+    console.log("Rollback da aprovação e notificação - OK");
+
     const requisicao = new NextRequest(
       "http://localhost:3002/api/v1/admin/driver/registration",
       {
@@ -261,6 +308,18 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
 
     assert.equal(cadastroAtualizado.status, "APROVADO");
     assert.ok(cadastroAtualizado.analisadoEm);
+
+    const notificacaoAprovacao = await prisma.notificacao.findFirst({
+      where: {
+        destinatarioId: motoristaId,
+        evento: "CADASTRO_APROVADO",
+      },
+    });
+
+    assert.ok(notificacaoAprovacao, "A aprovação deve gerar uma notificação.");
+
+    assert.equal(notificacaoAprovacao.papelDestinatario, "motorista");
+    assert.equal(notificacaoAprovacao.lida, false);
 
     console.log("Aprovação administrativa pela rota PATCH - OK");
     const requisicaoAjustes = new NextRequest(
@@ -332,6 +391,33 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
     assert.equal(cadastroAjustes.status, "AJUSTES_SOLICITADOS");
     assert.equal(cadastroAjustes.motivoAjuste, "Atualizar o documento da CNH.");
     assert.ok(cadastroAjustes.analisadoEm);
+
+    const notificacaoAjustes = await prisma.notificacao.findFirst({
+      where: {
+        destinatarioId: motoristaId,
+        evento: "CADASTRO_AJUSTES_SOLICITADOS",
+      },
+    });
+
+    assert.ok(
+      notificacaoAjustes,
+      "A solicitação de ajustes deve gerar uma notificação.",
+    );
+
+    assert.match(notificacaoAjustes.corpo, /Atualizar o documento da CNH/);
+
+    // Houve duas decisões válidas nos cenários do teste.
+    // A tentativa de transição inválida não deve gerar notificação.
+    const quantidadeNotificacoes = await prisma.notificacao.count({
+      where: {
+        destinatarioId: motoristaId,
+        evento: {
+          in: ["CADASTRO_APROVADO", "CADASTRO_AJUSTES_SOLICITADOS"],
+        },
+      },
+    });
+
+    assert.equal(quantidadeNotificacoes, 2);
 
     console.log("Solicitação de ajustes pela rota PATCH - OK");
   } finally {

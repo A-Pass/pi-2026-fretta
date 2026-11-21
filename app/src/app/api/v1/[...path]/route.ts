@@ -27,6 +27,7 @@ import {
   listarNotificacoes,
   marcarNotificacaoLida,
   marcarTodasNotificacoesLidas,
+  criarNotificacao,
   NotificationError,
 } from "@/server/modules/notifications/services/notification-service";
 import {
@@ -36,6 +37,7 @@ import {
   type FinalidadeUpload,
 } from "@/server/modules/uploads/services/upload-service";
 import { consultarAssinatura } from "@/server/modules/subscriptions/services/subscription-service";
+import { lerArquivoPrivado } from "@/server/modules/identity/storage/private-file-storage";
 
 function extrairDadosCadastro(body: unknown): CadastroMotoristaInput | null {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -372,6 +374,156 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // GET /api/v1/admin/driver-registrations/:id/documents/:documentId
+  const documentoAdminMatch = request.nextUrl.pathname.match(
+    /^\/api\/v1\/admin\/driver-registrations\/([^/]+)\/documents\/([^/]+)$/,
+  );
+
+  if (documentoAdminMatch) {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (!session) {
+      return Response.json(
+        {
+          code: "UNAUTHORIZED",
+          message: "Você precisa estar autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
+    const administrador = await verificarAdministrador(session.user.id);
+
+    if (!administrador) {
+      return Response.json(
+        {
+          code: "FORBIDDEN",
+          message: "Acesso permitido apenas para administradores.",
+        },
+        { status: 403 },
+      );
+    }
+
+    let cadastroId: string;
+    let documentoId: string;
+
+    try {
+      cadastroId = decodeURIComponent(documentoAdminMatch[1]);
+      documentoId = decodeURIComponent(documentoAdminMatch[2]);
+    } catch {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Identificador inválido.",
+        },
+        { status: 422 },
+      );
+    }
+
+    if (
+      !cadastroId.trim() ||
+      !documentoId.trim() ||
+      cadastroId.includes("/") ||
+      documentoId.includes("/")
+    ) {
+      return Response.json(
+        {
+          code: "INVALID_INPUT",
+          message: "Identificador inválido.",
+        },
+        { status: 422 },
+      );
+    }
+
+    const cadastro = await prisma.cadastroMotorista.findUnique({
+      where: { id: cadastroId },
+      select: {
+        motoristaId: true,
+        fotoPerfilId: true,
+        documentoCnhId: true,
+      },
+    });
+
+    if (
+      !cadastro ||
+      (documentoId !== cadastro.fotoPerfilId &&
+        documentoId !== cadastro.documentoCnhId)
+    ) {
+      return Response.json(
+        {
+          code: "DOCUMENT_NOT_FOUND",
+          message: "Documento não encontrado.",
+        },
+        { status: 404 },
+      );
+    }
+
+    const tipoEsperado =
+      documentoId === cadastro.fotoPerfilId ? "FOTO_PERFIL" : "CNH";
+
+    const documento = await prisma.arquivoPrivado.findFirst({
+      where: {
+        id: documentoId,
+        motoristaId: cadastro.motoristaId,
+        tipo: tipoEsperado,
+      },
+      select: {
+        chaveArmazenamento: true,
+        mimeType: true,
+      },
+    });
+
+    if (!documento) {
+      return Response.json(
+        {
+          code: "DOCUMENT_NOT_FOUND",
+          message: "Documento não encontrado.",
+        },
+        { status: 404 },
+      );
+    }
+
+    try {
+      const bytes = await lerArquivoPrivado(documento.chaveArmazenamento);
+
+      return new Response(new Uint8Array(bytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Content-Disposition": "inline",
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        return Response.json(
+          {
+            code: "DOCUMENT_NOT_FOUND",
+            message: "Documento não encontrado.",
+          },
+          { status: 404 },
+        );
+      }
+
+      console.error("Erro ao ler documento privado:", error);
+
+      return Response.json(
+        {
+          code: "INTERNAL_ERROR",
+          message: "Não foi possível recuperar o documento.",
+        },
+        { status: 500 },
+      );
+    }
+  }
+
   // GET /api/v1/uploads/:id
   const uploadMatch = request.nextUrl.pathname.match(
     /^\/api\/v1\/uploads\/([^/]+)$/,
@@ -408,20 +560,31 @@ export async function GET(request: NextRequest) {
 
     try {
       const attachment = await prisma.empresa.findFirst({
-        where: { documentoCnpjId: arquivoId, gestorId: { not: session.user.id } },
+        where: {
+          documentoCnpjId: arquivoId,
+          gestorId: { not: session.user.id },
+        },
         select: { gestorId: true },
       });
-      const reviewer = attachment && await prisma.user.findFirst({
-        where: { id: session.user.id, papel: "ADMIN" }, select: { id: true },
-      });
-      const arquivo = await obterUpload(arquivoId, reviewer ? attachment.gestorId : session.user.id);
+      const reviewer =
+        attachment &&
+        (await prisma.user.findFirst({
+          where: { id: session.user.id, papel: "ADMIN" },
+          select: { id: true },
+        }));
+      const arquivo = await obterUpload(
+        arquivoId,
+        reviewer ? attachment.gestorId : session.user.id,
+      );
 
       return new Response(new Uint8Array(arquivo.bytes), {
         status: 200,
         headers: {
           "Content-Type": arquivo.mimeType,
           "Content-Disposition": "inline",
-          ...(arquivo.mimeType === "application/pdf" && { "Content-Security-Policy": "sandbox" }),
+          ...(arquivo.mimeType === "application/pdf" && {
+            "Content-Security-Policy": "sandbox",
+          }),
           "Cache-Control": "private, no-store",
           "X-Content-Type-Options": "nosniff",
         },
@@ -632,7 +795,10 @@ export async function GET(request: NextRequest) {
       status: motorista.cadastro.status,
       cadastroCompleto: true,
       podeRealizarFretes: await driverCanOffer(prisma, session.user.id),
-      demoPixDisponivel: process.env.FRETTA_DEMO_PIX === "true" && motorista.cadastro.status === "APROVADO" && !motorista.vinculoEmpresa,
+      demoPixDisponivel:
+        process.env.FRETTA_DEMO_PIX === "true" &&
+        motorista.cadastro.status === "APROVADO" &&
+        !motorista.vinculoEmpresa,
       assinaturaAtiva: (await consultarAssinatura(session.user.id)).active,
       enviadoEm: motorista.cadastro.enviadoEm,
       analisadoEm: motorista.cadastro.analisadoEm,
@@ -739,25 +905,46 @@ export async function GET(request: NextRequest) {
 
   if (path === "/api/v1/conversations") {
     const session = await auth.api.getSession({ headers: request.headers });
-    if (!session) return Response.json({ message: "Entre na sua conta." }, { status: 401 });
+    if (!session)
+      return Response.json({ message: "Entre na sua conta." }, { status: 401 });
     const userId = session.user.id;
     const motorista = request.nextUrl.searchParams.get("role") === "motorista";
     const rows = await prisma.conversa.findMany({
-      where: { proposta: motorista ? { OR: [{ motoristaId: userId }, { empresa: { gestorId: userId } }] } : { frete: { clienteId: userId } } },
+      where: {
+        proposta: motorista
+          ? { OR: [{ motoristaId: userId }, { empresa: { gestorId: userId } }] }
+          : { frete: { clienteId: userId } },
+      },
       orderBy: [{ atualizadoEm: "desc" }, { id: "desc" }],
       take: 100,
-      select: { id: true, proposta: { select: {
-        empresa: { select: { nome: true } },
-        motorista: { select: { user: { select: { name: true } } } },
-        frete: { select: { id: true, titulo: true, cliente: { select: { user: { select: { name: true } } } } } },
-      } } },
+      select: {
+        id: true,
+        proposta: {
+          select: {
+            empresa: { select: { nome: true } },
+            motorista: { select: { user: { select: { name: true } } } },
+            frete: {
+              select: {
+                id: true,
+                titulo: true,
+                cliente: { select: { user: { select: { name: true } } } },
+              },
+            },
+          },
+        },
+      },
     });
-    return Response.json(rows.map(({ id, proposta }) => ({
-      id,
-      name: motorista ? proposta.frete.cliente.user.name : proposta.empresa?.nome ?? proposta.motorista.user.name,
-      title: proposta.frete.titulo,
-      freightId: proposta.frete.id,
-    })), { headers: { "Cache-Control": "private, no-store" } });
+    return Response.json(
+      rows.map(({ id, proposta }) => ({
+        id,
+        name: motorista
+          ? proposta.frete.cliente.user.name
+          : (proposta.empresa?.nome ?? proposta.motorista.user.name),
+        title: proposta.frete.titulo,
+        freightId: proposta.frete.id,
+      })),
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 
   // GET /api/v1/conversations/:id/messages
@@ -965,7 +1152,8 @@ export async function POST(request: NextRequest) {
     if (
       purpose !== "freight" &&
       purpose !== "profile" &&
-      purpose !== "company" && purpose !== "company-proof"
+      purpose !== "company" &&
+      purpose !== "company-proof"
     ) {
       return Response.json(
         {
@@ -1480,29 +1668,64 @@ export async function POST(request: NextRequest) {
     }
     const existing = motorista.cadastro;
     let correctionVersion: Date | undefined;
-    if (existing?.status === "AJUSTES_SOLICITADOS" && existing.itensAjuste.length) {
-      const response = (status: number, message: string) => Response.json({ message }, { status });
+    if (
+      existing?.status === "AJUSTES_SOLICITADOS" &&
+      existing.itensAjuste.length
+    ) {
+      const response = (status: number, message: string) =>
+        Response.json({ message }, { status });
       if (!body || typeof body !== "object" || Array.isArray(body))
-        return response(422, "Informe os itens solicitados pelo administrador.");
+        return response(
+          422,
+          "Informe os itens solicitados pelo administrador.",
+        );
       const input = body as Record<string, unknown>;
       if (input.expectedUpdatedAt !== existing.atualizadoEm.toISOString())
-        return response(409, "A solicitação de ajustes mudou. Atualize a situação.");
-      const fields = existing.itensAjuste.flatMap(item =>
-        Object.hasOwn(correctionFields, item) ? correctionFields[item as keyof typeof correctionFields] : []);
-      if (Object.keys(input).some(key => key !== "expectedUpdatedAt" && !fields.includes(key)) ||
-          fields.some(key => typeof input[key] !== "string"))
-        return response(422, "Envie somente os itens solicitados, preenchendo todos os campos.");
-      if ((fields.includes("fotoPerfilId") && input.fotoPerfilId === existing.fotoPerfilId) ||
-          (fields.includes("documentoCnhId") && input.documentoCnhId === existing.documentoCnhId))
-        return response(422, "Selecione uma nova imagem para o item solicitado.");
-      const person = await prisma.pessoa.findUnique({ where: { userId: session.user.id } });
+        return response(
+          409,
+          "A solicitação de ajustes mudou. Atualize a situação.",
+        );
+      const fields = existing.itensAjuste.flatMap((item) =>
+        Object.hasOwn(correctionFields, item)
+          ? correctionFields[item as keyof typeof correctionFields]
+          : [],
+      );
+      if (
+        Object.keys(input).some(
+          (key) => key !== "expectedUpdatedAt" && !fields.includes(key),
+        ) ||
+        fields.some((key) => typeof input[key] !== "string")
+      )
+        return response(
+          422,
+          "Envie somente os itens solicitados, preenchendo todos os campos.",
+        );
+      if (
+        (fields.includes("fotoPerfilId") &&
+          input.fotoPerfilId === existing.fotoPerfilId) ||
+        (fields.includes("documentoCnhId") &&
+          input.documentoCnhId === existing.documentoCnhId)
+      )
+        return response(
+          422,
+          "Selecione uma nova imagem para o item solicitado.",
+        );
+      const person = await prisma.pessoa.findUnique({
+        where: { userId: session.user.id },
+      });
       body = {
-        tipoPessoa: existing.tipoPessoa, nomeCompleto: person?.nomeCompleto, cpf: person?.cpf,
-        cnpj: existing.cnpj ?? undefined, razaoSocial: existing.razaoSocial ?? undefined,
-        cnhNumero: existing.cnhNumero, cnhCategoria: existing.cnhCategoria,
+        tipoPessoa: existing.tipoPessoa,
+        nomeCompleto: person?.nomeCompleto,
+        cpf: person?.cpf,
+        cnpj: existing.cnpj ?? undefined,
+        razaoSocial: existing.razaoSocial ?? undefined,
+        cnhNumero: existing.cnhNumero,
+        cnhCategoria: existing.cnhCategoria,
         cnhValidade: existing.cnhValidade.toISOString().slice(0, 10),
-        veiculoId: existing.veiculoId, fotoPerfilId: existing.fotoPerfilId,
-        documentoCnhId: existing.documentoCnhId, ...input,
+        veiculoId: existing.veiculoId,
+        fotoPerfilId: existing.fotoPerfilId,
+        documentoCnhId: existing.documentoCnhId,
+        ...input,
       };
       correctionVersion = existing.atualizadoEm;
     }
@@ -1568,11 +1791,15 @@ export async function POST(request: NextRequest) {
       );
     }
     try {
-      const cadastro = await salvarCadastroMotorista(session.user.id, {
-        ...dados,
-        fotoPerfilId: dados.fotoPerfilId,
-        documentoCnhId: dados.documentoCnhId,
-      }, correctionVersion);
+      const cadastro = await salvarCadastroMotorista(
+        session.user.id,
+        {
+          ...dados,
+          fotoPerfilId: dados.fotoPerfilId,
+          documentoCnhId: dados.documentoCnhId,
+        },
+        correctionVersion,
+      );
       return Response.json(
         {
           id: cadastro.id,
@@ -1758,12 +1985,19 @@ export async function PATCH(request: NextRequest) {
 
     const dados = body as Record<string, unknown>;
 
-    if (Object.keys(dados).some(key => key !== "name" && key !== "hideProfilePhoto") || typeof dados.name !== "string" || (dados.hideProfilePhoto !== undefined && dados.hideProfilePhoto !== true)) {
+    if (
+      Object.keys(dados).some(
+        (key) => key !== "name" && key !== "hideProfilePhoto",
+      ) ||
+      typeof dados.name !== "string" ||
+      (dados.hideProfilePhoto !== undefined && dados.hideProfilePhoto !== true)
+    ) {
       return Response.json(
         {
           code: "INVALID_INPUT",
 
-          message: "Informe um nome válido e, se quiser, solicite a remoção da foto.",
+          message:
+            "Informe um nome válido e, se quiser, solicite a remoção da foto.",
         },
 
         { status: 422 },
@@ -1791,7 +2025,9 @@ export async function PATCH(request: NextRequest) {
 
       data: {
         name,
-        ...(dados.hideProfilePhoto === true ? { hideProfilePhoto: true, image: null } : {}),
+        ...(dados.hideProfilePhoto === true
+          ? { hideProfilePhoto: true, image: null }
+          : {}),
       },
 
       select: {
@@ -1807,7 +2043,10 @@ export async function PATCH(request: NextRequest) {
     });
 
     const { hideProfilePhoto, ...profile } = usuario;
-    return Response.json({ ...profile, image: hideProfilePhoto ? null : profile.image });
+    return Response.json({
+      ...profile,
+      image: hideProfilePhoto ? null : profile.image,
+    });
   }
 
   const vehicleMatch = path.match(/^\/api\/v1\/vehicles\/([^/]+)$/);
@@ -2145,10 +2384,19 @@ export async function PATCH(request: NextRequest) {
 
     const motivoAjuste = dados.motivoAjuste;
     const itensAjuste = dados.itensAjuste;
-    if (itensAjuste !== undefined && (!Array.isArray(itensAjuste) || !itensAjuste.length ||
+    if (
+      itensAjuste !== undefined &&
+      (!Array.isArray(itensAjuste) ||
+        !itensAjuste.length ||
         new Set(itensAjuste).size !== itensAjuste.length ||
-        itensAjuste.some(item => !correctionItems.some(option => option.id === item))))
-      return Response.json({ message: "Selecione os itens que precisam ser corrigidos." }, { status: 422 });
+        itensAjuste.some(
+          (item) => !correctionItems.some((option) => option.id === item),
+        ))
+    )
+      return Response.json(
+        { message: "Selecione os itens que precisam ser corrigidos." },
+        { status: 422 },
+      );
     const expectedUpdatedAt = dados.expectedUpdatedAt;
     if (
       expectedUpdatedAt !== undefined &&
@@ -2234,9 +2482,15 @@ export async function PATCH(request: NextRequest) {
         { status: 409 },
       );
 
-    const completarPedidoAntigo = cadastro.status === "AJUSTES_SOLICITADOS" && !cadastro.itensAjuste.length &&
-      novoStatus === "AJUSTES_SOLICITADOS" && Array.isArray(itensAjuste);
-    if (!completarPedidoAntigo && !podeAlterarStatusCadastro(cadastro.status, novoStatus, "ADMIN")) {
+    const completarPedidoAntigo =
+      cadastro.status === "AJUSTES_SOLICITADOS" &&
+      !cadastro.itensAjuste.length &&
+      novoStatus === "AJUSTES_SOLICITADOS" &&
+      Array.isArray(itensAjuste);
+    if (
+      !completarPedidoAntigo &&
+      !podeAlterarStatusCadastro(cadastro.status, novoStatus, "ADMIN")
+    ) {
       return Response.json(
         {
           code: "INVALID_STATUS_TRANSITION",
@@ -2249,50 +2503,89 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (novoStatus === "APROVADO") {
-      const hoje = new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "America/Bahia" }));
+      const hoje = new Date(
+        new Date().toLocaleDateString("sv-SE", { timeZone: "America/Bahia" }),
+      );
       const documentos = await prisma.arquivoPrivado.findMany({
-        where: { motoristaId, OR: [
-          { id: cadastro.fotoPerfilId, tipo: "FOTO_PERFIL" },
-          { id: cadastro.documentoCnhId, tipo: "CNH" },
-        ] },
+        where: {
+          motoristaId,
+          OR: [
+            { id: cadastro.fotoPerfilId, tipo: "FOTO_PERFIL" },
+            { id: cadastro.documentoCnhId, tipo: "CNH" },
+          ],
+        },
         select: { id: true },
       });
-      if (cadastro.cnhValidade < hoje || !cadastro.veiculo.ativo || documentos.length !== 2)
-        return Response.json({ code: "REGISTRATION_INCOMPLETE", message: "Confira os documentos, a validade da CNH e o veículo ativo." }, { status: 422 });
+      if (
+        cadastro.cnhValidade < hoje ||
+        !cadastro.veiculo.ativo ||
+        documentos.length !== 2
+      )
+        return Response.json(
+          {
+            code: "REGISTRATION_INCOMPLETE",
+            message:
+              "Confira os documentos, a validade da CNH e o veículo ativo.",
+          },
+          { status: 422 },
+        );
     }
+    // Atualiza o cadastro e cria a notificação na mesma transação.
+    const resultado = await prisma.$transaction(async (tx) => {
+      const atualizacao = await tx.cadastroMotorista.updateMany({
+        where: {
+          id: cadastro.id,
+          status: cadastro.status,
+          atualizadoEm: cadastro.atualizadoEm,
+        },
+        data: {
+          status: novoStatus,
+          itensAjuste:
+            novoStatus === "AJUSTES_SOLICITADOS" && Array.isArray(itensAjuste)
+              ? itensAjuste
+              : [],
+          itensConferidos: correctionItems
+            .filter(
+              (item) =>
+                novoStatus === "APROVADO" ||
+                (Array.isArray(itensAjuste) && !itensAjuste.includes(item.id)),
+            )
+            .map((item) => item.id),
+          motivoAjuste:
+            novoStatus === "AJUSTES_SOLICITADOS" ? motivoAjuste!.trim() : null,
+          analisadoEm: new Date(),
+        },
+      });
 
-    // Atualização condicional para evitar aprovações concorrentes
+      // Uma atualização concorrente não deve gerar notificação.
+      if (atualizacao.count !== 1) {
+        return atualizacao;
+      }
 
-    const resultado = await prisma.cadastroMotorista.updateMany({
-      where: {
-        id: cadastro.id,
+      const aprovado = novoStatus === "APROVADO";
 
-        status: cadastro.status,
-        atualizadoEm: cadastro.atualizadoEm,
-      },
+      await criarNotificacao(tx, {
+        destinatarioId: motoristaId,
+        papelDestinatario: "motorista",
+        evento: aprovado ? "CADASTRO_APROVADO" : "CADASTRO_AJUSTES_SOLICITADOS",
+        titulo: aprovado
+          ? "Cadastro aprovado"
+          : "Correções necessárias no cadastro",
+        corpo: aprovado
+          ? "Seu cadastro foi aprovado pela equipe do FRETTA."
+          : `Seu cadastro precisa de ajustes: ${motivoAjuste!.trim()}`,
+        autorId: session.user.id,
+      });
 
-      data: {
-        status: novoStatus,
-        itensAjuste: novoStatus === "AJUSTES_SOLICITADOS" && Array.isArray(itensAjuste) ? itensAjuste : [],
-        itensConferidos: correctionItems
-          .filter(item => novoStatus === "APROVADO" || (Array.isArray(itensAjuste) && !itensAjuste.includes(item.id)))
-          .map(item => item.id),
-
-        motivoAjuste:
-          novoStatus === "AJUSTES_SOLICITADOS" ? motivoAjuste!.trim() : null,
-
-        analisadoEm: new Date(),
-      },
+      return atualizacao;
     });
 
     if (resultado.count !== 1) {
       return Response.json(
         {
           code: "REGISTRATION_CONFLICT",
-
           message: "O cadastro foi alterado por outra operação.",
         },
-
         { status: 409 },
       );
     }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 
@@ -105,4 +105,19 @@ export async function removerArquivoPrivado(
   const caminho = path.join(DIRETORIO_PRIVADO, chaveArmazenamento);
 
   await unlink(caminho);
+}
+
+export async function lerArquivoPrivado(
+  chaveArmazenamento: string,
+): Promise<Buffer> {
+  const nomeValido =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/i;
+
+  if (!nomeValido.test(chaveArmazenamento)) {
+    throw new Error("INVALID_STORAGE_KEY");
+  }
+
+  const caminho = path.join(DIRETORIO_PRIVADO, chaveArmazenamento);
+
+  return readFile(caminho);
 }
