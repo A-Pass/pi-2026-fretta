@@ -5,7 +5,7 @@ export function SubscriptionView({ onBack }: { onBack: () => void }) {
       <button className="back" onClick={onBack}>
         <ArrowLeft size={18} /> Voltar ao meu perfil
       </button>
-      <span className="eyebrow">MAIS CAMINHOS PARA SEU TRABALHO</span>
+      <span className="eyebrow">TELA DEMONSTRATIVA</span>
       <h1>Minha assinatura</h1>
       <section className="panel subscription-page">
         <ShieldCheck size={34} color="var(--orange)" />
@@ -13,9 +13,7 @@ export function SubscriptionView({ onBack }: { onBack: () => void }) {
         <p className="plan-price">
           R$ 49,90 <small>/ mês</small>
         </p>
-        <span className="badge">
-          Assinatura inativa
-        </span>
+        <span className="badge">Plano demonstrativo · sem cobrança</span>
         <ul>
           <li>
             <Check size={16} /> Buscar solicitações na sua área
@@ -27,7 +25,10 @@ export function SubscriptionView({ onBack }: { onBack: () => void }) {
             <Check size={16} /> Alterar a base para encontrar fretes de retorno
           </li>
         </ul>
-        <p>Planos e valores serão informados quando a integração estiver disponível.</p>
+        <p>
+          Você pode usar as funcionalidades do motorista sem assinatura. Esta
+          tela apresenta apenas uma demonstração do plano.
+        </p>
         <button className="primary" disabled>
           Assinatura indisponível
         </button>

@@ -21,7 +21,6 @@ type Props = {
   chatId: string;
   setChatId: (s: string) => void;
   send: (text: string) => Promise<boolean>;
-  subscription: boolean;
   onManageVehicles: () => void;
   onProvider?: (id: string, conversationId?: string) => void;
   onFreight?: (id: string) => void;
@@ -35,7 +34,6 @@ export function ChatView({
   send,
   save,
   name,
-  subscription,
   onManageVehicles,
   onProvider,
   onFreight,
@@ -98,7 +96,6 @@ export function ChatView({
     conversation &&
     ownProposal(conversation, store.profile?.id || "") &&
     canNegotiate &&
-    subscription &&
     driverCanPropose(store);
   const bottom = useRef<HTMLDivElement>(null),
     messagesViewport = useRef<HTMLDivElement>(null),

@@ -67,12 +67,9 @@ test("Docker Compose encaminha as credenciais Google para o servidor", () => {
     "utf8",
   );
 
-  assert.match(
-    compose,
-    /DATABASE_URL:\s+postgresql:\/\/\$\{DB_USER\}:\$\{DB_PASSWORD\}@database:5432\/\$\{DB_NAME\}/,
-  );
+  assert.match(compose, /DATABASE_URL:\s+\$\{DB_URL\}/);
   assert.match(compose, /condition:\s+service_healthy/);
-  assert.match(compose, /BETTER_AUTH_URL:\s+\$\{APP_BETTER_AUTH_URL:-\}/);
+  assert.match(compose, /BETTER_AUTH_URL:\s+\$\{APP_URL:-\}/);
   assert.match(compose, /BETTER_AUTH_SECRET:\s+\$\{APP_BETTER_AUTH_SECRET:-\}/);
   assert.match(compose, /GOOGLE_CLIENT_ID:\s+\$\{APP_GOOGLE_CLIENT_ID:-\}/);
   assert.match(compose, /GOOGLE_CLIENT_SECRET:\s+\$\{APP_GOOGLE_CLIENT_SECRET:-\}/);

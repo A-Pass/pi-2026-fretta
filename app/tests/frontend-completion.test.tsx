@@ -195,7 +195,6 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
         name={name}
         proposals={store.proposals}
         accepted={accepted}
-        subscription
         canPropose
         onRegistration={() => {}}
         setModal={() => {}}
@@ -234,4 +233,31 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
     ),
     false,
   );
+});
+test("motorista pode enviar proposta sem assinatura", () => {
+  const store = structuredClone(seed);
+  const freight = store.freights.find((item) => item.status === "ABERTO")!;
+  const html = renderToStaticMarkup(
+    <FreightDetailsView
+      f={freight}
+      role="motorista"
+      name="Carlos Santos"
+      store={{
+        ...store,
+        profile: { id: "driver-1", name: "Carlos Santos", photo: "" },
+      }}
+      proposals={[]}
+      accepted={undefined}
+      canPropose
+      onRegistration={() => {}}
+      setModal={() => {}}
+      setSelected={() => {}}
+      onChat={() => {}}
+      save={async () => true}
+      schedule={() => "A combinar"}
+    />,
+  );
+  assert.match(html, /Enviar proposta/);
+  assert.doesNotMatch(html, /Ative sua assinatura/);
+  assert.doesNotMatch(html, /disabled=""/);
 });

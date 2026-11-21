@@ -76,7 +76,7 @@ Confira a entrega e as pendências em [docs/frontend-checklist.md](docs/frontend
 
 ## Limites conhecidos
 
-Autenticação Google e sessão persistida via Better Auth/PostgreSQL estão implementadas. O estado da conta é carregado e salvo pela API no servidor com autorização por sessão. Cadastro complementar, autorização administrativa completa, uploads privados, chat remoto e pagamentos continuam pendentes nos módulos de domínio.
+Autenticação Google e sessão persistida via Better Auth/PostgreSQL estão implementadas. Os dados da conta são carregados e salvos pela API em tabelas relacionais vinculadas ao usuário, com autorização por sessão; a migração `relational_user_data` transfere os dados legados e remove `app_states`. Cadastro complementar, autorização administrativa completa, uploads privados, chat remoto e pagamentos continuam pendentes nos módulos de domínio.
 
 PWA: manifest e ícones preparados; em produção (`npm run build` e `npm start`) o service worker fornece apenas um aviso offline. APIs, dados privados e mapas não são cacheados. O sistema não funciona integralmente offline. A homologação em Android/iPhone físicos e em HTTPS publicado permanece pendente. Use `http://localhost:3000` em desenvolvimento; outros hosts podem ser bloqueados pela proteção de origem do Next.js.
 

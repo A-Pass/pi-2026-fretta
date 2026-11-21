@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AuthCompleteView } from "@/frontend/auth/AuthCompleteView";
-import { accountSetupIsComplete } from "@/frontend/auth/account-setup";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/db";
 import type { Role } from "@/contracts";
@@ -16,11 +15,11 @@ export default async function AuthCompletePage({ searchParams }: PageProps) {
 
   const params = await searchParams;
   const role: Role = params.perfil === "motorista" ? "motorista" : "cliente";
-  const savedState = await prisma.appState.findUnique({
-    where: { userId: session.user.id },
-    select: { data: true },
+  const account = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { accountSetupComplete: true },
   });
-  if (accountSetupIsComplete(savedState?.data))
+  if (account?.accountSetupComplete)
     redirect(`/${role}/inicio`);
 
   return (

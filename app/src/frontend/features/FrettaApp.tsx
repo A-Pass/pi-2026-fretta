@@ -103,8 +103,7 @@ export function FrettaApp() {
     saving = useRef(false),
     main = useRef<HTMLElement>(null);
   const name = store?.profile?.name || "",
-    profilePhoto = store?.profile?.photo || "",
-    subscription = false;
+    profilePhoto = store?.profile?.photo || "";
   useEffect(() => {
     if (role !== "motorista" || !selected) {
       setResolvedOpportunityId(selected);
@@ -263,7 +262,7 @@ export function FrettaApp() {
   async function createRequest(draft: FreightRequestDraft) {
     if (!store) return false;
     try {
-      const { freight } = await createBackendClient().createFreight({
+      const { freight, savedAddresses = [] } = await createBackendClient().createFreight({
         title: draft.title,
         description: draft.description,
         vehicle: draft.vehicle,
@@ -271,9 +270,12 @@ export function FrettaApp() {
         pickup: draft.pickup,
         delivery: draft.delivery,
         photoIds: draft.photos,
+        savePickup: draft.savePickup,
+        saveDelivery: draft.saveDelivery,
       });
       const next: Store = {
         ...store,
+        addresses: [...(store.addresses || []), ...savedAddresses],
         freights: [freight, ...store.freights.filter((item) => item.id !== freight.id)],
         freightAddresses: {
           ...store.freightAddresses,
@@ -303,7 +305,6 @@ export function FrettaApp() {
       !store ||
       !f ||
       role !== "motorista" ||
-      !subscription ||
       !driverCanPropose(store) ||
       f.status !== "ABERTO"
     )
@@ -671,7 +672,6 @@ export function FrettaApp() {
               store={store}
               proposals={proposals}
               accepted={accepted}
-              subscription={subscription}
               canPropose={driverCanPropose(store)}
               onRegistration={() => nav("cadastro-motorista")}
               setModal={setModal}
@@ -769,7 +769,6 @@ export function FrettaApp() {
                 onCompany={() => nav("empresa")}
                 onSubscription={() => nav("assinatura")}
                 role={role}
-                subscription={subscription}
                 setEntered={() => {
                   void signOut();
                   setModal("");
@@ -802,7 +801,6 @@ export function FrettaApp() {
               setChatId={setChatId}
               send={send}
               save={save}
-              subscription={subscription}
               onManageVehicles={() => nav("veiculos")}
               onProvider={navigation.openProvider}
               onFreight={setSelected}
@@ -811,7 +809,6 @@ export function FrettaApp() {
             <DriverHomeView
               store={store}
               name={name}
-              subscription={subscription}
               save={save}
               onSelect={(freight) => {
                 opportunityCache.clear();
@@ -827,7 +824,6 @@ export function FrettaApp() {
                 setSelectedOpportunity(freightFromFeedItem(freight));
                 setSelected(freight.id);
               }}
-              onProfile={() => nav("assinatura")}
               schedule={(f) => scheduleLabel(f.schedule)}
             />
           ) : role === "motorista" && tab === "fretes" ? (
@@ -855,7 +851,6 @@ export function FrettaApp() {
                 if (!id) setSelectedOpportunity(null);
                 setSelected(id);
               }}
-              subscription={subscription}
               schedule={(f) => scheduleLabel(f.schedule)}
             />
           )}

@@ -14,18 +14,14 @@ import { createBackendClient, type FreightFeedItem } from "../../api/backend";
 type Props = {
   store: Store;
   name: string;
-  subscription: boolean;
   save: (s: Store) => Promise<boolean>;
-  onProfile: () => void;
   schedule: (f: FreightFeedItem) => string | undefined;
   onSelect: (freight: FreightFeedItem) => void;
 };
 export function DriverHomeView({
   store,
   name,
-  subscription,
   save,
-  onProfile,
   schedule,
   onSelect,
 }: Props) {
@@ -49,7 +45,7 @@ export function DriverHomeView({
     [query, area?.center.lat, area?.center.lng, radiusKm],
   );
   useEffect(() => {
-    if (!subscription || !area) return;
+    if (!area) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setSearching(true);
@@ -92,7 +88,6 @@ export function DriverHomeView({
       controller.abort();
     };
   }, [
-    subscription,
     query,
     area?.center.lat,
     area?.center.lng,
@@ -256,12 +251,10 @@ export function DriverHomeView({
               : "Defina sua área de operação para encontrar solicitações próximas."}
           </p>
         </div>
-        {subscription && (
-          <span className="badge">
-            {matches.length}{" "}
-            {matches.length === 1 ? "oportunidade" : "oportunidades"}
-          </span>
-        )}
+        <span className="badge">
+          {matches.length}{" "}
+          {matches.length === 1 ? "oportunidade" : "oportunidades"}
+        </span>
       </div>
       <label className="search driver-search">
         <Search size={18} />
@@ -272,71 +265,61 @@ export function DriverHomeView({
           placeholder="Busque por título, região ou destino"
         />
       </label>
-      {!subscription ? (
-        <section className="panel empty">
-          <h2>Assinatura indisponível</h2>
-          <p>Novas oportunidades estarão disponíveis quando a assinatura for integrada.</p>
-          <button className="primary" onClick={onProfile}>
-            Ver assinatura
-          </button>
-        </section>
-      ) : (
-        <div className="cards">
-          {searching && (
-            <p className="muted" role="status">
-              Buscando fretes disponíveis…
-            </p>
-          )}
-          {searchError && (
-            <p className="alert" role="alert">
-              {searchError}
-            </p>
-          )}
-          {matches.slice(0, visible).map(({ freight: f, distance }) => (
-            <article className="freight-card" key={f.id}>
-              <div className="section-head">
-                <span className="type-icon">
-                  <Package />
+      <div className="cards">
+        {searching && (
+          <p className="muted" role="status">
+            Buscando fretes disponíveis…
+          </p>
+        )}
+        {searchError && (
+          <p className="alert" role="alert">
+            {searchError}
+          </p>
+        )}
+        {matches.slice(0, visible).map(({ freight: f, distance }) => (
+          <article className="freight-card" key={f.id}>
+            <div className="section-head">
+              <span className="type-icon">
+                <Package />
+              </span>
+              <span className="badge">
+                Retirada a aproximadamente {Math.round(distance)} km
+              </span>
+            </div>
+            <h3>{f.title}</h3>
+            <p className="description">{f.description}</p>
+            <div className="route">
+              <p>
+                <MapPin size={16} />
+                <span>
+                  <small>RETIRADA</small>
+                  {f.origin}
                 </span>
-                <span className="badge">
-                  Retirada a aproximadamente {Math.round(distance)} km
+              </p>
+              <p>
+                <MapPin size={16} />
+                <span>
+                  <small>ENTREGA</small>
+                  {f.destination}
                 </span>
-              </div>
-              <h3>{f.title}</h3>
-              <p className="description">{f.description}</p>
-              <div className="route">
-                <p>
-                  <MapPin size={16} />
-                  <span>
-                    <small>RETIRADA</small>
-                    {f.origin}
-                  </span>
-                </p>
-                <p>
-                  <MapPin size={16} />
-                  <span>
-                    <small>ENTREGA</small>
-                    {f.destination}
-                  </span>
-                </p>
-              </div>
-              <div className="facts">
-                <span>🚚 {f.vehicle}</span>
-                <span>◷ {schedule(f)}</span>
-              </div>
-              <button className="card-link" onClick={() => onSelect(f)}>
-                Ver oportunidade <ArrowRight size={18} />
-              </button>
-            </article>
-          ))}
-          {!matches.length && (
-            <EmptyState title="Nenhuma retirada nesta área por enquanto">
-              Aumente o raio ou altere sua base para buscar oportunidades em
-              outra região.
-            </EmptyState>
-          )}
-        </div>
-      )}
+              </p>
+            </div>
+            <div className="facts">
+              <span>🚚 {f.vehicle}</span>
+              <span>◷ {schedule(f)}</span>
+            </div>
+            <button className="card-link" onClick={() => onSelect(f)}>
+              Ver oportunidade <ArrowRight size={18} />
+            </button>
+          </article>
+        ))}
+        {!matches.length && (
+          <EmptyState title="Nenhuma retirada nesta área por enquanto">
+            Aumente o raio ou altere sua base para buscar oportunidades em
+            outra região.
+          </EmptyState>
+        )}
+      </div>
       {visible < matches.length && (
         <div className="load-more">
           <button

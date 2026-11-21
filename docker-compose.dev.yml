@@ -5,6 +5,11 @@ services:
     image: app-fretta:dev
     ports:
       - "9229:9229"
+      - "127.0.0.1:${APP_EXTERNAL_PORT}:${APP_PORT}"
     environment:
-      NODE_ENV: development
+      NODE_ENV: ${APP_NODE_ENV}
       NODE_OPTIONS: "--inspect=0.0.0.0:9229"
+
+  database:
+    ports:
+      - "127.0.0.1:5433:${DB_PORT}"

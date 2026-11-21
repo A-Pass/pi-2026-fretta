@@ -82,7 +82,7 @@ export function DriverRegistrationStatusView({
           </h1>
           <p>
             {approved
-              ? "Você já pode configurar sua área de operação e buscar o próximo frete. Novas propostas também dependem de uma assinatura ativa."
+              ? "Você já pode configurar sua área de operação, buscar oportunidades e enviar propostas sem precisar de assinatura."
               : pending
                 ? "A documentação foi selecionada e os dados foram conferidos no formulário. O envio ainda não significa que sua identidade ou habilitação foram verificadas."
                 : rejected

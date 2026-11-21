@@ -1,5 +1,14 @@
 # Estágio base compartilhado
-FROM node:22-slim AS base
+FROM node:22-trixie-slim AS base
+
+# Alterna para root para ter permissão de instalar pacotes no sistema
+USER root
+
+# Instala o openssl sem pacotes recomendados extras e remove os caches do apt na mesma camada
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 RUN chown node:node /app
 USER node
@@ -14,7 +23,8 @@ RUN npm ci
 
 COPY --chown=node:node . .
 
-EXPOSE 3000
+ARG APP_PORT=3000
+EXPOSE $APP_PORT
 
 # Estágio de desenvolvimento (com devDependencies, watch e debug)
 FROM base AS development

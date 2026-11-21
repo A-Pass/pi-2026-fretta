@@ -37,7 +37,13 @@ export type PrivateFreightDetail = {
 export type NewFreight = Pick<
   Freight,
   "title" | "description" | "vehicle" | "schedule"
-> & { pickup: Address; delivery: Address; photoIds: string[] };
+> & {
+  pickup: Address;
+  delivery: Address;
+  photoIds: string[];
+  savePickup?: boolean;
+  saveDelivery?: boolean;
+};
 export type NewOffer = {
   priceCents: number;
   vehicleId: string;
@@ -76,7 +82,10 @@ export function createBackendClient(
     freight: (value: string, signal?: AbortSignal) =>
       http.request<PrivateFreightDetail>(`/freights/${id(value)}`, { signal }),
     createFreight: (payload: NewFreight) =>
-      post<PrivateFreightDetail>("/freights", payload),
+        post<PrivateFreightDetail & { savedAddresses: SavedAddress[] }>(
+          "/freights",
+          payload,
+        ),
     cancelFreight: (value: string) =>
       post<PrivateFreightDetail>(`/freights/${id(value)}/cancel`),
     startFreight: (value: string) =>
