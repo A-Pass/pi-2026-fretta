@@ -1,4 +1,9 @@
-import type { Address, FreightRequestDraft, Schedule } from "@/contracts";
+import type {
+  Address,
+  FreightRequestDraft,
+  MapPoint,
+  Schedule,
+} from "@/contracts";
 export function emptyAddress(): Address {
   return {
     label: "",
@@ -14,6 +19,67 @@ export function emptyAddress(): Address {
 }
 
 export type ReverseGeocodeAddress = Record<string, string | undefined>;
+
+export type PostalCodeAddress = {
+  cep?: string;
+  logradouro?: string;
+  complemento?: string;
+  bairro?: string;
+  localidade?: string;
+  uf?: string;
+  erro?: boolean;
+};
+
+export function postalCodeMapPoint(data: {
+  location?: {
+    coordinates?: {
+      latitude?: string | number;
+      longitude?: string | number;
+    };
+  };
+}): MapPoint | null {
+  const rawLatitude = data.location?.coordinates?.latitude;
+  const rawLongitude = data.location?.coordinates?.longitude;
+  if (
+    rawLatitude === undefined ||
+    rawLongitude === undefined ||
+    (typeof rawLatitude === "string" && !rawLatitude.trim()) ||
+    (typeof rawLongitude === "string" && !rawLongitude.trim())
+  )
+    return null;
+  const latitude = Number(rawLatitude);
+  const longitude = Number(rawLongitude);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  )
+    return null;
+  return { lat: latitude, lng: longitude };
+}
+
+export function formatPostalCode(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  return digits.length > 5
+    ? `${digits.slice(0, 5)}-${digits.slice(5)}`
+    : digits;
+}
+
+export function fillAddressFromPostalCode(
+  address: Address,
+  postal: PostalCodeAddress,
+): Address {
+  const state = postal.uf?.trim().toUpperCase() || "";
+  return {
+    ...address,
+    city: postal.localidade?.trim() || address.city,
+    state: /^[A-Z]{2}$/.test(state) ? state : address.state,
+    neighborhood: postal.bairro?.trim() || address.neighborhood,
+    street: postal.logradouro?.trim() || address.street,
+    postalCode: postal.cep?.trim() || address.postalCode,
+  };
+}
 
 const brazilStates: Record<string, string> = {
   acre: "AC",
@@ -49,7 +115,10 @@ export function fillAddressFromReverseGeocode(
   address: Address,
   geocoded: ReverseGeocodeAddress,
 ): Address {
-  const stateCode = geocoded.state_code?.trim().toUpperCase().replace(/^BR-/, "");
+  const stateCode = geocoded.state_code
+    ?.trim()
+    .toUpperCase()
+    .replace(/^BR-/, "");
   const normalizedState =
     (stateCode && /^[A-Z]{2}$/.test(stateCode) ? stateCode : "") ||
     brazilStates[

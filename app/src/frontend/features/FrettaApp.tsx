@@ -77,6 +77,9 @@ export function FrettaApp() {
   const [updatingDriver, setUpdatingDriver] = useState(false);
   const [modal, setModal] = useState(""),
     [success, setSuccess] = useState<"proposal" | "request" | null>(null);
+  const [publishedRequestId, setPublishedRequestId] = useState<string | null>(
+    null,
+  );
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("TODOS");
   const latest = useRef<Store | null>(null),
@@ -167,7 +170,7 @@ export function FrettaApp() {
     if (!store) return false;
     const next = buildRequest(store, draft);
     if (!(await save(next))) return false;
-    setSelected(next.freights[0].id);
+    setPublishedRequestId(next.freights[0].id);
     setModal("");
     setSuccess("request");
     return true;
@@ -740,10 +743,20 @@ export function FrettaApp() {
         }
         description={
           success === "request"
-            ? "Agora você pode acompanhar as propostas recebidas."
+            ? "Sua solicitação foi publicada. Abra os detalhes para acompanhar as propostas recebidas."
             : "Acompanhe a resposta em Meus serviços ou continue a conversa pelo chat."
         }
-        onClose={() => setSuccess(null)}
+        actionLabel={success === "request" ? "Ver solicitação" : "Entendi"}
+        onClose={() => {
+          setSuccess(null);
+          setPublishedRequestId(null);
+        }}
+        onAction={() => {
+          if (success === "request" && publishedRequestId)
+            setSelected(publishedRequestId);
+          setSuccess(null);
+          setPublishedRequestId(null);
+        }}
       />
     </div>
   );
