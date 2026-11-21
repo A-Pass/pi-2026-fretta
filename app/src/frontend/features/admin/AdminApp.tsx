@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -25,7 +26,7 @@ const labels = {
   AJUSTES_SOLICITADOS: "Ajustes solicitados",
 };
 export function AdminApp() {
-  const real = process.env.NEXT_PUBLIC_API_MODE === "real";
+  const real = true;
   const [store, setStore] = useState<Store | null>(null),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true);
@@ -91,19 +92,19 @@ export function AdminApp() {
   return (
     <div className="admin-shell">
       <header className="admin-header">
-        <a className="brand" href="/">
+        <Link className="brand" href="/">
           FRETTA<span>•</span>
-        </a>
+        </Link>
         <span>
           <ShieldCheck size={19} /> Administração
         </span>
-        <a href="/?perfil=cliente&tela=perfil">Voltar ao aplicativo</a>
+        <Link href="/cliente/perfil">Voltar ao aplicativo</Link>
       </header>
       <main className="admin-main">
         <p className="admin-demo-note">
           {real
             ? "Área restrita · Acesso depende de autorização no servidor."
-            : "PAINEL DE DEMONSTRAÇÃO · Administrador fictício. Não use documentos reais. As decisões afetam somente os exemplos deste navegador e não concedem permissão administrativa real."}
+            : "Acesso administrativo restrito."}
         </p>
         {error && (
           <p className="alert" role="alert">
@@ -281,7 +282,7 @@ export function AdminApp() {
                         <ClipboardList />
                         <p>Imagem privada da CNH</p>
                         <small>
-                          A demonstração não guarda nem exibe a imagem da CNH. A
+                          A imagem da CNH não é exibida por esta interface.
                           visualização real depende de upload privado e
                           autorização do servidor.
                         </small>
@@ -414,7 +415,7 @@ export function AdminApp() {
         }
         description={
           decision === "APROVADO"
-            ? "A aprovação será registrada no histórico de demonstração. Não representa verificação oficial dos documentos."
+            ? "A decisão será registrada apenas após autorização no servidor."
             : `O prestador verá este motivo ao consultar o cadastro: ${reason.trim()}`
         }
         confirmLabel={
@@ -438,7 +439,7 @@ export function AdminApp() {
           setStore(updated);
           setSuccess(
             decision === "APROVADO"
-              ? "Cadastro aprovado na demonstração."
+              ? "Cadastro aprovado."
               : "Correções solicitadas. O motivo está disponível no cadastro do prestador.",
           );
           setDecision(null);

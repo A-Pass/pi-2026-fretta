@@ -1,10 +1,9 @@
 import { useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, Camera, LogOut, Pencil, User, X } from "lucide-react";
 import type { Role, DriverRegistration } from "@/contracts";
 import { prepareOnboardingPhoto } from "./onboarding/images";
 import { useDiscardChanges } from "../components/useDiscardChanges";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { resetDemo } from "../api/client";
 type Props = {
   onAddresses: () => void;
   onRegistration: () => void;
@@ -41,7 +40,6 @@ export function ProfileView({
   subscription,
   setEntered,
 }: Props) {
-  const [restoreOpen, setRestoreOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftName, setDraftName] = useState(name),
     [draftPhoto, setDraftPhoto] = useState(photo),
@@ -196,7 +194,7 @@ export function ProfileView({
         )}
         <h2>{name}</h2>
         <p>
-          {role === "cliente" ? "Cliente" : "Motorista"} · Conta de demonstração
+          {role === "cliente" ? "Cliente" : "Motorista"} · Conta FRETTA
         </p>
         <button
           className="primary"
@@ -213,11 +211,9 @@ export function ProfileView({
           Meus Endereços{" "}
           <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
         </button>
-        {process.env.NEXT_PUBLIC_API_MODE !== "real" && (
-          <a className="secondary profile-return" href="/admin">
-            Painel administrativo · demonstração
-          </a>
-        )}
+        <Link className="secondary profile-return" href="/admin">
+          Painel administrativo
+        </Link>
         {role === "motorista" && (
           <div className="profile-driver-links">
             <button className="secondary" onClick={onPublicProfile}>
@@ -231,7 +227,7 @@ export function ProfileView({
             <button className="secondary" onClick={onRegistration}>
               Cadastro do motorista ·{" "}
               {registration?.status === "APROVADO"
-                ? "Aprovado na demonstração"
+                ? "Aprovado"
                 : registration?.status === "EM_ANALISE"
                   ? "Em análise"
                   : registration?.status === "AJUSTES_SOLICITADOS"
@@ -254,22 +250,7 @@ export function ProfileView({
         >
           <LogOut size={18} /> Sair da conta
         </button>
-        <button className="danger" onClick={() => setRestoreOpen(true)}>
-          Restaurar demonstração
-        </button>
       </section>
-      <ConfirmDialog
-        open={restoreOpen}
-        onClose={() => setRestoreOpen(false)}
-        title="Restaurar demonstração?"
-        description="Solicitações, conversas, veículos, endereços e alterações de perfil salvos neste navegador serão apagados e substituídos pelos exemplos iniciais."
-        confirmLabel="Restaurar demonstração"
-        cancelLabel="Manter meus dados"
-        onConfirm={async () => {
-          resetDemo();
-          return true;
-        }}
-      />
     </>
   );
 }

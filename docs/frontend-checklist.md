@@ -1,6 +1,6 @@
-# Checklist do front-end — 16/11/2026
+# Checklist do front-end — 17/11/2026
 
-Implementação na demonstração local. Não representa uma entrega com contas reais.
+Fluxos de domínio ainda usam demonstração local. O login Google cria conta/sessão reais, mas não conecta esses dados à identidade nem oferece isolamento entre usuários.
 
 ## Concluído nesta revisão
 
@@ -21,6 +21,7 @@ Implementação na demonstração local. Não representa uma entrega com contas 
 - [x] Datas/horários com apresentação em America/Bahia, campos locais convertidos para instantes ISO com fuso, exemplos novos com disponibilidade futura.
 - [x] Listas de cliente e oportunidades com carregamento local em lotes de 12. Paginação HTTP ainda depende da API.
 - [x] Pop-ups nativos acessíveis, confirmação visual para restaurar demonstração, foco nas ações, link para pular ao conteúdo, avaliação por teclado e ajustes de contraste.
+- [x] Tela de acesso com usuário, senha com controle para mostrar/ocultar, recuperar senha, registro e autenticação real via Google; Apple ID, recuperação e cadastro seguem sem integração real.
 - [x] Ajustes responsivos do chat, pop-ups, formulários e acordo; conferência no navegador em 360 e 1440 pixels.
 - [x] Tela de assinatura com estado, benefícios e ativação/vencimento simulados, sem cobrança. Histórico e serviços contratados não são bloqueados pelo vencimento.
 - [x] Ícones PNG 192/512, ícone maskable e Apple, manifest atualizado e instruções de instalação.
@@ -37,7 +38,7 @@ Implementação na demonstração local. Não representa uma entrega com contas 
 - [x] Em análise, ajustes solicitados, reenvio e aprovação explicitamente simulada. Envio não aprova automaticamente.
 - [x] Cadastro pendente/CNH vencida/falta de foto ou veículo impede novas propostas. Serviços e conversas existentes continuam acessíveis.
 - [x] Números completos e imagem de CNH não são persistidos no protótipo; exemplo fictício disponível sem documentos reais.
-- [ ] Identificação de conta Google nova, upload privado, autenticidade documental e análise administrativa reais dependem do backend.
+- [ ] Associação da identidade Google ao cadastro complementar, upload privado, autenticidade documental e análise administrativa reais dependem do backend.
 
 ## Verificação
 
@@ -48,7 +49,8 @@ Implementação na demonstração local. Não representa uma entrega com contas 
 
 ## Pendente de integração com o grupo
 
-- [ ] Login Google real, sessão de servidor, cadastro complementar e saída real da conta.
+- [x] Login OAuth Google com sessão persistida no PostgreSQL, callback Better Auth e encerramento de sessão.
+- [ ] Configurar credenciais OAuth e banco por ambiente e validar o fluxo em HTTPS; conectar cadastro complementar, autorização e recursos de domínio à identidade.
 - [x] Cliente HTTP tipado preparado por endpoint, com cursores, cancelamento, timeout e mensagens seguras de erro.
 - [ ] Conectar as telas aos endpoints reais após confirmar os DTOs com o grupo. O endpoint provisório continua retornando 501.
 - [ ] Autorização por conta, associação cliente/motorista, filtro geográfico e proteção de endereços no servidor. O armazenamento demonstrativo é compartilhado neste navegador.

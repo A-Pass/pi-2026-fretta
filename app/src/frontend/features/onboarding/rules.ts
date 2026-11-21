@@ -139,7 +139,7 @@ export function submitDriverRegistration(
     if (error) throw new Error(error);
   }
   const registration: DriverRegistration = {
-    mode: "demo",
+    mode: "real",
     status: "EM_ANALISE",
     fullName: draft.fullName.trim(),
     personType: draft.personType,
@@ -158,7 +158,7 @@ export function submitDriverRegistration(
     documentsSubmitted: true,
     submittedAt: new Date().toISOString(),
   };
-  // Deliberately never persist raw tax IDs, CNH number or the CNH image in the demo store.
+  // Raw tax IDs, CNH number and CNH image must only be transmitted by a private authorized upload flow.
   return {
     ...store,
     driverRegistration: registration,
@@ -182,7 +182,6 @@ export function driverCanPropose(store: Store, today = todayLocal()) {
   const registration = store.driverRegistration;
   return (
     !!registration &&
-    registration.mode === "demo" &&
     registration.status === "APROVADO" &&
     registration.documentsSubmitted &&
     licenseDateValid(registration.license.expiresOn, today) &&
@@ -206,7 +205,7 @@ export function simulateReview(
       !store.vehicles?.length)
   )
     throw new Error(
-      "Complete a foto, o veículo e uma CNH não vencida antes de simular a aprovação.",
+      "Complete a foto, o veículo e uma CNH não vencida antes de enviar propostas.",
     );
   return {
     ...store,

@@ -33,5 +33,9 @@ export function opportunities(store: Store, area: OperatingArea) {
     .sort((a, b) => a.distance - b.distance);
 }
 export function ownProposal(p: Proposal, name: string) {
-  return p.driverId === "demo-driver" || (!p.driverId && p.driver === name);
+  return (
+    p.driverId === "provider-current" ||
+    p.driverId === "demo-driver" ||
+    (!p.driverId && p.driver === name)
+  );
 }

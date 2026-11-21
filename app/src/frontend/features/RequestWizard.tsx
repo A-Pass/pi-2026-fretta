@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Check, Camera, Truck, X } from "lucide-react";
 import type { FreightRequestDraft, SavedAddress, Schedule } from "@/contracts";
 import { prepareOnboardingPhoto } from "./onboarding/images";
 import { useDiscardChanges } from "../components/useDiscardChanges";
+import { DateField } from "../components/DateField";
 import { AddressFields } from "./addresses/AddressFields";
 import {
   emptyAddress,
@@ -377,43 +378,39 @@ export function RequestWizard({
                   </p>
                 ) : (
                   <div className="form-grid">
-                    <label>
-                      {draft.schedule.kind === "fixa"
-                        ? "Data do frete"
-                        : "Início do intervalo"}
-                      <input
-                        type="date"
+                    <DateField
+                      label={
+                        draft.schedule.kind === "fixa"
+                          ? "Data do frete"
+                          : "Início do intervalo"
+                      }
+                      required
+                      min={todayLocal()}
+                      value={draft.schedule.start || ""}
+                      onChange={(start) =>
+                        update({
+                          schedule: {
+                            ...draft.schedule,
+                            start,
+                          },
+                        })
+                      }
+                    />
+                    {draft.schedule.kind === "intervalo" && (
+                      <DateField
+                        label="Fim do intervalo"
                         required
-                        min={todayLocal()}
-                        value={draft.schedule.start || ""}
-                        onChange={(e) =>
+                        min={draft.schedule.start || todayLocal()}
+                        value={draft.schedule.end || ""}
+                        onChange={(end) =>
                           update({
                             schedule: {
                               ...draft.schedule,
-                              start: e.target.value,
+                              end,
                             },
                           })
                         }
                       />
-                    </label>
-                    {draft.schedule.kind === "intervalo" && (
-                      <label>
-                        Fim do intervalo
-                        <input
-                          type="date"
-                          required
-                          min={draft.schedule.start || todayLocal()}
-                          value={draft.schedule.end || ""}
-                          onChange={(e) =>
-                            update({
-                              schedule: {
-                                ...draft.schedule,
-                                end: e.target.value,
-                              },
-                            })
-                          }
-                        />
-                      </label>
                     )}
                   </div>
                 )}

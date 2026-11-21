@@ -9,10 +9,20 @@ export function LocationPicker({
   value,
   onChange,
   radiusKm,
+  mapCenter,
+  mapZoom = 12,
+  suggestedPoint,
+  selectionResetKey = 0,
+  showLocateButton = true,
 }: {
   value: MapPoint | null;
   radiusKm?: number;
   onChange: (p: MapPoint | null) => void;
+  mapCenter?: MapPoint | null;
+  mapZoom?: number;
+  suggestedPoint?: MapPoint | null;
+  selectionResetKey?: number;
+  showLocateButton?: boolean;
 }) {
   const instructionsId = useId();
   const tileLayer = useRef<TileLayer | null>(null);
@@ -29,6 +39,7 @@ export function LocationPicker({
     [tileError, setTileError] = useState(false);
   const circle = useRef<Circle | null>(null);
   const radius = useRef(radiusKm);
+  const previousSelectionResetKey = useRef(selectionResetKey);
   radius.current = radiusKm;
   change.current = onChange;
   const placeRef = useRef<(p: MapPoint) => void>(() => {});
@@ -136,6 +147,27 @@ export function LocationPicker({
     }
   }, [value?.lat, value?.lng, mapReady]);
   useEffect(() => {
+    if (previousSelectionResetKey.current === selectionResetKey) return;
+    previousSelectionResetKey.current = selectionResetKey;
+    marker.current?.remove();
+    marker.current = null;
+    circle.current?.remove();
+    circle.current = null;
+    draftRef.current = null;
+    setDraft(null);
+  }, [selectionResetKey, mapReady]);
+  useEffect(() => {
+    if (mapCenter && map.current) {
+      map.current.setView([mapCenter.lat, mapCenter.lng], mapZoom);
+    }
+  }, [mapCenter?.lat, mapCenter?.lng, mapZoom, mapReady]);
+  useEffect(() => {
+    if (suggestedPoint && map.current) {
+      placeRef.current(suggestedPoint);
+      map.current.setView([suggestedPoint.lat, suggestedPoint.lng], 17);
+    }
+  }, [suggestedPoint?.lat, suggestedPoint?.lng, mapReady]);
+  useEffect(() => {
     if (circle.current && radiusKm && map.current) {
       circle.current.setRadius(radiusKm * 1000);
       map.current.fitBounds(circle.current.getBounds(), { padding: [15, 15] });
@@ -175,19 +207,19 @@ export function LocationPicker({
     <div className="location-picker">
       <div className="section-head">
         <p className="muted" id={instructionsId}>
-          Toque no mapa ou arraste o marcador. No teclado, use as setas para
-          mover o mapa e o botão “Selecionar centro do mapa”. Use + e − para
-          ajustar o zoom.
+          Toque no mapa ou arraste o marcador. Use + e − para ajustar o zoom.
         </p>
-        <button
-          type="button"
-          className="secondary"
-          onClick={locate}
-          disabled={loading || !mapReady}
-        >
-          <LocateFixed size={17} />
-          {loading ? "Buscando localização…" : "Usar minha localização"}
-        </button>
+        {showLocateButton && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={locate}
+            disabled={loading || !mapReady}
+          >
+            <LocateFixed size={17} />
+            {loading ? "Buscando localização…" : "Usar minha localização"}
+          </button>
+        )}
       </div>
       <div
         ref={container}
@@ -218,21 +250,6 @@ export function LocationPicker({
           {error}
         </p>
       )}
-      <button
-        type="button"
-        className="secondary select-map-center"
-        disabled={!mapReady || loading}
-        onClick={() => {
-          const center = map.current?.getCenter();
-          if (center) {
-            placeRef.current({ lat: center.lat, lng: center.lng });
-            change.current(null);
-            setError("");
-          }
-        }}
-      >
-        <MapPin size={16} /> Selecionar centro do mapa
-      </button>
       <div className="map-confirm">
         <span>
           {value ? (
@@ -259,5 +276,73 @@ export function LocationPicker({
         </button>
       </div>
     </div>
+  );
+}
+
+export function UseMyLocationButton({
+  onLocated,
+}: {
+  onLocated: (point: MapPoint) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  function locate() {
+    if (!navigator.geolocation) {
+      setError(
+        "Seu navegador não oferece localização. Preencha o endereço manualmente.",
+      );
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (!alive.current) return;
+        onLocated({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        setLoading(false);
+      },
+      (geolocationError) => {
+        if (!alive.current) return;
+        setLoading(false);
+        setError(
+          geolocationError.code === 1
+            ? "Permissão de localização negada. Preencha o endereço manualmente."
+            : "Não foi possível obter sua localização. Tente novamente ou preencha o endereço.",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="secondary"
+        onClick={locate}
+        disabled={loading}
+      >
+        <LocateFixed size={17} />
+        {loading ? "Buscando localização…" : "Usar minha localização"}
+      </button>
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
