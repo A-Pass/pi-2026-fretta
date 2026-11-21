@@ -86,9 +86,6 @@ jobs:
             --exclude='target' \
             . | ssh deploy-server "mkdir -p '$REMOTE_PATH' && tar -xzf - -C '$REMOTE_PATH'"
 
-          # Envia o .env
-          scp .env "deploy-server:$REMOTE_PATH/.env"
-
           # Executa o build multicamada e inicialização dos contêineres do monólito
           ssh deploy-server "
             cd '$REMOTE_PATH' &&
