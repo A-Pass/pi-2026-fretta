@@ -134,6 +134,12 @@ export function AddressBookView({
                 {a.complement ? ` · ${a.complement}` : ""}
                 <br />
                 {a.neighborhood}, {a.city} · {a.state}
+                {a.postalCode ? (
+                  <>
+                    <br />
+                    CEP: {a.postalCode}
+                  </>
+                ) : ""}
               </p>
               <div className="actions">
                 <button className="secondary" onClick={() => edit(a)}>

@@ -91,7 +91,7 @@ export interface AppNotification {
   proposalId?: string;
 }
 export interface DriverRegistration {
-  mode: "demo";
+  mode?: "demo" | "real";
   status: "EM_ANALISE" | "AJUSTES_SOLICITADOS" | "APROVADO";
   fullName: string;
   personType: "pf" | "pj";
@@ -130,6 +130,7 @@ export interface PublicProviderProfile {
   }[];
 }
 export interface Store {
+  accountSetupComplete?: boolean;
   adminDemoCases?: AdminCase[];
   adminReviews?: AdminReview[];
   companyProfile?: CompanyProfile;
@@ -165,6 +166,7 @@ export interface Address {
   neighborhood: string;
   street: string;
   number: string;
+  postalCode?: string;
   complement: string;
   point: MapPoint | null;
 }

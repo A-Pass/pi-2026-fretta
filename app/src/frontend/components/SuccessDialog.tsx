@@ -5,14 +5,23 @@ type Props = {
   title: string;
   description: string;
   onClose: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
 };
-export function SuccessDialog({ open, title, description, onClose }: Props) {
+export function SuccessDialog({
+  open,
+  title,
+  description,
+  onClose,
+  actionLabel = "Entendi",
+  onAction,
+}: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const confirmButton = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (open) {
       dialog.current?.showModal();
-      confirmButton.current?.focus();
+      heading.current?.focus();
     } else dialog.current?.close();
   }, [open]);
   return (
@@ -37,15 +46,15 @@ export function SuccessDialog({ open, title, description, onClose }: Props) {
         <Check size={36} strokeWidth={2.8} />
       </div>
       <span className="success-eyebrow">TUDO CERTO!</span>
-      <h2 id="success-title">{title}</h2>
+      <h2 id="success-title" ref={heading} tabIndex={-1}>
+        {title}
+      </h2>
       <p id="success-description">{description}</p>
       <button
-        ref={confirmButton}
-        autoFocus
         className="success-button"
-        onClick={onClose}
+        onClick={onAction ?? onClose}
       >
-        Entendi
+        {actionLabel}
       </button>
     </dialog>
   );

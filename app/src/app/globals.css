@@ -945,28 +945,116 @@ main {
 .login-role strong {
   color: var(--orange);
 }
-.google-login {
+.login-form {
+  margin-top: 26px;
+}
+.login-form label {
+  gap: 9px;
+  margin-bottom: 17px;
+}
+.login-form input {
+  width: 100%;
+  min-height: 48px;
+}
+.login-password-field {
+  position: relative;
+}
+.login-password-field input {
+  padding-right: 44px;
+}
+.login-form .login-password-toggle {
+  position: absolute;
+  right: 12px;
+  bottom: 13px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.login-password-toggle:hover {
+  color: var(--ink);
+}
+.login-form input::placeholder {
+  color: #a4a197;
+}
+.login-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -5px;
+}
+.login-text-button {
+  color: var(--orange);
+  font-size: 13px;
+  font-weight: 700;
+}
+.login-text-button:hover {
+  color: #d84925;
+  text-decoration: underline;
+}
+.login-submit {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 18px;
+}
+.login-provider-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.login-provider-divider::before,
+.login-provider-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+.login-providers {
+  display: grid;
+  gap: 10px;
+}
+.login-provider {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  border: 1px solid #d9d7d1;
-  background: white;
-  border-radius: 11px;
+  gap: 10px;
+  min-height: 46px;
   width: 100%;
-  padding: 15px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: white;
+  font-size: 13px;
   font-weight: 600;
-  font-size: 14px;
 }
-.google-login:hover {
-  background: #faf9f6;
+.login-provider:hover {
+  background: var(--paper);
   border-color: var(--orange);
+}
+.login-register {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.login-notice {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
 }
 .login-demo {
   background: #faf7f2;
   padding: 16px;
   border-radius: 12px;
-  margin: 24px 0 16px;
+  margin: 18px 0 0;
   font-size: 12px;
 }
 .login-demo b {
@@ -975,6 +1063,87 @@ main {
 .login-demo p {
   margin: 6px 0 0;
   color: var(--muted);
+}
+.auth-account-email {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.auth-role {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: capitalize;
+}
+.auth-role svg,
+.auth-role strong {
+  color: var(--orange);
+}
+.auth-complete-form {
+  text-align: left;
+}
+.auth-complete-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.auth-complete-form input:not([type="file"]),
+.auth-complete-form select {
+  width: 100%;
+  min-height: 48px;
+}
+.auth-photo-field {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 20px 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+.auth-photo-preview,
+.auth-photo-preview > span {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border: 3px solid #f6dfd2;
+  border-radius: 50%;
+  background: #fff0e8;
+  color: var(--orange);
+}
+.auth-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.auth-photo-upload {
+  margin: 0;
+}
+.auth-photo-field small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: center;
+}
+.auth-privacy-note {
+  margin: -4px 0 16px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.auth-complete-submit {
+  width: 100%;
+  min-height: 48px;
+}
+.auth-sign-out {
+  width: 100%;
+  margin-top: 20px;
 }
 .login-card > small {
   font-size: 11px;
@@ -1572,6 +1741,35 @@ main {
 }
 .address-fields .form-grid label {
   align-self: start;
+}
+.date-field-control {
+  position: relative;
+  display: block;
+}
+.date-field-control input[type="date"] {
+  width: 100%;
+  min-height: 48px;
+  padding-right: 48px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.date-field-control input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+.date-field-button {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--orange);
+  transform: translateY(-50%);
+}
+.date-field-button:hover {
+  background: #fff1e8;
 }
 .checkbox-line {
   display: flex;

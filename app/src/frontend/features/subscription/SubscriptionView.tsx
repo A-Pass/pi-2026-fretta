@@ -25,7 +25,7 @@ export function SubscriptionView({
           R$ 49,90 <small>/ mês</small>
         </p>
         <span className="badge">
-          {active ? "Ativa na demonstração" : "Inativa na demonstração"}
+          {active ? "Assinatura ativa" : "Assinatura inativa"}
         </span>
         <ul>
           <li>
@@ -43,11 +43,10 @@ export function SubscriptionView({
           acessíveis quando a assinatura está inativa.
         </p>
         <button className="primary" onClick={() => setConfirm(true)}>
-          {active ? "Simular vencimento" : "Experimentar ativação"}
+          {active ? "Registrar vencimento" : "Solicitar ativação"}
         </button>
         <p className="muted">
-          Esta tela é uma demonstração. Nenhum pagamento será solicitado ou
-          cobrado.
+          A confirmação de pagamento é processada pelo servidor. Nenhuma cobrança ocorre nesta tela.
         </p>
       </section>
       <ConfirmDialog
@@ -55,15 +54,15 @@ export function SubscriptionView({
         onClose={() => setConfirm(false)}
         title={
           active
-            ? "Simular assinatura inativa?"
-            : "Ativar assinatura de demonstração?"
+            ? "Alterar para assinatura inativa?"
+            : "Solicitar ativação da assinatura?"
         }
         description={
           active
             ? "Você poderá conferir a experiência com a assinatura vencida, preservando os serviços contratados."
-            : "O acesso às oportunidades e novas propostas será liberado nesta demonstração. Não haverá cobrança."
+            : "A ativação depende da confirmação do pagamento pelo servidor."
         }
-        confirmLabel={active ? "Simular vencimento" : "Ativar demonstração"}
+        confirmLabel={active ? "Alterar status" : "Solicitar ativação"}
         cancelLabel="Voltar"
         destructive={false}
         onConfirm={async () => {

@@ -5,12 +5,12 @@
 // ============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/server/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ============================================================================
@@ -41,8 +41,20 @@ model User {
 
   cliente   Cliente?
   motorista Motorista?
+  appState  AppState?
 
   @@map("user")
+}
+
+model AppState {
+  userId String   @id @map("user_id")
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data   Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_states")
 }
 
 model Session {

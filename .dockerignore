@@ -1,0 +1,11 @@
+.git
+**/.git
+**/node_modules
+**/.next
+**/.env*
+**/uploads
+_storage_
+PI 2026.2 - Fretta
+docs
+database/*
+!database/schema.prisma

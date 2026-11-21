@@ -44,7 +44,7 @@ export type NewOffer = {
   availableAt: string;
   message: string;
 };
-/** Prepared against docs/api.md. The UI's demo adapter stays independent until the group implements and confirms the API DTOs. No mutation is retried automatically. */
+/** Prepared against docs/api.md. Mutations are sent once and never retried automatically. */
 export function createBackendClient(
   options?: Parameters<typeof createHttpTransport>[0],
 ) {

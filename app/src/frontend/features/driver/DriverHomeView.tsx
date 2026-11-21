@@ -218,8 +218,8 @@ export function DriverHomeView({
       </label>
       {!subscription ? (
         <section className="panel empty">
-          <h2>Assinatura vencida na demonstração</h2>
-          <p>Ative a simulação no perfil para consultar novas oportunidades.</p>
+          <h2>Assinatura vencida</h2>
+          <p>Atualize sua assinatura para consultar novas oportunidades.</p>
           <button className="primary" onClick={onProfile}>
             Ver assinatura
           </button>

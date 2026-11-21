@@ -10,3 +10,5 @@ PI 2026.2 - Fretta
 
 # Docker
 _storage_
+dist/
+.env
