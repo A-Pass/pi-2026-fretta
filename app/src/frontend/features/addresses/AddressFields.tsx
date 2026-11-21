@@ -1,3 +1,9 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+import {
+  fillEmptyAddressFields,
+  type AddressSuggestion,
+} from "@/contracts/address-suggestion";
 import type { Address, SavedAddress } from "@/contracts";
 import { LocationPicker } from "../../components/LocationPicker";
 const states = [
@@ -47,6 +53,69 @@ export function AddressFields({
   privacyNotice = false,
   editingSaved = false,
 }: Props) {
+  const [geoAvailable, setGeoAvailable] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoStatus, setGeoStatus] = useState("");
+  const latest = useRef({ value, onChange });
+  latest.current = { value, onChange };
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/v1/address-suggestion", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then((response) => response.json())
+      .then((response) => {
+        if (!controller.signal.aborted)
+          setGeoAvailable(response.available === true);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+  async function suggest() {
+    const point = value.point;
+    if (!point || geoLoading) return;
+    setGeoStatus("");
+    setGeoLoading(true);
+    try {
+      const response = await fetch("/api/v1/address-suggestion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(point),
+      });
+      if (!response.ok) throw new Error();
+      const suggestion: AddressSuggestion = await response.json();
+      const current = latest.current;
+      if (
+        current.value.point?.lat !== point.lat ||
+        current.value.point?.lng !== point.lng
+      )
+        return;
+      const filled = fillEmptyAddressFields(current.value, suggestion);
+      if (
+        filled.city === current.value.city &&
+        filled.state === current.value.state &&
+        filled.neighborhood === current.value.neighborhood &&
+        filled.street === current.value.street
+      ) {
+        setGeoStatus(
+          "Nenhum campo vazio pôde ser preenchido. Confira o endereço.",
+        );
+      } else {
+        current.onChange(filled);
+        setGeoStatus(
+          "Sugestão preenchida. Confira o endereço e informe o número.",
+        );
+      }
+    } catch {
+      setGeoStatus(
+        "Não foi possível consultar o endereço. Preencha os campos manualmente.",
+      );
+    } finally {
+      setGeoLoading(false);
+    }
+  }
+
   function field(key: keyof Omit<Address, "point">, v: string) {
     onChange({ ...value, [key]: v });
   }
@@ -88,9 +157,19 @@ export function AddressFields({
         </p>
       )}
       <p className="muted address-instructions">
-        Preencha o endereço correspondente ao ponto escolhido. O mapa não
-        preenche estes campos automaticamente.
+        Confira o endereço correspondente ao ponto escolhido.
       </p>
+      {geoAvailable && value.point && (
+        <button
+          type="button"
+          className="secondary"
+          disabled={geoLoading}
+          onClick={() => void suggest()}
+        >
+          {geoLoading ? "Consultando endereço…" : "Sugerir endereço pelo mapa"}
+        </button>
+      )}
+      {geoStatus && <p role="status">{geoStatus}</p>}
       <div className="form-grid">
         <label>
           Cidade
