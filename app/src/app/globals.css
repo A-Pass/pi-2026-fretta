@@ -245,14 +245,6 @@ header > div {
   font-size: 12px;
   color: var(--muted);
 }
-.demo {
-  font-size: 9px;
-  letter-spacing: 1px;
-  border: 1px solid #e7d5b7;
-  padding: 5px 8px;
-  border-radius: 5px;
-  color: #997e50;
-}
 header > .header-brand {
   color: var(--orange);
   font-family: Manrope, Arial, sans-serif;
@@ -786,9 +778,6 @@ main {
     height: 65px;
     padding: 0 20px;
   }
-  .demo {
-    font-size: 8px;
-  }
   main {
     padding: 26px 20px 35px;
   }
@@ -1049,20 +1038,6 @@ main {
   background: var(--paper);
   color: var(--ink);
   font-size: 12px;
-}
-.login-demo {
-  background: #faf7f2;
-  padding: 16px;
-  border-radius: 12px;
-  margin: 18px 0 0;
-  font-size: 12px;
-}
-.login-demo b {
-  color: #8b6548;
-}
-.login-demo p {
-  margin: 6px 0 0;
-  color: var(--muted);
 }
 .auth-account-email {
   color: var(--muted);
@@ -2594,7 +2569,7 @@ main {
   padding: 0;
 }
 
-/* Guided first access and document submission for the driver demo. */
+/* Guided first access and document submission for drivers. */
 .driver-onboarding-page {
   min-height: 100dvh;
   background: var(--paper);
@@ -2621,7 +2596,7 @@ main {
   max-width: 960px;
   padding: 30px 24px 72px;
 }
-.onboarding-demo-note {
+.onboarding-note {
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -2634,7 +2609,7 @@ main {
   line-height: 1.7;
   margin-bottom: 32px;
 }
-.onboarding-demo-note svg {
+.onboarding-note svg {
   flex-shrink: 0;
   margin-top: 3px;
 }
@@ -2971,17 +2946,17 @@ main {
   display: grid;
   gap: 12px;
 }
-.onboarding-demo-controls {
+.onboarding-admin-link {
   border: 1px dashed #ceb89b;
   border-radius: 12px;
   padding: 16px;
   font-size: 13px;
 }
-.onboarding-demo-controls summary {
+.onboarding-admin-link summary {
   cursor: pointer;
   font-weight: 600;
 }
-.onboarding-demo-controls .actions {
+.onboarding-admin-link .actions {
   flex-wrap: wrap;
 }
 .driver-registration-banner {
@@ -3018,7 +2993,7 @@ main {
   .onboarding-main {
     padding: 24px 18px 48px;
   }
-  .onboarding-demo-note {
+  .onboarding-note {
     font-size: 11px;
     padding: 12px;
     gap: 9px;
@@ -3393,7 +3368,7 @@ a {
   margin: auto;
   padding: 28px 24px 60px;
 }
-.admin-demo-note {
+.admin-access-note {
   background: #fff3df;
   border: 1px solid #ebd4ae;
   border-radius: 12px;
@@ -3403,6 +3378,40 @@ a {
 }
 .admin-main > .panel {
   margin-top: 20px;
+}
+.admin-login {
+  width: min(440px, 100%);
+  margin: 40px auto 0;
+  padding: 32px;
+}
+.admin-login-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  color: var(--orange);
+  background: #fff1e8;
+}
+.admin-login h1 {
+  margin: 8px 0;
+}
+.admin-login form {
+  display: grid;
+  gap: 4px;
+  margin-top: 22px;
+}
+.admin-login form input {
+  width: 100%;
+}
+.admin-login form .primary {
+  margin-top: 8px;
+  width: 100%;
+}
+.admin-logout {
+  font-weight: 700;
+  color: #a33d24;
 }
 .admin-stats {
   display: grid;
@@ -3477,6 +3486,14 @@ a {
   height: 100px;
   object-fit: cover;
   border-radius: 16px;
+}
+.admin-license-preview {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: white;
 }
 .admin-vehicle {
   padding: 12px 0;

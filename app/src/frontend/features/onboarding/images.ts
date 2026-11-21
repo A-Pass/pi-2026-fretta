@@ -22,7 +22,7 @@ function withImageDeadline<T>(task: Promise<T>): Promise<T> {
     );
   });
 }
-/** Decode and re-encode locally; original identity documents never leave this demo browser. */
+/** Decode and re-encode locally before the image is saved with the account state. */
 export async function prepareOnboardingPhoto(
   file: File,
 ): Promise<PreparedPhoto> {
@@ -92,44 +92,4 @@ export async function prepareOnboardingPhoto(
   } finally {
     URL.revokeObjectURL(url);
   }
-}
-export function demoPhoto(kind: "profile" | "license"): PreparedPhoto {
-  const canvas = document.createElement("canvas");
-  canvas.width = kind === "profile" ? 480 : 900;
-  canvas.height = kind === "profile" ? 480 : 560;
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = kind === "profile" ? "#fff0e8" : "#e6efdf";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (kind === "profile") {
-    ctx.fillStyle = "#bb4928";
-    ctx.beginPath();
-    ctx.arc(240, 172, 70, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(240, 345, 135, 115, 0, Math.PI, 0);
-    ctx.fill();
-  } else {
-    ctx.fillStyle = "#365437";
-    ctx.font = "bold 36px sans-serif";
-    ctx.fillText("DOCUMENTO FICTÍCIO", 40, 80);
-    ctx.font = "26px sans-serif";
-    ctx.fillText("FRETTA · exemplo para demonstração", 40, 140);
-    ctx.fillText("Sem dados pessoais · sem validade", 40, 200);
-    ctx.fillStyle = "#bfcfba";
-    ctx.fillRect(40, 260, 170, 210);
-    ctx.fillRect(245, 270, 570, 20);
-    ctx.fillRect(245, 325, 440, 20);
-    ctx.fillRect(245, 380, 500, 20);
-  }
-  ctx.fillStyle = "#843721";
-  ctx.font = "bold 22px sans-serif";
-  ctx.fillText("AMOSTRA · SEM VALIDADE", 40, canvas.height - 24);
-  return {
-    dataUrl: canvas.toDataURL("image/png"),
-    type: "image/png",
-    name: `${kind}-ficticio.png`,
-    size: 10000,
-    width: canvas.width,
-    height: canvas.height,
-  };
 }

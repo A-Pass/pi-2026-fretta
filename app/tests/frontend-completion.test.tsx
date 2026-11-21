@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import { seed } from "../src/frontend/mocks/seed";
+import { seed } from "./fixtures/seed";
 import {
   acceptProposal,
   submitReview,
@@ -146,7 +146,8 @@ test("avaliação exige conclusão, nota válida e impede novo envio por partici
 });
 test("notificações de recusa pertencem ao motorista e não duplicam ao marcar leitura", () => {
   const previous = structuredClone(seed);
-  previous.proposals[0].driverId = "demo-driver";
+  previous.profile = { id: "driver-1", name: "Carlos Santos", photo: "" };
+  previous.proposals[0].driverId = "driver-1";
   const next = withNotifications(previous, declineOffer(previous, "p1", "p1"));
   const notification = next.notifications!.find(
     (n) => n.title === "Proposta recusada",
@@ -176,12 +177,20 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
     },
   };
   function html(store: Store, role: "cliente" | "motorista", name: string) {
-    const f = store.freights[0];
-    const accepted = store.proposals.find((p) => p.id === f.acceptedProposalId);
+    const viewerStore = {
+      ...store,
+      profile: {
+        id: role === "motorista" && name === "Carlos Santos" ? "driver-1" : "client-1",
+        name,
+        photo: "",
+      },
+    };
+    const f = viewerStore.freights[0];
+    const accepted = viewerStore.proposals.find((p) => p.id === f.acceptedProposalId);
     return renderToStaticMarkup(
       <FreightDetailsView
         f={f}
-        store={store}
+        store={viewerStore}
         role={role}
         name={name}
         proposals={store.proposals}
@@ -201,7 +210,14 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
     html(s, "motorista", "Carlos Santos").includes("Rua Privada de Teste"),
     false,
   );
+  s.proposals[0].driverId = "driver-1";
   const accepted = acceptProposal(s, "p1");
+  assert.equal(html(s, "cliente", "Cleiton").includes("Aceitar proposta"), true);
+  assert.equal(html(s, "cliente", "Cleiton").includes("Recusar proposta"), true);
+  assert.equal(
+    html(accepted, "cliente", "Cleiton").includes("Recusar proposta"),
+    false,
+  );
   assert.equal(
     html(accepted, "cliente", "Cleiton").includes("Rua Privada de Teste"),
     true,

@@ -12,7 +12,11 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { ReviewForm } from "../components/ReviewForm";
 import { acceptProposal, money } from "./freights/rules";
-import { proposalOffers, proposalStatusLabel } from "./freights/negotiation";
+import {
+  declineOffer,
+  proposalOffers,
+  proposalStatusLabel,
+} from "./freights/negotiation";
 import { providerId, providerName } from "./providers/rules";
 import { ownProposal } from "./driver/rules";
 import { StatusBadge } from "../components/StatusBadge";
@@ -61,7 +65,7 @@ function FullAddress({ title, address }: { title: string; address?: Address }) {
           )}
         </>
       ) : (
-        <p className="muted">Endereço completo não informado neste exemplo.</p>
+        <p className="muted">Endereço completo ainda não foi carregado.</p>
       )}
     </article>
   );
@@ -88,60 +92,77 @@ export function FreightDetailsView({
     proposal: Proposal;
     offerId: string;
   } | null>(null);
+  const [proposalToDecline, setProposalToDecline] = useState<{
+    proposal: Proposal;
+    offerId: string;
+  } | null>(null);
   const [transition, setTransition] = useState<"start" | "complete" | null>(
     null,
   );
   const isOpportunity = role === "motorista" && f.status === "ABERTO";
-  const chosenDriver = accepted && ownProposal(accepted, name);
+  const chosenDriver = accepted && ownProposal(accepted, store.profile?.id || "");
   const canSeeAgreement = accepted && (role === "cliente" || chosenDriver);
   const agreement = f.agreement || accepted;
   const snapshot = store.freightAddresses?.[f.id];
-  const renderProposal = (p: Proposal) => (
-    <article className="proposal" key={p.id}>
-      <div className="section-head">
-        <b>{providerName(p)}</b>
-        <span>
-          <Star size={14} /> {p.rating || "Novo"}
-        </span>
-      </div>
-      {p.providerKind === "empresa" && (
-        <p className="muted">Motorista: {p.driver}</p>
-      )}
-      {onProvider && (
-        <button
-          className="provider-link"
-          onClick={() => onProvider(providerId(p), p.id)}
-        >
-          Ver perfil do prestador
-        </button>
-      )}
-      <small>{p.vehicle}</small>
-      <h2>{money(p.priceCents)}</h2>
-      <p>{dateTime(p.availableAt)}</p>
-      <p>{p.message}</p>
-      <span className="badge">{proposalStatusLabel(p)}</span>
-      <div className="actions">
-        {p.status === "PENDENTE" &&
-          f.status === "ABERTO" &&
-          role === "cliente" && (
-            <button
-              className="primary"
-              onClick={() =>
-                setProposalToAccept({
-                  proposal: p,
-                  offerId: proposalOffers(p).at(-1)!.id,
-                })
-              }
-            >
-              Aceitar proposta
-            </button>
+  const renderProposal = (p: Proposal) => {
+    const latestOffer = proposalOffers(p).at(-1);
+    const canDecide =
+      p.status === "PENDENTE" &&
+      latestOffer?.status === "PENDENTE" &&
+      f.status === "ABERTO" &&
+      role === "cliente";
+    return (
+      <article className="proposal" key={p.id}>
+        <div className="section-head">
+          <b>{providerName(p)}</b>
+          <span>
+            <Star size={14} /> {p.rating || "Novo"}
+          </span>
+        </div>
+        {p.providerKind === "empresa" && (
+          <p className="muted">Motorista: {p.driver}</p>
+        )}
+        {onProvider && (
+          <button
+            className="provider-link"
+            onClick={() => onProvider(providerId(p), p.id)}
+          >
+            Ver perfil do prestador
+          </button>
+        )}
+        <small>{p.vehicle}</small>
+        <h2>{money(p.priceCents)}</h2>
+        <p>{dateTime(p.availableAt)}</p>
+        <p>{p.message}</p>
+        <span className="badge">{proposalStatusLabel(p)}</span>
+        <div className="actions">
+          {canDecide && latestOffer && (
+            <>
+              <button
+                className="primary"
+                onClick={() =>
+                  setProposalToAccept({ proposal: p, offerId: latestOffer.id })
+                }
+              >
+                Aceitar proposta
+              </button>
+              <button
+                className="secondary"
+                onClick={() =>
+                  setProposalToDecline({ proposal: p, offerId: latestOffer.id })
+                }
+              >
+                Recusar proposta
+              </button>
+            </>
           )}
-        <button className="secondary" onClick={() => onChat(p.id)}>
-          Conversar
-        </button>
-      </div>
-    </article>
-  );
+          <button className="secondary" onClick={() => onChat(p.id)}>
+            Conversar
+          </button>
+        </div>
+      </article>
+    );
+  };
   return (
     <>
       <button className="back" onClick={() => setSelected(null)}>
@@ -325,6 +346,27 @@ export function FreightDetailsView({
             ),
           );
           if (ok) setProposalToAccept(null);
+          return ok;
+        }}
+      />
+      <ConfirmDialog
+        open={proposalToDecline !== null}
+        onClose={() => setProposalToDecline(null)}
+        title={`Recusar essa proposta de ${proposalToDecline ? providerName(proposalToDecline.proposal) : ""}?`}
+        description="A proposta será recusada e o frete continuará aberto para outras propostas."
+        confirmLabel="Sim, recusar proposta"
+        cancelLabel="Voltar"
+        destructive
+        onConfirm={async () => {
+          if (!proposalToDecline) return false;
+          const ok = await save(
+            declineOffer(
+              store,
+              proposalToDecline.proposal.id,
+              proposalToDecline.offerId,
+            ),
+          );
+          if (ok) setProposalToDecline(null);
           return ok;
         }}
       />

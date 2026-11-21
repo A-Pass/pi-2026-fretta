@@ -72,7 +72,11 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
       await api.save({
         ...store,
         accountSetupComplete: true,
-        profile: { name: normalizedName, photo: profilePhoto },
+        profile: {
+          id: store.profile?.id || "",
+          name: normalizedName,
+          photo: profilePhoto,
+        },
       });
       setDocumentValue("");
       window.location.assign(`/${role}/inicio`);

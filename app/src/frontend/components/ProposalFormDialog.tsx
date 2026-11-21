@@ -139,6 +139,11 @@ export function ProposalFormDialog({
                 name="date"
                 type="datetime-local"
                 min={localDateTime()}
+                defaultValue={
+                  proposal
+                    ? localDateTime(new Date(proposal.availableAt))
+                    : undefined
+                }
                 required
               />
             </label>
@@ -148,6 +153,7 @@ export function ProposalFormDialog({
                 name="message"
                 placeholder="Explique o que está incluído e os detalhes combinados…"
                 maxLength={2000}
+                defaultValue={proposal?.message}
                 required
               />
             </label>

@@ -15,7 +15,7 @@ export const tabs = [
   "empresa",
 ] as const;
 export type Tab = (typeof tabs)[number];
-export type DemoRoute = {
+export type AppRoute = {
   role: Role;
   tab: Tab;
   selected: string | null;
@@ -23,7 +23,7 @@ export type DemoRoute = {
   providerId: string | null;
   providerConversationId: string | null;
 };
-export const initialRoute: DemoRoute = {
+export const initialRoute: AppRoute = {
   role: "cliente",
   tab: "inicio",
   selected: null,
@@ -80,13 +80,13 @@ export function isAppRoute(pathname: string) {
   return params.length === 0;
 }
 
-export function parseRoute(pathname: string): DemoRoute {
+export function parseRoute(pathname: string): AppRoute {
   const [pathRole, pathTab, id, action, conversationId] =
     decodeSegments(pathname);
   if (!isRole(pathRole) || !tabs.includes(pathTab as Tab)) return initialRoute;
 
   const tab = pathTab as Tab;
-  const route: DemoRoute = {
+  const route: AppRoute = {
     role: pathRole,
     tab,
     selected: null,
@@ -106,7 +106,7 @@ export function parseRoute(pathname: string): DemoRoute {
   return route;
 }
 
-export function parseLegacyRoute(search: string): DemoRoute {
+export function parseLegacyRoute(search: string): AppRoute {
   const p = new URLSearchParams(search);
   const role = p.get("perfil") === "motorista" ? "motorista" : "cliente";
   const tab = tabs.includes(p.get("tela") as Tab)
@@ -131,7 +131,7 @@ export function parseLegacyRoute(search: string): DemoRoute {
   };
 }
 
-export function routeUrl(route: DemoRoute) {
+export function routeUrl(route: AppRoute) {
   if (route.providerId) {
     const providerUrl = `/${route.role}/prestador/${encodeURIComponent(
       route.providerId,

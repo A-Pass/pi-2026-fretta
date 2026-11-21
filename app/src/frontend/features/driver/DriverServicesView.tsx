@@ -23,7 +23,9 @@ export function DriverServicesView({
   const [tab, setTab] = useState("propostas");
   const [visible, setVisible] = useState(12);
   useEffect(() => setVisible(12), [tab]);
-  const mine = store.proposals.filter((p) => ownProposal(p, name));
+  const mine = store.proposals.filter((p) =>
+    ownProposal(p, store.profile?.id || ""),
+  );
   const list = mine.flatMap((proposal) => {
     const freight = store.freights.find((f) => f.id === proposal.freightId);
     if (!freight) return [];
