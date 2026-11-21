@@ -5,6 +5,7 @@ import {
   addressError,
   scheduleError,
   publicRegion,
+  fillAddressFromReverseGeocode,
 } from "../src/frontend/features/addresses/rules";
 import { createRequest } from "../src/frontend/features/addresses/createRequest";
 import { seed } from "../src/frontend/mocks/seed";
@@ -22,6 +23,45 @@ test("exige confirmação de ponto e campos do endereço", () => {
   assert.ok(addressError({ ...address, point: null }));
   assert.ok(addressError({ ...address, street: "" }));
   assert.equal(addressError(address, true), "");
+});
+test("preenche campos disponíveis do endereço a partir da geocodificação reversa", () => {
+  const result = fillAddressFromReverseGeocode(
+    {
+      ...emptyAddress(),
+      complement: "Casa",
+      point: { lat: -16.377, lng: -39.58 },
+    },
+    {
+      city: "Eunápolis",
+      state: "Bahia",
+      state_code: "BR-BA",
+      suburb: "Jardim Primavera",
+      road: "Rua das Flores",
+      house_number: "123",
+      postcode: "45820-000",
+    },
+  );
+
+  assert.equal(result.city, "Eunápolis");
+  assert.equal(result.state, "BA");
+  assert.equal(result.neighborhood, "Jardim Primavera");
+  assert.equal(result.street, "Rua das Flores");
+  assert.equal(result.number, "123");
+  assert.equal(result.postalCode, "45820-000");
+  assert.equal(result.complement, "Casa");
+  assert.deepEqual(result.point, { lat: -16.377, lng: -39.58 });
+});
+test("preserva campos existentes quando a API não retorna esses dados", () => {
+  const result = fillAddressFromReverseGeocode(
+    { ...address, postalCode: "45820-000" },
+    {},
+  );
+
+  assert.equal(result.city, address.city);
+  assert.equal(result.neighborhood, address.neighborhood);
+  assert.equal(result.street, address.street);
+  assert.equal(result.number, address.number);
+  assert.equal(result.postalCode, "45820-000");
 });
 test("valida agenda conforme opção e rejeita intervalos invertidos", () => {
   assert.equal(scheduleError({ kind: "combinar" }, "2026-10-28"), "");

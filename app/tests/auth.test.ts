@@ -4,6 +4,14 @@ import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 import { GET } from "../src/app/api/auth/[...all]/route";
 import { getAuthConfigurationError } from "../src/server/auth/env";
+import { accountSetupIsComplete } from "../src/frontend/auth/account-setup";
+
+test("cadastro concluído ou conta legada não volta para a conclusão", () => {
+  assert.equal(accountSetupIsComplete(null), false);
+  assert.equal(accountSetupIsComplete({ accountSetupComplete: false }), false);
+  assert.equal(accountSetupIsComplete({ accountSetupComplete: true }), true);
+  assert.equal(accountSetupIsComplete({ profile: { name: "Pessoa" } }), true);
+});
 
 test("Google OAuth exige banco, segredo forte e credenciais do provedor", () => {
   assert.match(getAuthConfigurationError({}) ?? "", /DATABASE_URL/);

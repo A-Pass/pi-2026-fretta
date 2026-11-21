@@ -130,6 +130,7 @@ export interface PublicProviderProfile {
   }[];
 }
 export interface Store {
+  accountSetupComplete?: boolean;
   adminDemoCases?: AdminCase[];
   adminReviews?: AdminReview[];
   companyProfile?: CompanyProfile;
@@ -165,6 +166,7 @@ export interface Address {
   neighborhood: string;
   street: string;
   number: string;
+  postalCode?: string;
   complement: string;
   point: MapPoint | null;
 }

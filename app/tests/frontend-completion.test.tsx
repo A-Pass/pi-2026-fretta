@@ -21,6 +21,8 @@ import {
 } from "../src/frontend/features/navigation/routes";
 import { FreightDetailsView } from "../src/frontend/features/FreightDetailsView";
 import { LoginView } from "../src/frontend/features/LoginView";
+import { AuthCompleteView } from "../src/frontend/auth/AuthCompleteView";
+import { identityDocumentError } from "../src/frontend/auth/registration";
 import type { Address, Store, Vehicle } from "../src/contracts";
 
 const vehicle: Vehicle = {
@@ -44,6 +46,32 @@ test("tela de acesso oferece os campos e ações de autenticação sem simular c
   );
   assert.match(html, /Continuar com Google/);
   assert.match(html, /sessão/);
+});
+test("cadastro pós-Google mostra nome, foto e documento conforme o perfil", () => {
+  const html = renderToStaticMarkup(
+    <AuthCompleteView
+      name="Pessoa de Teste"
+      email="teste@example.com"
+      image="https://example.com/foto.jpg"
+      role="motorista"
+    />,
+  );
+  assert.match(html, /Complete seu cadastro/);
+  assert.match(html, /Pessoa de Teste/);
+  assert.match(html, /Carteira de motorista \(CNH\)/);
+  assert.match(html, /validado somente neste navegador/);
+  assert.match(html, /Concluir cadastro/);
+});
+test("documentos são validados sem armazenar seus valores", () => {
+  assert.equal(identityDocumentError("cliente", "cpf", "529.982.247-25"), "");
+  assert.notEqual(
+    identityDocumentError("cliente", "cpf", "111.111.111-11"),
+    "",
+  );
+  assert.equal(identityDocumentError("cliente", "rg", "MG1234567"), "");
+  assert.notEqual(identityDocumentError("cliente", "rg", "AB"), "");
+  assert.equal(identityDocumentError("motorista", "cnh", "12345678901"), "");
+  assert.notEqual(identityDocumentError("motorista", "cnh", "11111111111"), "");
 });
 test("veículos rejeitam placa duplicada, categoria inválida e capacidade negativa", () => {
   assert.equal(validateVehicle(vehicle, []), "");

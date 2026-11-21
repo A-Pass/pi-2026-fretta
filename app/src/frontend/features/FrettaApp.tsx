@@ -248,7 +248,8 @@ export function FrettaApp() {
     try {
       const { error: signInError } = await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/auth/complete",
+        callbackURL: `/auth/complete?perfil=${role}`,
+        additionalParams: { prompt: "select_account" },
       });
       if (signInError) {
         setGoogleSignInError(
@@ -264,9 +265,17 @@ export function FrettaApp() {
     }
   }
   async function signOut() {
-    await authClient.signOut().catch(() => undefined);
-    setAuthenticated(false);
-    navigation.logout();
+    try {
+      const { error: signOutError } = await authClient.signOut();
+      if (signOutError) {
+        setError("Não foi possível encerrar a sessão. Tente novamente.");
+        return;
+      }
+      setAuthenticated(false);
+      navigation.logout();
+    } catch {
+      setError("Não foi possível encerrar a sessão. Tente novamente.");
+    }
   }
   if (!ready)
     return (
@@ -303,27 +312,24 @@ export function FrettaApp() {
         {loadError && (
           <>
             <p role="alert">{loadError}</p>
+            {error && <p role="alert">{error}</p>}
             <button className="secondary" onClick={() => location.reload()}>
               Tentar novamente
             </button>
-            <button className="secondary" onClick={() => navigation.logout()}>
-              Voltar ao início
+            <button className="secondary" onClick={() => void signOut()}>
+              Encerrar sessão
             </button>
           </>
         )}
       </main>
     );
-  if (
-    role === "motorista" &&
-    (tab === "cadastro-motorista" ||
-      (!driverCanPropose(store) && tab === "inicio"))
-  ) {
+  if (role === "motorista" && tab === "cadastro-motorista") {
     if (!store.driverRegistration || updatingDriver)
       return (
         <DriverOnboardingView
           store={store}
           onClient={() => setRole("cliente")}
-          onLogout={navigation.logout}
+          onLogout={() => void signOut()}
           onServices={() => nav("fretes")}
           onSubmit={async (draft) => {
             const ok = await save(submitDriverRegistration(store, draft));
@@ -346,7 +352,7 @@ export function FrettaApp() {
         onServices={() => nav("fretes")}
         onConversations={() => nav("chat")}
         onClient={() => setRole("cliente")}
-        onLogout={navigation.logout}
+        onLogout={() => void signOut()}
       />
     );
   }

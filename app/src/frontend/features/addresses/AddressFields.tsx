@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import type { Address, SavedAddress } from "@/contracts";
 import { LocationPicker } from "../../components/LocationPicker";
+import { fillAddressFromReverseGeocode } from "./rules";
 const states = [
   "AC",
   "AL",
@@ -47,6 +49,69 @@ export function AddressFields({
   privacyNotice = false,
   editingSaved = false,
 }: Props) {
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  const [locationStatus, setLocationStatus] = useState("");
+  valueRef.current = value;
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    const point = value.point;
+    if (!point) {
+      setLocationStatus("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setLocationStatus("Buscando endereço no ponto confirmado...");
+    const query = new URLSearchParams({
+      format: "jsonv2",
+      lat: String(point.lat),
+      lon: String(point.lng),
+      addressdetails: "1",
+      "accept-language": "pt-BR",
+    });
+    fetch(`https://nominatim.openstreetmap.org/reverse?${query}`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("Reverse geocoding failed");
+        return response.json();
+      })
+      .then((data: { address?: Record<string, string | undefined> }) => {
+        if (controller.signal.aborted) return;
+        if (!data.address) {
+          setLocationStatus(
+            "O endereço não pôde ser identificado. Confira os campos.",
+          );
+          return;
+        }
+        const filled = fillAddressFromReverseGeocode(
+          valueRef.current,
+          data.address,
+        );
+        if (JSON.stringify(filled) !== JSON.stringify(valueRef.current)) {
+          onChangeRef.current(filled);
+        }
+        setLocationStatus("Campos preenchidos com base no ponto confirmado.");
+      })
+      .catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "name" in error &&
+          error.name === "AbortError"
+        )
+          return;
+        setLocationStatus(
+          "Não foi possível buscar o endereço. Confira os campos manualmente.",
+        );
+      });
+
+    return () => controller.abort();
+  }, [value.point?.lat, value.point?.lng]);
+
   function field(key: keyof Omit<Address, "point">, v: string) {
     onChange({ ...value, [key]: v });
   }
@@ -88,9 +153,15 @@ export function AddressFields({
         </p>
       )}
       <p className="muted address-instructions">
-        Preencha o endereço correspondente ao ponto escolhido. O mapa não
-        preenche estes campos automaticamente.
+        O ponto confirmado preenche automaticamente os dados disponíveis. Confira
+        as informações antes de continuar. A consulta é feita gratuitamente no
+        OpenStreetMap (Nominatim).
       </p>
+      {locationStatus && (
+        <p className="muted" role="status">
+          {locationStatus}
+        </p>
+      )}
       <div className="form-grid">
         <label>
           Cidade
@@ -140,6 +211,16 @@ export function AddressFields({
             required
             maxLength={20}
             placeholder="Ex.: 123 ou S/N"
+          />
+        </label>
+        <label>
+          CEP <span className="muted">(opcional)</span>
+          <input
+            value={value.postalCode ?? ""}
+            onChange={(e) => field("postalCode", e.target.value)}
+            maxLength={9}
+            autoComplete="postal-code"
+            placeholder="Ex.: 45820-000"
           />
         </label>
         <label>
