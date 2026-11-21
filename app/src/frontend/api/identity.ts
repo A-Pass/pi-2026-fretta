@@ -12,6 +12,11 @@ export interface IdentityViewer {
   emailVerified: boolean;
   managesCompany?: boolean;
   driverPublicId?: string | null;
+  driverStats?: {
+    completed: number;
+    average: number | null;
+    count: number;
+  } | null;
   companyMembership?: string | null;
   roles: { cliente: boolean; motorista: boolean };
   driverRegistration: {

@@ -111,6 +111,15 @@ export function RealNotifications({
                   <ArrowRight size={16} aria-hidden="true" />
                 </a>
               )}
+              {item.event === "CONFIRMACAO_CONCLUSAO" &&
+                item.conversationId && (
+                  <Link
+                    className="secondary real-freight-link"
+                    href={`/${item.role || role}/chat/${encodeURIComponent(item.conversationId)}`}
+                  >
+                    Abrir conversa
+                  </Link>
+                )}
               {item.freightId && (
                 <Link
                   className="secondary real-freight-link"

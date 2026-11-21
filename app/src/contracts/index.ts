@@ -104,6 +104,7 @@ export interface AppNotification {
   read: boolean;
   freightId: string;
   proposalId?: string;
+  conversationId?: string | null;
 }
 export interface DriverRegistration {
   mode: "demo";

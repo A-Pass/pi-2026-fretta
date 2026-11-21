@@ -313,6 +313,69 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
 
     assert.equal(totalMensagensConversa, 2);
     assert.equal(totalNotificacoesConversa, 2);
+
+    async function unread(cookie: string, role: "cliente" | "motorista") {
+      const response = await GET(
+        new NextRequest(
+          `http://localhost:3002/api/v1/notifications?summary=true&role=${role}`,
+          { headers: { cookie } },
+        ),
+      );
+      assert.equal(response.status, 200);
+      return (await response.json()).unreadMessages;
+    }
+    async function read(cookie: string) {
+      return POST(
+        new NextRequest(
+          `http://localhost:3002/api/v1/conversations/${conversaId}/read`,
+          {
+            method: "POST",
+            headers: { cookie, "content-type": "application/json" },
+            body: JSON.stringify({
+              notificationIds: pagina.readableNotificationIds,
+            }),
+          },
+        ),
+      );
+    }
+    assert.equal(await unread(cliente.cookie, "cliente"), true);
+    assert.equal(await unread(cliente.cookie, "motorista"), false);
+    assert.equal(await unread(motorista.cookie, "motorista"), true);
+    assert.equal((await read(terceiro.cookie)).status, 404);
+    assert.equal((await read(cliente.cookie)).status, 204);
+    assert.equal(await unread(cliente.cookie, "cliente"), false);
+    assert.equal(await unread(motorista.cookie, "motorista"), true);
+    const aceite = await prisma.notificacao.create({
+      data: {
+        destinatarioId: motorista.id,
+        papelDestinatario: "motorista",
+        evento: "ACEITE",
+        titulo: "Proposta aceita",
+        corpo: frete.titulo,
+        propostaId,
+        freteId,
+        conversaId,
+      },
+    });
+    async function acceptanceSummary(cookie: string) {
+      const response = await GET(
+        new NextRequest(
+          "http://localhost:3002/api/v1/notifications?summary=true&role=motorista",
+          { headers: { cookie } },
+        ),
+      );
+      assert.equal(response.status, 200);
+      return (await response.json()).accepted;
+    }
+    assert.deepEqual(await acceptanceSummary(motorista.cookie), [
+      {
+        id: aceite.id,
+        customerName: "Cliente Fictício",
+        conversationId: conversaId,
+        freightTitle: frete.titulo,
+      },
+    ]);
+    assert.deepEqual(await acceptanceSummary(terceiro.cookie), []);
   } finally {
     // Remover notificações fictícias criadas neste teste.
     if (conversaId) {

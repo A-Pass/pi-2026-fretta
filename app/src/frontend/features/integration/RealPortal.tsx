@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   LogOut,
@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Package,
   Truck,
+  Star,
   User,
 } from "lucide-react";
 import Link from "next/link";
@@ -34,9 +35,17 @@ import { RealConversations } from "./RealConversations";
 import { RealNotifications } from "./RealNotifications";
 import { DriverCorrectionForm } from "./DriverCorrectionForm";
 import { DemoPixView } from "./DemoPixView";
+import { DriverScheduledPickups } from "./DriverScheduledPickups";
 import { DriverPublicId } from "./DriverPublicId";
 import { RealCompanyWorkspace } from "./RealCompanyWorkspace";
 import { RealFreights } from "./RealFreights";
+
+type AcceptedProposalNotice = {
+  id: string;
+  conversationId: string;
+  customerName: string;
+  freightTitle: string;
+};
 
 const client = createIdentityClient();
 const http = createHttpTransport();
@@ -64,22 +73,59 @@ export function RealPortal() {
   const [removePhoto, setRemovePhoto] = useState(false);
   const [addresses, setAddresses] = useState<SavedAddress[] | null>(null);
   const [unreadOwner, setUnreadOwner] = useState<string | null>(null);
+  const [unreadMessagesKey, setUnreadMessagesKey] = useState<string | null>(
+    null,
+  );
   const [notificationRevision, setNotificationRevision] = useState(0);
+  const [acceptedNotice, setAcceptedNotice] = useState<
+    (AcceptedProposalNotice & { owner: string }) | null
+  >(null);
+  const dismissedAcceptance = useRef(new Set<string>());
   const sessionUserId = session?.user.id;
+  const messageKey = sessionUserId ? `${sessionUserId}:${route.role}` : null;
+  const refreshNotificationSummary = useCallback(
+    () => setNotificationRevision((revision) => revision + 1),
+    [],
+  );
   useEffect(() => {
     if (!sessionUserId) {
       setUnreadOwner(null);
+      setUnreadMessagesKey(null);
+      setAcceptedNotice(null);
       return;
     }
     const controller = new AbortController();
     const refresh = () =>
       void http
-        .request<{ unread: boolean }>("/notifications?summary=true", {
+        .request<{
+          unread: boolean;
+          unreadMessages: boolean;
+          accepted: AcceptedProposalNotice[];
+        }>(`/notifications?summary=true&role=${route.role}`, {
           signal: controller.signal,
         })
         .then((result) => {
-          if (!controller.signal.aborted)
+          if (!controller.signal.aborted) {
             setUnreadOwner(result.unread ? sessionUserId : null);
+            setUnreadMessagesKey(result.unreadMessages ? messageKey : null);
+            if (route.role === "motorista") {
+              const pending = result.accepted?.find(({ id }) => {
+                const key = `fretta:acceptance:${sessionUserId}:${id}`;
+                if (dismissedAcceptance.current.has(key)) return false;
+                try {
+                  return localStorage.getItem(key) !== "seen";
+                } catch {
+                  return true;
+                }
+              });
+              if (pending)
+                setAcceptedNotice((current) =>
+                  current?.owner === sessionUserId
+                    ? current
+                    : { ...pending, owner: sessionUserId },
+                );
+            }
+          }
         })
         .catch(() => {});
     refresh();
@@ -90,7 +136,17 @@ export function RealPortal() {
       window.removeEventListener("focus", refresh);
       window.clearInterval(timer);
     };
-  }, [sessionUserId, notificationRevision, pathname]);
+  }, [sessionUserId, notificationRevision, pathname, route.role, messageKey]);
+  function dismissAcceptance() {
+    if (!acceptedNotice) return;
+    const key = `fretta:acceptance:${acceptedNotice.owner}:${acceptedNotice.id}`;
+    dismissedAcceptance.current.add(key);
+    try {
+      localStorage.setItem(key, "seen");
+    } catch {}
+    setAcceptedNotice(null);
+    refreshNotificationSummary();
+  }
   const hasUnread = !!sessionUserId && unreadOwner === sessionUserId;
   const [companySelected, setCompanySelected] = useState(false);
   const [welcomeRole, setWelcomeRole] = useState<Role>("cliente");
@@ -408,10 +464,27 @@ export function RealPortal() {
                   ? "active"
                   : ""
               }
+              aria-label={
+                id === "chat" && messageKey && unreadMessagesKey === messageKey
+                  ? "Conversas, novas mensagens"
+                  : undefined
+              }
               aria-current={tab === id ? "page" : undefined}
               onClick={() => nav(id)}
             >
-              <Icon size={20} />
+              {id === "chat" ? (
+                <span className="chat-nav-icon">
+                  <Icon size={20} />
+                  {messageKey && unreadMessagesKey === messageKey && (
+                    <span
+                      className="notification-unread-dot"
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              ) : (
+                <Icon size={20} />
+              )}
               <span>{label}</span>
             </button>
           ))}
@@ -474,6 +547,33 @@ export function RealPortal() {
             description="Seu cadastro de motorista foi aprovado. Você pode consultar a situação em Meu perfil."
             onClose={() => setApprovalNotice(null)}
           />
+          <SuccessDialog
+            open={
+              role === "motorista" &&
+              !!sessionUserId &&
+              acceptedNotice?.owner === sessionUserId &&
+              !(approvalKey !== null && approvalNotice === approvalKey)
+            }
+            title={`${acceptedNotice?.customerName ?? "O cliente"} aceitou sua proposta!`}
+            description={
+              acceptedNotice?.freightTitle
+                ? `Frete: ${acceptedNotice.freightTitle}`
+                : ""
+            }
+            actionLabel="Ir para o chat"
+            onClose={dismissAcceptance}
+            onAction={() => {
+              if (!acceptedNotice) return;
+              const conversation = acceptedNotice.conversationId;
+              dismissAcceptance();
+              router.push(
+                `/motorista/chat/${encodeURIComponent(conversation)}`,
+              );
+            }}
+          />
+          {driverHome && viewer?.roles.motorista && (
+            <DriverScheduledPickups key={viewer.id} />
+          )}
           {driverHome &&
             registration &&
             registrationOwner === viewer?.id &&
@@ -600,6 +700,7 @@ export function RealPortal() {
               key={viewer.id}
               role={role}
               conversationId={route.chatId}
+              onRead={refreshNotificationSummary}
               vehicles={vehicles}
               canOffer={
                 registrationOwner === viewer.id &&
@@ -835,6 +936,22 @@ export function RealPortal() {
                 )}
                 <h2>{viewer.name}</h2>
                 <p>{viewer.email}</p>
+                {role === "motorista" && viewer.driverStats && (
+                  <div className="driver-rating-summary">
+                    <span>
+                      <Star size={17} aria-hidden="true" />{" "}
+                      {viewer.driverStats.average === null
+                        ? "Ainda sem avaliações"
+                        : `${viewer.driverStats.average.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} de 5 · ${viewer.driverStats.count} ${viewer.driverStats.count === 1 ? "avaliação" : "avaliações"}`}
+                    </span>
+                    <strong>
+                      {viewer.driverStats.completed}{" "}
+                      {viewer.driverStats.completed === 1
+                        ? "frete concluído"
+                        : "fretes concluídos"}
+                    </strong>
+                  </div>
+                )}
                 {role === "motorista" && viewer.driverPublicId && (
                   <DriverPublicId
                     key={viewer.driverPublicId}

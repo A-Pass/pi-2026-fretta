@@ -1,3 +1,4 @@
+import { listScheduledPickups } from "./pickups";
 import { distanceKm } from "@/contracts/distance";
 import { approvedDriver } from "../companies/service";
 import type { Address } from "@/contracts";
@@ -123,6 +124,11 @@ function detail(f: Row, userId: string) {
   const hired = f.propostas.some(
     (p) => p.id === f.propostaAceitaId && p.motoristaId === userId,
   );
+  const contracted = f.propostas.find((p) => p.id === f.propostaAceitaId);
+  const pickupAt = contracted?.ofertas.find(
+    (offer) => offer.status === "ACEITA",
+  )?.retiradaEm;
+  const reviewed = f.avaliacoes.some((r) => r.autorId === userId);
   return {
     ...listing(f),
     owner,
@@ -138,7 +144,16 @@ function detail(f: Row, userId: string) {
       start: f.dataInicio?.toISOString().slice(0, 10),
       end: f.dataFim?.toISOString().slice(0, 10),
     },
-    reviewed: f.avaliacoes.some((r) => r.autorId === userId),
+    reviewed,
+    completion:
+      (owner || hired) && contracted?.conversa && pickupAt
+        ? {
+            conversationId: contracted.conversa.id,
+            pickupAt: pickupAt.toISOString(),
+            reviewed,
+            awaitingOther: f.avaliacoes.length > 0 && f.status !== "CONCLUIDO",
+          }
+        : undefined,
     clientName: f.cliente.user.name,
     photos: f.fotos.map((photo) => photo.arquivoId),
     addresses:
@@ -178,6 +193,8 @@ export async function freightOperation(
   body: Record<string, unknown>,
 ) {
   const [id, action, proposalId] = segments;
+  if (id === "pickups" && method === "GET" && !action)
+    return { pickups: await listScheduledPickups(tx, userId) };
   if (id === "addresses" && method === "POST" && !proposalId) {
     requireValue(
       await tx.cliente.findUnique({ where: { userId } }),
@@ -268,6 +285,28 @@ export async function freightOperation(
         ...listing(f),
         ownRequest: f.clienteId === userId,
         proposalCount: !driver ? f.propostas.length : undefined,
+        ...(f.clienteId === userId &&
+        ["AGENDADO", "EM_TRANSPORTE", "CONCLUIDO"].includes(f.status) &&
+        f.propostaAceitaId
+          ? (() => {
+              const proposal = f.propostas.find(
+                (p) => p.id === f.propostaAceitaId,
+              );
+              const offer = proposal?.ofertas.find(
+                (o) => o.status === "ACEITA",
+              );
+              return proposal && offer
+                ? {
+                    agreement: {
+                      driver: proposal.motorista.user.name,
+                      priceCents: offer.valorCents,
+                      pickupAt: offer.retiradaEm,
+                      conversationId: proposal.conversa?.id,
+                    },
+                  }
+                : {};
+            })()
+          : {}),
       })),
       nextCursor: rows.length > 50 ? rows[49].id : null,
     };
@@ -767,14 +806,38 @@ export async function freightOperation(
         },
       });
     }
-  } else if (!proposalId && action === "reviews") {
+  } else if (!proposalId && (action === "reviews" || action === "complete")) {
     requireValue(owner || hired, "Somente participantes podem avaliar.", 403);
-    requireValue(
-      f.status === "CONCLUIDO" &&
-        !f.avaliacoes.some((r) => r.autorId === userId),
-      "A avaliação está indisponível.",
-      409,
-    );
+    const contracted = f.propostas.find((p) => p.id === f.propostaAceitaId);
+    const reviewed = f.avaliacoes.some((r) => r.autorId === userId);
+    const closing = action === "complete";
+    if (
+      closing &&
+      reviewed &&
+      ["AGENDADO", "EM_TRANSPORTE", "CONCLUIDO"].includes(f.status)
+    )
+      return detail(f, userId);
+    if (closing) {
+      requireValue(
+        ["AGENDADO", "EM_TRANSPORTE"].includes(f.status),
+        "O frete não está disponível para encerramento.",
+        409,
+      );
+      const pickup = contracted?.ofertas.find(
+        (offer) => offer.status === "ACEITA",
+      )?.retiradaEm;
+      requireValue(
+        pickup && pickup <= new Date(),
+        "Confirme a conclusão a partir do horário combinado de retirada.",
+        422,
+      );
+    } else {
+      requireValue(
+        f.status === "CONCLUIDO" && !reviewed,
+        "A avaliação está indisponível.",
+        409,
+      );
+    }
     const score = body.score;
     requireValue(
       typeof score === "number" &&
@@ -783,9 +846,7 @@ export async function freightOperation(
         score <= 5,
       "Informe uma nota de 1 a 5.",
     );
-    const target = owner
-      ? f.propostas.find((p) => p.id === f.propostaAceitaId)?.motoristaId
-      : f.clienteId;
+    const target = owner ? contracted?.motoristaId : f.clienteId;
     requireValue(
       target && target !== userId,
       "Participante indisponível.",
@@ -800,10 +861,37 @@ export async function freightOperation(
         comentario: field(body.comment, 1000, 0),
       },
     });
-  } else if (
-    !proposalId &&
-    (action === "start" || action === "complete" || action === "cancel")
-  ) {
+    if (closing) {
+      const complete = f.avaliacoes.some((rating) => rating.autorId === target);
+      await tx.frete.update({
+        where: { id },
+        data: complete ? { status: "CONCLUIDO" } : { atualizadoEm: new Date() },
+      });
+      const recipients = new Set([
+        target,
+        ...(complete ? [contracted?.empresa?.gestorId] : []),
+      ]);
+      recipients.delete(undefined);
+      recipients.delete(userId);
+      for (const destinatarioId of recipients) {
+        if (!destinatarioId) continue;
+        await tx.notificacao.create({
+          data: {
+            destinatarioId,
+            papelDestinatario:
+              destinatarioId === f.clienteId ? "cliente" : "motorista",
+            evento: complete ? "CONCLUIDO" : "CONFIRMACAO_CONCLUSAO",
+            titulo: complete
+              ? "Serviço encerrado"
+              : "Confirme a conclusão do frete",
+            corpo: f.titulo,
+            freteId: id,
+            conversaId: contracted?.conversa?.id,
+          },
+        });
+      }
+    }
+  } else if (!proposalId && (action === "start" || action === "cancel")) {
     requireValue(
       action === "start" ? hired : owner,
       "Operação restrita aos participantes.",
@@ -811,19 +899,12 @@ export async function freightOperation(
     );
     requireValue(
       action === "start"
-        ? f.status === "AGENDADO"
-        : action === "complete"
-          ? f.status === "EM_TRANSPORTE"
-          : ["ABERTO", "AGENDADO"].includes(f.status),
+        ? f.status === "AGENDADO" && !f.avaliacoes.length
+        : ["ABERTO", "AGENDADO"].includes(f.status) && !f.avaliacoes.length,
       "O estado do frete mudou.",
       409,
     );
-    const status =
-      action === "start"
-        ? "EM_TRANSPORTE"
-        : action === "complete"
-          ? "CONCLUIDO"
-          : "CANCELADO";
+    const status = action === "start" ? "EM_TRANSPORTE" : "CANCELADO";
     await tx.frete.update({
       where: { id },
       data: {
@@ -855,9 +936,7 @@ export async function freightOperation(
       ...new Set(
         (action === "start"
           ? [f.clienteId, contracted?.empresa?.gestorId]
-          : action === "complete"
-            ? [contracted?.motoristaId, contracted?.empresa?.gestorId]
-            : f.propostas.flatMap((p) => [p.motoristaId, p.empresa?.gestorId])
+          : f.propostas.flatMap((p) => [p.motoristaId, p.empresa?.gestorId])
         ).filter(
           (recipient): recipient is string =>
             !!recipient && recipient !== userId,

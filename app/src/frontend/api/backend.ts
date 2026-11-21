@@ -78,12 +78,14 @@ export function createBackendClient(
       post<PrivateFreightDetail>(`/proposals/${id(value)}/accept`, { offerId }),
     decline: (value: string, offerId: string) =>
       post<Proposal>(`/proposals/${id(value)}/decline`, { offerId }),
-    messages: (value: string, cursor?: string, signal?: AbortSignal) =>
-      http.page<Message>(
+    messages: async (value: string, cursor?: string, signal?: AbortSignal) => {
+      const page = await http.page<Message>(
         `/conversations/${id(value)}/messages`,
         cursor,
         signal,
-      ),
+      );
+      return page as typeof page & { readableNotificationIds?: string[] };
+    },
     sendMessage: (value: string, text: string, clientMessageId: string) =>
       post<Message>(`/conversations/${id(value)}/messages`, {
         text,

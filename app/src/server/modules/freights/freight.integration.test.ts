@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { prisma } from "@/server/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
+import { listScheduledPickups, registerDuePickups } from "./pickups";
 import { freightOperation, FreightError } from "./service";
 import {
   enviarMensagem,
@@ -183,12 +184,13 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       priceCents: 22000,
       vehicleId: vehicle.id,
       availableAt,
-      message: "Posso buscar amanhã.",
+      message: "",
     };
     const first = await run(driver, "POST", [id, "propose"], quote);
     assert.ok("proposals" in first);
     const proposal = first.proposals[0];
     const firstOffer = proposal.offers[0];
+    assert.equal(firstOffer.message, "");
     await run(client, "POST", [id, "decline", proposal.id], {
       offerId: firstOffer.id,
     });
@@ -205,6 +207,7 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
     const revised = await run(driver, "POST", [id, "propose"], {
       ...quote,
       priceCents: 21000,
+      message: "   ",
     });
     assert.ok("proposals" in revised);
     assert.equal(revised.proposals[0].conversationId, proposal.conversationId);
@@ -214,6 +217,7 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       }),
       denied(409),
     );
+    assert.equal(revised.proposals[0].offers[0].message, "");
     const outdated = revised.proposals[0].offers[0].id;
     const edited = await run(client, "POST", [id, "edit"], {
       ...request,
@@ -237,12 +241,71 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
     const offerId = latest.proposals[0].offers[0].id;
     await run(client, "POST", [id, "accept", proposal.id], { offerId });
     await run(client, "POST", [id, "accept", proposal.id], { offerId });
+    assert.equal(
+      (await listScheduledPickups(prisma, driver)).find(
+        (pickup) => pickup.id === id,
+      )?.pickupAt,
+      availableAt,
+    );
+    assert.deepEqual(await listScheduledPickups(prisma, other), []);
+    const reminder = { id: `pickup-due:${offerId}`, destinatarioId: driver };
+    await registerDuePickups(
+      prisma,
+      driver,
+      new Date(Date.parse(availableAt) - 1),
+    );
+    assert.equal(await prisma.notificacao.count({ where: reminder }), 0);
+    await registerDuePickups(prisma, driver, new Date(availableAt));
+    await registerDuePickups(prisma, driver, new Date(availableAt));
+    assert.equal(await prisma.notificacao.count({ where: reminder }), 1);
+    const clientList = await run(client, "GET", []);
+    assert.ok(
+      "items" in clientList &&
+        clientList.items?.some(
+          (item) =>
+            "agreement" in item &&
+            item.id === id &&
+            item.agreement?.conversationId === proposal.conversationId,
+        ),
+    );
     const privateDetail = await run(driver, "GET", [id]);
     assert.ok("addresses" in privateDetail && privateDetail.addresses);
     await assert.rejects(run(other, "POST", [id, "start"]), denied(403));
     await run(driver, "POST", [id, "start"]);
-    await run(client, "POST", [id, "complete"]);
-    await run(client, "POST", [id, "reviews"], { score: 5 });
+    assert.equal(
+      (await listScheduledPickups(prisma, driver)).some(
+        (pickup) => pickup.id === id,
+      ),
+      false,
+    );
+    await assert.rejects(
+      run(client, "POST", [id, "complete"], { score: 5 }),
+      denied(422),
+    );
+    await assert.rejects(
+      run(other, "POST", [id, "complete"], { score: 5 }),
+      denied(403),
+    );
+    await prisma.oferta.update({
+      where: { id: offerId },
+      data: { retiradaEm: new Date(Date.now() - 60_000) },
+    });
+    await assert.rejects(run(client, "POST", [id, "complete"]), denied(422));
+    const waiting = await run(client, "POST", [id, "complete"], { score: 5 });
+    assert.ok("status" in waiting && waiting.status === "EM_TRANSPORTE");
+    await run(client, "POST", [id, "complete"], { score: 1 });
+    const finished = await run(driver, "POST", [id, "complete"], { score: 4 });
+    assert.ok("status" in finished && finished.status === "CONCLUIDO");
+    const ratings = await prisma.avaliacao.findMany({ where: { freteId: id } });
+    assert.equal(ratings.length, 2);
+    assert.equal(
+      ratings.find((rating) => rating.avaliadoId === driver)?.nota,
+      5,
+    );
+    assert.equal(
+      ratings.find((rating) => rating.avaliadoId === client)?.nota,
+      4,
+    );
     await assert.rejects(
       run(client, "POST", [id, "reviews"], { score: 5 }),
       denied(409),

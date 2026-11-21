@@ -24,7 +24,7 @@ import { createBackendClient } from "../../api/backend";
 import { OperatingAreaPicker } from "./OperatingAreaPicker";
 import { ProposalFormDialog } from "../../components/ProposalFormDialog";
 import { SuccessDialog } from "../../components/SuccessDialog";
-import { scheduleLabel } from "../../lib/dates";
+import { dateTime, scheduleLabel } from "../../lib/dates";
 import { StatusBadge } from "../../components/StatusBadge";
 import { RequestWizard } from "../RequestWizard";
 import { defaultArea } from "../driver/rules";
@@ -41,11 +41,22 @@ type Summary = {
   ownRequest?: boolean;
   proposalCount?: number;
   vehicle: string;
+  agreement?: {
+    driver: string;
+    priceCents: number;
+    pickupAt: string | null;
+    conversationId?: string;
+  };
 };
 type Detail = Summary & {
   owner: boolean;
   hired: boolean;
   reviewed: boolean;
+  completion?: {
+    conversationId: string;
+    pickupAt: string;
+    awaitingOther?: boolean;
+  };
   updatedAt: string;
   schedule: FreightRequestDraft["schedule"];
   clientName: string;
@@ -362,6 +373,25 @@ export function RealFreights({
                   </span>
                 </p>
                 <p className="muted">{f.vehicle}</p>
+                {role === "cliente" && tab === "fretes" && f.agreement && (
+                  <div className="freight-agreement-summary">
+                    <strong>Frete confirmado com {f.agreement.driver}</strong>
+                    <p>
+                      {money.format(f.agreement.priceCents / 100)}
+                      {f.agreement.pickupAt
+                        ? ` · Retirada em ${dateTime(f.agreement.pickupAt)}`
+                        : ""}
+                    </p>
+                    {f.agreement.conversationId && (
+                      <Link
+                        className="secondary real-freight-link"
+                        href={`/cliente/chat/${encodeURIComponent(f.agreement.conversationId)}`}
+                      >
+                        Conversar com o motorista
+                      </Link>
+                    )}
+                  </div>
+                )}
                 <Link
                   className="secondary real-freight-link"
                   href={`${root}/${f.id}`}
@@ -558,18 +588,25 @@ export function RealFreights({
               )}
             </article>
           ))}
-          {detail.hired && detail.status === "AGENDADO" && (
-            <button disabled={busy} onClick={() => void change("start")}>
-              Iniciar transporte
-            </button>
+          {detail.completion?.awaitingOther && (
+            <p role="status">
+              Aguardando a confirmação das duas partes no chat.
+            </p>
           )}
-          {clientOwnsRequest && detail.status === "EM_TRANSPORTE" && (
-            <button disabled={busy} onClick={() => void change("complete")}>
-              Concluir frete
-            </button>
-          )}
+          {detail.hired &&
+            detail.status === "AGENDADO" &&
+            !detail.completion?.awaitingOther && (
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => void change("start")}
+              >
+                Iniciar transporte
+              </button>
+            )}
           {clientOwnsRequest &&
-            ["ABERTO", "AGENDADO"].includes(detail.status) && (
+            ["ABERTO", "AGENDADO"].includes(detail.status) &&
+            !detail.completion?.awaitingOther && (
               <button
                 type="button"
                 className="primary real-freight-cancel"
