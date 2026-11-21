@@ -17,7 +17,6 @@ type Props = {
   setQuery: (s: string) => void;
   setFilter: (s: string) => void;
   setSelected: (s: string | null) => void;
-  subscription: boolean;
   schedule: (f: Freight) => string | undefined;
 };
 export function FreightListView({
@@ -33,7 +32,6 @@ export function FreightListView({
   setQuery,
   setFilter,
   setSelected,
-  subscription,
   schedule,
 }: Props) {
   const [visible, setVisible] = useState(12);
@@ -147,55 +145,45 @@ export function FreightListView({
           ))}
         </select>
       </div>
-      {role === "motorista" && !subscription ? (
-        <section className="panel empty">
-          <h2>Assinatura vencida</h2>
-          <p>Atualize sua assinatura para consultar novas oportunidades.</p>
-          <button className="primary" onClick={() => nav("perfil")}>
-            Ver assinatura
-          </button>
-        </section>
-      ) : (
-        <div className="cards">
-          {list.slice(0, visible).map((f) => (
-            <article className="freight-card" key={f.id}>
-              <div className="section-head">
-                <span className="type-icon">
-                  <Package />
-                </span>
-                <StatusBadge status={f.status} />
-              </div>
-              <h3>{f.title}</h3>
-              <p className="description">{f.description}</p>
-              <div className="route">
-                <p>
-                  <MapPin size={16} />
-                  {f.origin}
-                </p>
-                <p>
-                  <MapPin size={16} />
-                  {f.destination}
-                </p>
-              </div>
-              <div className="facts">
-                <span>🚚 {f.vehicle}</span>
-                <span>◷ {schedule(f)}</span>
-              </div>
-              <button className="card-link" onClick={() => setSelected(f.id)}>
-                {role === "cliente"
-                  ? `${store.proposals.filter((p) => p.freightId === f.id).length} propostas · Ver detalhes`
-                  : "Ver oportunidade"}
-                <ArrowRight size={18} />
-              </button>
-            </article>
-          ))}
-          {!list.length && (
-            <EmptyState title="Nenhum frete por aqui ainda">
-              Tente outra busca ou crie sua primeira solicitação.
-            </EmptyState>
-          )}
-        </div>
-      )}
+      <div className="cards">
+        {list.slice(0, visible).map((f) => (
+          <article className="freight-card" key={f.id}>
+            <div className="section-head">
+              <span className="type-icon">
+                <Package />
+              </span>
+              <StatusBadge status={f.status} />
+            </div>
+            <h3>{f.title}</h3>
+            <p className="description">{f.description}</p>
+            <div className="route">
+              <p>
+                <MapPin size={16} />
+                {f.origin}
+              </p>
+              <p>
+                <MapPin size={16} />
+                {f.destination}
+              </p>
+            </div>
+            <div className="facts">
+              <span>🚚 {f.vehicle}</span>
+              <span>◷ {schedule(f)}</span>
+            </div>
+            <button className="card-link" onClick={() => setSelected(f.id)}>
+              {role === "cliente"
+                ? `${store.proposals.filter((p) => p.freightId === f.id).length} propostas · Ver detalhes`
+                : "Ver oportunidade"}
+              <ArrowRight size={18} />
+            </button>
+          </article>
+        ))}
+        {!list.length && (
+          <EmptyState title="Nenhum frete por aqui ainda">
+            Tente outra busca ou crie sua primeira solicitação.
+          </EmptyState>
+        )}
+      </div>
       {visible < list.length && (
         <div className="load-more">
           <button

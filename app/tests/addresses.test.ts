@@ -11,7 +11,7 @@ import {
   postalCodeMapPoint,
 } from "../src/frontend/features/addresses/rules";
 import { createRequest } from "../src/frontend/features/addresses/createRequest";
-import { seed } from "../src/frontend/mocks/seed";
+import { seed } from "./fixtures/seed";
 import type { FreightRequestDraft, Address } from "../src/contracts";
 const address: Address = {
   ...emptyAddress(),

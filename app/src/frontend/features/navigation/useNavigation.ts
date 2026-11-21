@@ -5,15 +5,15 @@ import {
   initialRoute,
   parseRoute,
   routeUrl,
-  type DemoRoute,
+  type AppRoute,
   type Tab,
 } from "./routes";
 const sessionKey = "fretta-session";
 
-export function useDemoNavigation() {
+export function useNavigation() {
   const pathname = usePathname();
   const router = useRouter();
-  const [route, setRoute] = useState<DemoRoute>(() => parseRoute(pathname));
+  const [route, setRoute] = useState<AppRoute>(() => parseRoute(pathname));
   const current = useRef(route);
   const currentPath = useRef(pathname);
   const [entered, setEntered] = useState(false);
@@ -45,7 +45,7 @@ export function useDemoNavigation() {
     setReady(true);
   }, []);
 
-  function navigate(patch: Partial<DemoRoute>, replace = false) {
+  function navigate(patch: Partial<AppRoute>, replace = false) {
     const from = currentPath.current;
     const next = { ...current.current, ...patch };
     const url = routeUrl(next);

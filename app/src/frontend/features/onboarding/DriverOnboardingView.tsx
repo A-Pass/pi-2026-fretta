@@ -131,7 +131,7 @@ export function DriverOnboardingView({
         </button>
       </header>
       <main className="onboarding-main">
-        <div className="onboarding-demo-note">
+        <div className="onboarding-note">
           <ShieldCheck size={20} />
           <span>
             <b>Cadastro do motorista</b> · Informe dados reais somente em um ambiente seguro. Os documentos serão analisados por uma operação autorizada.
@@ -200,7 +200,7 @@ export function DriverOnboardingView({
               Continuar como cliente
             </button>
             {store.proposals.some((p) =>
-              ownProposal(p, store.profile?.name || "Cleiton"),
+              ownProposal(p, store.profile?.id || ""),
             ) && (
               <button className="back" onClick={onServices}>
                 Acessar meus serviços existentes

@@ -1,0 +1,108 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  REMOTE_PATH: /opt/fretta
+
+jobs:
+  deploy_production:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+
+          cat > ~/.ssh/config <<EOF
+          Host deploy-server
+            HostName ${{ secrets.SSH_HOST }}
+            User ${{ secrets.SSH_USER }}
+            Port ${{ secrets.SSH_PORT }}
+            IdentityFile /tmp/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking accept-new
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Criar o diretório de deploy
+        run: |
+          # Cria diretório remoto
+          ssh deploy-server "mkdir -p '$REMOTE_PATH'"
+
+      - name: Gerar arquivo .env
+        env:
+          APP_HOST: ${{ secrets.APP_HOST }}
+          APP_PORT: ${{ secrets.APP_PORT }}
+          APP_BETTER_AUTH_SECRET: ${{ secrets.APP_BETTER_AUTH_SECRET }}
+          APP_GOOGLE_CLIENT_ID: ${{ secrets.APP_GOOGLE_CLIENT_ID }}
+          APP_GOOGLE_CLIENT_SECRET: ${{ secrets.APP_GOOGLE_CLIENT_SECRET }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          {
+            printf 'DB_HOST="%s"\n' "${DB_HOST//\$/\$\$}"
+
+            printf 'APP_PORT="%s"\n' "${APP_PORT//\$/\$\$}"
+
+            printf 'APP_BETTER_AUTH_SECRET="%s"\n' "${APP_BETTER_AUTH_SECRET//\$/\$\$}"
+
+            printf 'APP_GOOGLE_CLIENT_ID="%s"\n' "${APP_GOOGLE_CLIENT_ID//\$/\$\$}"
+
+            printf 'APP_GOOGLE_CLIENT_SECRET="%s"\n' "${APP_GOOGLE_CLIENT_SECRET//\$/\$\$}"
+
+            printf 'DB_HOST="%s"\n' "${DB_HOST//\$/\$\$}"
+
+            printf 'DB_PORT="%s"\n' "${DB_PORT//\$/\$\$}"
+
+            printf 'DB_USER="%s"\n' "${DB_USER//\$/\$\$}"
+
+            printf 'DB_NAME="%s"\n' "${DB_NAME//\$/\$\$}"
+
+            printf 'DB_PASSWORD="%s"\n' "${DB_PASSWORD//\$/\$\$}"
+            
+          } | ssh deploy-server "cat > '$REMOTE_PATH/.env' && chmod 600 '$REMOTE_PATH/.env'"
+
+      - name: Enviar arquivos, subir contêineres e limpar diretório remoto
+        run: |
+          # Compacta localmente, envia via SSH e extrai no remoto
+          tar -czf - \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.env' \
+            --exclude='node_modules' \
+            --exclude='target' \
+            . | ssh deploy-server "mkdir -p '$REMOTE_PATH' && tar -xzf - -C '$REMOTE_PATH'"
+
+          # Envia o .env
+          scp .env "deploy-server:$REMOTE_PATH/.env"
+
+          # Executa o build multicamada e inicialização dos contêineres do monólito
+          ssh deploy-server "
+            cd '$REMOTE_PATH' &&
+            chmod 600 .env &&
+            docker compose up -d --build --remove-orphans
+          "
+
+          # Remove os arquivos de deploy do servidor após a inicialização dos contêineres
+          if [ -z "$REMOTE_PATH" ] || [ "$REMOTE_PATH" = "/" ]; then
+            echo "REMOTE_PATH vazio ou apontando para a raiz; recusando remover." >&2
+            exit 1
+          fi
+          REMOTE_PATH_QUOTED="$(python3 -c 'import os, shlex; print(shlex.quote(os.environ["REMOTE_PATH"]))')"
+          ssh deploy-server "rm -rf -- $REMOTE_PATH_QUOTED"
+
+      - name: Limpeza local
+        if: always()
+        run: rm -f /tmp/deploy_key .env

@@ -13,21 +13,29 @@ import {
 import type {
   AppNotification,
   FreightRequestDraft,
+  Freight,
   Proposal,
   ProposalOffer,
   Store,
 } from "@/contracts";
 import { api } from "../api/client";
+import {
+  createBackendClient,
+  type FreightFeedItem,
+} from "../api/backend";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SuccessDialog } from "../components/SuccessDialog";
 import { ProposalFormDialog } from "../components/ProposalFormDialog";
 import { EmptyState } from "../components/EmptyState";
 import { RequestWizard } from "./RequestWizard";
 import { AddressBookView } from "./addresses/AddressBookView";
-import { createRequest as buildRequest } from "./addresses/createRequest";
 import { DriverHomeView } from "./driver/DriverHomeView";
 import { DriverServicesView } from "./driver/DriverServicesView";
-import { defaultArea, ownProposal } from "./driver/rules";
+import {
+  freightFromFeedItem,
+  isFreightFeedItem,
+  ownProposal,
+} from "./driver/rules";
 import { LoginView } from "./LoginView";
 import { WelcomeView } from "./WelcomeView";
 import { ProfileView } from "./ProfileView";
@@ -38,7 +46,7 @@ import { VehicleBookView } from "./vehicles/VehicleBookView";
 import { NotificationsView } from "./notifications/NotificationsView";
 import { withNotifications, unreadNotifications } from "./notifications/rules";
 import { SubscriptionView } from "./subscription/SubscriptionView";
-import { useDemoNavigation } from "./navigation/useDemoNavigation";
+import { useNavigation } from "./navigation/useNavigation";
 import { reviseOffer } from "./freights/negotiation";
 import { scheduleLabel } from "../lib/dates";
 import { DriverOnboardingView } from "./onboarding/DriverOnboardingView";
@@ -53,8 +61,11 @@ import {
 import { InstallApp } from "../components/InstallApp";
 import { authClient } from "../auth/client";
 
+const opportunityCache = new Map<string, FreightFeedItem>();
+const opportunityStorageKey = "fretta-selected-opportunity";
+
 export function FrettaApp() {
-  const navigation = useDemoNavigation();
+  const navigation = useNavigation();
   const {
     role,
     tab,
@@ -68,6 +79,12 @@ export function FrettaApp() {
     setChatId,
   } = navigation;
   const [store, setStore] = useState<Store | null>(null),
+    [selectedOpportunity, setSelectedOpportunity] = useState<Freight | null>(
+      null,
+    ),
+    [resolvedOpportunityId, setResolvedOpportunityId] = useState<string | null>(
+      null,
+    ),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -85,9 +102,31 @@ export function FrettaApp() {
   const latest = useRef<Store | null>(null),
     saving = useRef(false),
     main = useRef<HTMLElement>(null);
-  const name = store?.profile?.name || "Cleiton",
-    profilePhoto = store?.profile?.photo || "",
-    subscription = store?.subscriptionActive ?? true;
+  const name = store?.profile?.name || "",
+    profilePhoto = store?.profile?.photo || "";
+  useEffect(() => {
+    if (role !== "motorista" || !selected) {
+      setResolvedOpportunityId(selected);
+      return;
+    }
+    if (selectedOpportunity?.id === selected) {
+      setResolvedOpportunityId(selected);
+      return;
+    }
+
+    let cached = opportunityCache.get(selected);
+    if (!cached) {
+      try {
+        const stored = sessionStorage.getItem(opportunityStorageKey);
+        const item: unknown = stored ? JSON.parse(stored) : null;
+        if (isFreightFeedItem(item) && item.id === selected) cached = item;
+      } catch {
+        cached = undefined;
+      }
+    }
+    if (cached) setSelectedOpportunity(freightFromFeedItem(cached));
+    setResolvedOpportunityId(selected);
+  }, [role, selected, selectedOpportunity?.id]);
   useEffect(() => {
     let active = true;
     void authClient.getSession().then(({ data }) => {
@@ -122,6 +161,55 @@ export function FrettaApp() {
     };
   }, [authenticated]);
   useEffect(() => {
+    if (!authenticated || role !== "cliente" || !selected) return;
+    let active = true;
+    let refreshing = false;
+    const refresh = () => {
+      if (refreshing || saving.current) return;
+      refreshing = true;
+      void api
+        .load()
+        .then((s) => {
+          if (!active) return;
+          const current = latest.current;
+          const updated = current
+            ? {
+                ...current,
+                proposals: [
+                  ...current.proposals.filter(
+                    (proposal) => proposal.freightId !== selected,
+                  ),
+                  ...s.proposals.filter(
+                    (proposal) => proposal.freightId === selected,
+                  ),
+                ],
+              }
+            : s;
+          latest.current = updated;
+          setStore(updated);
+        })
+        .catch((failure) => {
+          if (!active) return;
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "Não foi possível atualizar as propostas recebidas.",
+          );
+        })
+        .finally(() => {
+          refreshing = false;
+        });
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    const interval = window.setInterval(refresh, 15000);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(interval);
+    };
+  }, [authenticated, role, selected]);
+  useEffect(() => {
     setModal("");
     setUpdatingDriver(false);
     setError("");
@@ -153,61 +241,95 @@ export function FrettaApp() {
     setQuery("");
     setFilter("TODOS");
   }
-  const f = store?.freights.find((f) => f.id === selected);
+  const f =
+    store?.freights.find((f) => f.id === selected) ||
+    (role === "motorista" && selectedOpportunity?.id === selected
+      ? selectedOpportunity
+      : undefined);
   const proposals =
     store?.proposals.filter(
       (p) =>
         p.freightId === selected &&
-        (role === "cliente" || ownProposal(p, name)),
+        (role === "cliente" || ownProposal(p, store?.profile?.id || "")),
     ) || [];
   const accepted = proposals.find(
     (p) => p.id === f?.acceptedProposalId && p.status === "ACEITA",
   );
   const own = store?.proposals.find(
-    (p) => p.freightId === selected && ownProposal(p, name),
+    (p) =>
+      p.freightId === selected && ownProposal(p, store?.profile?.id || ""),
   );
   async function createRequest(draft: FreightRequestDraft) {
     if (!store) return false;
-    const next = buildRequest(store, draft);
-    if (!(await save(next))) return false;
-    setPublishedRequestId(next.freights[0].id);
-    setModal("");
-    setSuccess("request");
-    return true;
+    try {
+      const { freight, savedAddresses = [] } = await createBackendClient().createFreight({
+        title: draft.title,
+        description: draft.description,
+        vehicle: draft.vehicle,
+        schedule: draft.schedule,
+        pickup: draft.pickup,
+        delivery: draft.delivery,
+        photoIds: draft.photos,
+        savePickup: draft.savePickup,
+        saveDelivery: draft.saveDelivery,
+      });
+      const next: Store = {
+        ...store,
+        addresses: [...(store.addresses || []), ...savedAddresses],
+        freights: [freight, ...store.freights.filter((item) => item.id !== freight.id)],
+        freightAddresses: {
+          ...store.freightAddresses,
+          [freight.id]: {
+            pickup: structuredClone(draft.pickup),
+            delivery: structuredClone(draft.delivery),
+          },
+        },
+      };
+      latest.current = next;
+      setStore(next);
+      setPublishedRequestId(freight.id);
+      setModal("");
+      setSuccess("request");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível publicar a solicitação.",
+      );
+      return false;
+    }
   }
   async function propose(offer: ProposalOffer) {
     if (
       !store ||
       !f ||
       role !== "motorista" ||
-      !subscription ||
       !driverCanPropose(store) ||
       f.status !== "ABERTO"
     )
       throw new Error("Não é possível enviar uma proposta agora.");
     const existing = store.proposals.find(
-      (p) => p.freightId === f.id && ownProposal(p, name),
+      (p) => p.freightId === f.id && ownProposal(p, store.profile?.id || ""),
     );
     let next: Store;
     if (existing) next = reviseOffer(store, existing.id, offer);
     else {
-      const p: Proposal = {
-        ...offer,
-        id: crypto.randomUUID(),
-        freightId: f.id,
-        driver: name,
-        driverId: "provider-current",
-        rating: publicProvider(store, "provider-current")?.rating || 0,
-        providerName: publicProvider(store, "provider-current")?.name || name,
-        providerKind: publicProvider(store, "provider-current")?.kind || "autonomo",
-        providerLogo:
-          store.driverRegistration?.personType === "pj"
-            ? store.companyProfile?.logo
-            : undefined,
-        status: "PENDENTE",
-        offers: [offer],
-      };
+      const p = await createBackendClient().propose(f.id, {
+        priceCents: offer.priceCents,
+        vehicleId: offer.vehicleId || "",
+        availableAt: offer.availableAt,
+        message: offer.message,
+      });
       next = { ...store, proposals: [...store.proposals, p] };
+    }
+    if (!existing) {
+      const enriched = withNotifications(latest.current || next, next);
+      latest.current = enriched;
+      setStore(enriched);
+      setModal("");
+      setSuccess("proposal");
+      return true;
     }
     const ok = await save(next);
     if (ok) {
@@ -223,7 +345,7 @@ export function FrettaApp() {
       !p ||
       !text.trim() ||
       text.length > 2000 ||
-      (role === "motorista" && !ownProposal(p, name))
+      (role === "motorista" && !ownProposal(p, store.profile?.id || ""))
     )
       return false;
     return save({
@@ -447,7 +569,7 @@ export function FrettaApp() {
               aria-label="Configurar área de operação"
             >
               <MapPin size={16} />
-              {(store.operatingArea || defaultArea).label}
+              {store.operatingArea?.label || "Definir área de operação"}
             </button>
           )}
           <div>
@@ -506,7 +628,7 @@ export function FrettaApp() {
             <ProviderProfileView
               key={providerId}
               provider={publicProvider(store, providerId)}
-              preview={role === "motorista" && providerId === "provider-current"}
+              preview={role === "motorista" && providerId === store.profile?.id}
               onBack={() => navigation.back("fretes")}
               onConversation={
                 role === "cliente" &&
@@ -527,6 +649,13 @@ export function FrettaApp() {
                   : undefined
               }
             />
+          ) : selected &&
+            !f &&
+            role === "motorista" &&
+            resolvedOpportunityId !== selected ? (
+            <p className="muted" role="status">
+              Carregando oportunidade…
+            </p>
           ) : selected && !f ? (
             <EmptyState title="Solicitação não encontrada">
               Ela não está mais disponível.
@@ -543,11 +672,13 @@ export function FrettaApp() {
               store={store}
               proposals={proposals}
               accepted={accepted}
-              subscription={subscription}
               canPropose={driverCanPropose(store)}
               onRegistration={() => nav("cadastro-motorista")}
               setModal={setModal}
-              setSelected={setSelected}
+              setSelected={(id) => {
+                if (!id) setSelectedOpportunity(null);
+                setSelected(id);
+              }}
               onChat={setChatId}
               onProvider={navigation.openProvider}
               save={save}
@@ -566,7 +697,7 @@ export function FrettaApp() {
               store={store}
               save={save}
               onBack={() => nav("perfil")}
-              onPreview={() => navigation.openProvider("provider-current")}
+              onPreview={() => navigation.openProvider(store.profile?.id || "")}
             />
           ) : tab === "veiculos" && role === "motorista" ? (
             <VehicleBookView
@@ -576,10 +707,6 @@ export function FrettaApp() {
             />
           ) : tab === "assinatura" && role === "motorista" ? (
             <SubscriptionView
-              active={subscription}
-              onChange={(subscriptionActive) =>
-                save({ ...store, subscriptionActive })
-              }
               onBack={() => nav("perfil")}
             />
           ) : [
@@ -611,12 +738,17 @@ export function FrettaApp() {
                     profile.photo !== profilePhoto;
                   const ok = await save({
                     ...store,
-                    profile,
+                    profile: {
+                      ...store.profile,
+                      ...profile,
+                      id: store.profile?.id || "",
+                    },
                     ...(photoChanged
                       ? {
                           driverRegistration: {
                             ...store.driverRegistration!,
                             status: "EM_ANALISE",
+                            submittedAt: new Date().toISOString(),
                             reviewedAt: undefined,
                             feedback: undefined,
                           },
@@ -633,11 +765,10 @@ export function FrettaApp() {
                 }}
                 onAddresses={() => nav("enderecos")}
                 onVehicles={() => nav("veiculos")}
-                onPublicProfile={() => navigation.openProvider("provider-current")}
+                onPublicProfile={() => navigation.openProvider(store.profile?.id || "")}
                 onCompany={() => nav("empresa")}
                 onSubscription={() => nav("assinatura")}
                 role={role}
-                subscription={subscription}
                 setEntered={() => {
                   void signOut();
                   setModal("");
@@ -670,7 +801,6 @@ export function FrettaApp() {
               setChatId={setChatId}
               send={send}
               save={save}
-              subscription={subscription}
               onManageVehicles={() => nav("veiculos")}
               onProvider={navigation.openProvider}
               onFreight={setSelected}
@@ -679,10 +809,21 @@ export function FrettaApp() {
             <DriverHomeView
               store={store}
               name={name}
-              subscription={subscription}
               save={save}
-              onSelect={setSelected}
-              onProfile={() => nav("assinatura")}
+              onSelect={(freight) => {
+                opportunityCache.clear();
+                opportunityCache.set(freight.id, freight);
+                try {
+                  sessionStorage.setItem(
+                    opportunityStorageKey,
+                    JSON.stringify(freight),
+                  );
+                } catch {
+                  // The in-memory cache still covers client-side navigation.
+                }
+                setSelectedOpportunity(freightFromFeedItem(freight));
+                setSelected(freight.id);
+              }}
               schedule={(f) => scheduleLabel(f.schedule)}
             />
           ) : role === "motorista" && tab === "fretes" ? (
@@ -706,8 +847,10 @@ export function FrettaApp() {
               nav={nav}
               setQuery={setQuery}
               setFilter={setFilter}
-              setSelected={setSelected}
-              subscription={subscription}
+              setSelected={(id) => {
+                if (!id) setSelectedOpportunity(null);
+                setSelected(id);
+              }}
               schedule={(f) => scheduleLabel(f.schedule)}
             />
           )}

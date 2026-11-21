@@ -21,7 +21,6 @@ type Props = {
   chatId: string;
   setChatId: (s: string) => void;
   send: (text: string) => Promise<boolean>;
-  subscription: boolean;
   onManageVehicles: () => void;
   onProvider?: (id: string, conversationId?: string) => void;
   onFreight?: (id: string) => void;
@@ -35,13 +34,14 @@ export function ChatView({
   send,
   save,
   name,
-  subscription,
   onManageVehicles,
   onProvider,
   onFreight,
 }: Props) {
   const conversation = store.proposals.find(
-    (p) => p.id === chatId && (role === "cliente" || ownProposal(p, name)),
+    (p) =>
+      p.id === chatId &&
+      (role === "cliente" || ownProposal(p, store.profile?.id || "")),
   );
   const freight = store.freights.find((f) => f.id === conversation?.freightId);
   const [decision, setDecision] = useState<{
@@ -94,9 +94,8 @@ export function ChatView({
   const canRevise =
     role === "motorista" &&
     conversation &&
-    ownProposal(conversation, name) &&
+    ownProposal(conversation, store.profile?.id || "") &&
     canNegotiate &&
-    subscription &&
     driverCanPropose(store);
   const bottom = useRef<HTMLDivElement>(null),
     messagesViewport = useRef<HTMLDivElement>(null),
@@ -392,7 +391,7 @@ export function ChatView({
     );
   const conversations = store.proposals.filter(
     (p) =>
-      (role === "cliente" || ownProposal(p, name)) &&
+      (role === "cliente" || ownProposal(p, store.profile?.id || "")) &&
       `${providerName(p)} ${store.freights.find((f) => f.id === p.freightId)?.title || ""}`
         .toLocaleLowerCase()
         .includes(search.toLocaleLowerCase()),

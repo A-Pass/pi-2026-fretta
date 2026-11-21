@@ -99,3 +99,129 @@ export function submitReview(
     ),
   };
 }
+
+export function startFreight(
+  store: Store,
+  freightId: string,
+  role: Role,
+  now = Date.now(),
+): Store {
+  const freight = store.freights.find((item) => item.id === freightId);
+  const availableAt = Date.parse(freight?.agreement?.availableAt || "");
+  if (
+    !freight ||
+    role !== "motorista" ||
+    freight.status !== "AGENDADO" ||
+    !freight.agreement?.driverId ||
+    freight.agreement.driverId !== store.profile?.id ||
+    !Number.isFinite(availableAt) ||
+    availableAt > now
+  )
+    throw new Error("O início deste frete não está disponível.");
+  return {
+    ...store,
+    freights: store.freights.map((item) =>
+      item.id === freightId ? { ...item, status: "EM_TRANSPORTE" } : item,
+    ),
+  };
+}
+
+export function completeFreight(
+  store: Store,
+  freightId: string,
+  role: Role,
+): Store {
+  const freight = store.freights.find((item) => item.id === freightId);
+  if (!freight || role !== "cliente" || freight.status !== "EM_TRANSPORTE")
+    throw new Error("A conclusão deste frete não está disponível.");
+  return {
+    ...store,
+    freights: store.freights.map((item) =>
+      item.id === freightId ? { ...item, status: "CONCLUIDO" } : item,
+    ),
+  };
+}
+
+export function cancelFreight(
+  store: Store,
+  freightId: string,
+  role: Role,
+  reason: string,
+): Store {
+  const freight = store.freights.find((item) => item.id === freightId);
+  const trimmedReason = reason.trim();
+  const canCancelAsClient =
+    role === "cliente" &&
+    ["ABERTO", "AGENDADO", "EM_TRANSPORTE"].includes(freight?.status || "");
+  const canCancelAsDriver =
+    role === "motorista" &&
+    ["AGENDADO", "EM_TRANSPORTE"].includes(freight?.status || "") &&
+    !!freight?.agreement?.driverId &&
+    freight.agreement.driverId === store.profile?.id;
+  if (
+    !freight ||
+    (!canCancelAsClient && !canCancelAsDriver) ||
+    trimmedReason.length < 3 ||
+    trimmedReason.length > 1000
+  )
+    throw new Error("Informe o motivo para cancelar este frete.");
+
+  const proposalIds = canCancelAsDriver
+    ? [freight.acceptedProposalId || freight.agreement?.proposalId].filter(
+        (id): id is string => !!id,
+      )
+    : freight.acceptedProposalId
+      ? [freight.acceptedProposalId]
+      : freight.agreement?.proposalId
+        ? [freight.agreement.proposalId]
+        : store.proposals
+            .filter(
+              (proposal) =>
+                proposal.freightId === freightId &&
+                proposal.status === "PENDENTE",
+            )
+            .map((proposal) => proposal.id);
+  const canceledAt = new Date().toISOString();
+  const canceledBy = role === "cliente" ? "Cliente" : "Motorista";
+  const cancellationMessages = proposalIds.map((proposalId) => ({
+    id: crypto.randomUUID(),
+    freightId,
+    proposalId,
+    role,
+    text: `${canceledBy} cancelou o frete. Motivo: ${trimmedReason}`,
+    createdAt: canceledAt,
+  }));
+  const reopened = canCancelAsDriver;
+
+  return {
+    ...store,
+    freights: store.freights.map((item) =>
+      item.id === freightId
+        ? {
+            ...item,
+            status: reopened ? "ABERTO" : "CANCELADO",
+            ...(reopened
+              ? { acceptedProposalId: undefined, agreement: undefined }
+              : {}),
+          }
+        : item,
+    ),
+    proposals: store.proposals.map((proposal) =>
+      proposal.freightId === freightId &&
+      (reopened ||
+        proposal.status === "PENDENTE" ||
+        proposal.status === "ACEITA")
+        ? {
+            ...proposal,
+            status: "ENCERRADA",
+            offers: proposal.offers?.map((offer) =>
+              offer.status === "PENDENTE" || offer.status === "ACEITA"
+                ? { ...offer, status: "ENCERRADA" }
+                : offer,
+            ),
+          }
+        : proposal,
+    ),
+    messages: [...store.messages, ...cancellationMessages],
+  };
+}

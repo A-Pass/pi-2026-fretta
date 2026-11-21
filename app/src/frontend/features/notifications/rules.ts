@@ -1,7 +1,7 @@
 import type { AppNotification, Role, Store } from "@/contracts";
 import { ownProposal } from "../driver/rules";
 import { proposalOffers } from "../freights/negotiation";
-/** Demo events only: production recipients must be derived and authorized by the server. */
+/** Notification changes are persisted with the account state. */
 export function withNotifications(previous: Store, next: Store): Store {
   const notifications = [...(next.notifications || [])];
   function add(
@@ -38,7 +38,7 @@ export function withNotifications(previous: Store, next: Store): Store {
         p.id,
       );
     if (
-      ownProposal(p, next.profile?.name || "Cleiton") &&
+      ownProposal(p, next.profile?.id || "") &&
       latest.status !== oldLatest?.status
     ) {
       if (latest.status === "RECUSADA")
@@ -77,7 +77,7 @@ export function withNotifications(previous: Store, next: Store): Store {
     const role: Role = m.role === "cliente" ? "motorista" : "cliente";
     if (
       role === "motorista" &&
-      !ownProposal(p, next.profile?.name || "Cleiton")
+      !ownProposal(p, next.profile?.id || "")
     )
       continue;
     add(
@@ -104,7 +104,7 @@ export function withNotifications(previous: Store, next: Store): Store {
     if (
       f.status === "CONCLUIDO" &&
       p &&
-      ownProposal(p, next.profile?.name || "Cleiton")
+      ownProposal(p, next.profile?.id || "")
     )
       add(
         `completed:${f.id}`,

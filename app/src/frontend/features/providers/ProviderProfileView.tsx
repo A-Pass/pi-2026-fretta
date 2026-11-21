@@ -25,7 +25,7 @@ export function ProviderProfileView({
   if (!provider)
     return (
       <EmptyState title="Perfil não encontrado">
-        Este prestador não está disponível neste exemplo.
+        Este prestador não está mais disponível.
         <button className="secondary" onClick={onBack}>
           Voltar
         </button>
