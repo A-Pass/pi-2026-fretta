@@ -53,9 +53,11 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           {
-            printf 'DB_HOST="%s"\n' "${DB_HOST//\$/\$\$}"
+            printf 'APP_HOST="%s"\n' "${APP_HOST//\$/\$\$}"
 
             printf 'APP_PORT="%s"\n' "${APP_PORT//\$/\$\$}"
+
+            printf 'APP_URL="https://%s:%s"\n' "$APP_HOST" "$DB_PORT"
 
             printf 'APP_BETTER_AUTH_SECRET="%s"\n' "${APP_BETTER_AUTH_SECRET//\$/\$\$}"
 
@@ -72,6 +74,8 @@ jobs:
             printf 'DB_NAME="%s"\n' "${DB_NAME//\$/\$\$}"
 
             printf 'DB_PASSWORD="%s"\n' "${DB_PASSWORD//\$/\$\$}"
+
+            printf 'DB_URL=postgresql://%s:%s@%s:%s/%s\n' "$DB_USER" "$DB_PASSWORD" "$DB_HOST" "$DB_PORT" "$DB_NAME"
             
           } | ssh deploy-server "cat > '$REMOTE_PATH/.env' && chmod 600 '$REMOTE_PATH/.env'"
 
