@@ -31,9 +31,19 @@ services:
     container_name: fretta-db
     image: postgres:17-trixie
     environment:
-      POSTGRES_USER_FILE: ${DB_USER}
-      POSTGRES_DB_FILE: ${DB_NAME}
-      POSTGRES_PASSWORD_FILE: ${DB_PASSWORD}
+      POSTGRES_USER_FILE: /run/secrets/db_user
+      POSTGRES_DB_FILE: /run/secrets/db_name
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - source: db_user
+        target: /run/secrets/db_user
+        mode: 0400
+      - source: db_name
+        target: /run/secrets/db_name
+        mode: 0400
+      - source: db_password
+        target: /run/secrets/db_password
+        mode: 0400
     volumes:
       - fretta_db_data:/var/lib/postgres/data
     healthcheck:

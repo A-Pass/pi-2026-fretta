@@ -21,6 +21,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    secrets: !reset null
 
 secrets:
   dot_env:
