@@ -37,6 +37,7 @@ services:
       FRETTA_DEMO_PIX: ${FRETTA_DEMO_PIX:-false}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FRETTA_REVERSE_GEOCODER_URL: ${FRETTA_REVERSE_GEOCODER_URL:-}
     volumes:
       - fretta_documents:/app/storage
     depends_on:

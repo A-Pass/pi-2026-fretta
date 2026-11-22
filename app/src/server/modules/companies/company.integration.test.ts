@@ -188,7 +188,17 @@ test("empresa convida por código, atribui e contrata com motorista sem assinatu
             "AGENDADO",
           );
           await freight(driver, [personal.id, "start"]);
-          await freight(customer, [personal.id, "complete"]);
+          await tx.oferta.create({
+            data: {
+              propostaId: personalProposal.id,
+              autorId: driver,
+              status: "ACEITA",
+              retiradaEm: new Date(Date.now() - 60_000),
+              valorCents: 10000,
+            },
+          });
+          await freight(customer, [personal.id, "complete"], { score: 5 });
+          await freight(driver, [personal.id, "complete"], { score: 5 });
           assert.equal(
             (await tx.frete.findUniqueOrThrow({ where: { id: personal.id } }))
               .status,
@@ -353,7 +363,12 @@ test("empresa convida por código, atribui e contrata com motorista sem assinatu
           await assert.rejects(company(driver, ["leave"]), denied(409));
           await assert.rejects(freight(manager, [id, "start"]), denied(403));
           await freight(driver, [id, "start"]);
-          await freight(customer, [id, "complete"]);
+          await tx.oferta.update({
+            where: { id: proposal.offers[0].id },
+            data: { retiradaEm: new Date(Date.now() - 60_000) },
+          });
+          await freight(customer, [id, "complete"], { score: 5 });
+          await freight(driver, [id, "complete"], { score: 4 });
           await company(driver, ["leave"]);
           assert.equal(
             await tx.vinculoEmpresa.count({ where: { motoristaId: driver } }),

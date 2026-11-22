@@ -53,7 +53,7 @@ export function ProposalFormDialog({
         vehicle: vehicleLabel(vehicle),
         vehicleId: vehicle.id,
         availableAt,
-        message: String(data.get("message")).trim(),
+        message: String(data.get("message") ?? "").trim(),
         createdAt: new Date().toISOString(),
         status: "PENDENTE",
       });
@@ -90,7 +90,7 @@ export function ProposalFormDialog({
       <p className="muted">
         {proposal
           ? "A proposta anterior continuará no histórico. Somente esta poderá ser aceita."
-          : "Informe o valor, o veículo e como você pode ajudar."}
+          : "Informe o valor, o veículo e a disponibilidade."}
       </p>
       {!vehicles.length ? (
         <div className="empty">
@@ -143,12 +143,11 @@ export function ProposalFormDialog({
               />
             </label>
             <label>
-              Comentário
+              Comentário (opcional)
               <textarea
                 name="message"
                 placeholder="Explique o que está incluído e os detalhes combinados…"
                 maxLength={2000}
-                required
               />
             </label>
           </fieldset>

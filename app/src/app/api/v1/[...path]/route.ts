@@ -1,4 +1,5 @@
 import { correctionItems, correctionFields } from "@/contracts/driver-corrections";
+import { registerDuePickups } from "@/server/modules/freights/pickups";
 import { driverCanOffer } from "@/server/modules/freights/service";
 import { prisma } from "@/server/db/prisma";
 import { auth } from "@/server/auth/auth";
@@ -18,6 +19,7 @@ import { verificarDocumentosMotorista } from "@/server/modules/identity/services
 import { salvarCadastroMotorista } from "@/server/modules/identity/services/driver-registration-persistence";
 import {
   listarMensagens,
+  marcarMensagensLidas,
   enviarMensagem,
   ChatError,
 } from "@/server/modules/chat/services/message-service";
@@ -543,6 +545,15 @@ export async function GET(request: NextRequest) {
         ? null
         : (user.motorista.cadastro?.status ?? "NAO_ENVIADO");
 
+    const completedFreights = { status: "CONCLUIDO" as const, propostaAceita: { motoristaId: session.user.id } };
+    const driverStats = user.motorista ? await Promise.all([
+      prisma.frete.count({ where: completedFreights }),
+      prisma.avaliacao.aggregate({
+        where: { avaliadoId: session.user.id, frete: completedFreights },
+        _avg: { nota: true }, _count: true,
+      }),
+    ]).then(([completed, ratings]) => ({ completed, average: ratings._avg.nota, count: ratings._count })) : null;
+
     return Response.json({
       id: session.user.id,
       name: user.name,
@@ -551,6 +562,7 @@ export async function GET(request: NextRequest) {
       emailVerified: session.user.emailVerified,
 
       driverPublicId: user.motorista?.codigoPublico ?? null,
+      driverStats,
       managesCompany: user.empresas.length > 0,
       companyMembership: user.motorista?.vinculoEmpresa?.empresa.nome ?? null,
       roles: {
@@ -832,12 +844,36 @@ export async function GET(request: NextRequest) {
     const cursor = request.nextUrl.searchParams.get("cursor") ?? undefined;
 
     try {
+      const role = request.nextUrl.searchParams.get("role");
+      if (role === "motorista" || !role) await registerDuePickups(prisma, session.user.id);
       if (request.nextUrl.searchParams.get("summary") === "true") {
-        const unread = Boolean(await prisma.notificacao.findFirst({
-          where: { destinatarioId: session.user.id, lida: false },
-          select: { id: true },
-        }));
-        return Response.json({ unread }, { headers: { "Cache-Control": "private, no-store" } });
+        const where = { destinatarioId: session.user.id, lida: false };
+        const [unread, unreadMessages, acceptances] = await Promise.all([
+          prisma.notificacao.findFirst({ where, select: { id: true } }),
+          prisma.notificacao.findFirst({ where: {
+            ...where, evento: "NOVA_MENSAGEM",
+            ...(role === "cliente" || role === "motorista" ? { papelDestinatario: role } : {}),
+          }, select: { id: true } }),
+          role === "motorista" ? prisma.notificacao.findMany({
+            where: { ...where, papelDestinatario: "motorista", evento: "ACEITE", propostaId: { not: null } },
+            select: { id: true, propostaId: true },
+            orderBy: [{ criadoEm: "desc" }, { id: "desc" }],
+            take: 20,
+          }) : [],
+        ]);
+        const acceptedProposals = acceptances.length ? await prisma.proposta.findMany({
+          where: { motoristaId: session.user.id, id: { in: acceptances.flatMap((event) => event.propostaId ? [event.propostaId] : []) } },
+          select: { id: true, conversa: { select: { id: true } }, frete: {
+            select: { titulo: true, cliente: { select: { user: { select: { name: true } } } } },
+          } },
+        }) : [];
+        const proposalsById = new Map(acceptedProposals.map((proposal) => [proposal.id, proposal]));
+        const accepted = acceptances.flatMap((event) => {
+          const proposal = event.propostaId ? proposalsById.get(event.propostaId) : undefined;
+          return proposal?.conversa ? [{ id: event.id, conversationId: proposal.conversa.id,
+            customerName: proposal.frete.cliente.user.name, freightTitle: proposal.frete.titulo }] : [];
+        });
+        return Response.json({ unread: Boolean(unread), unreadMessages: Boolean(unreadMessages), accepted }, { headers: { "Cache-Control": "private, no-store" } });
       }
       const resultado = await listarNotificacoes(session.user.id, cursor);
 
@@ -1022,6 +1058,20 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 },
       );
+    }
+  }
+  const leituraMensagens = path.match(/^\/api\/v1\/conversations\/([^/]+)\/read$/);
+  if (leituraMensagens) {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session) return new Response(null, { status: 401 });
+    try {
+      const body = await request.json().catch(() => null);
+      await marcarMensagensLidas(leituraMensagens[1], session.user.id, body?.notificationIds);
+      return new Response(null, { status: 204 });
+    } catch (error) {
+      if (error instanceof ChatError)
+        return Response.json({ code: error.code, message: error.message }, { status: error.status });
+      return Response.json({ message: "Não foi possível atualizar a leitura." }, { status: 500 });
     }
   }
   // POST /api/v1/conversations/:id/messages

@@ -4693,3 +4693,90 @@ button.company-brand-home {
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
+
+.chat-nav-icon {
+  position: relative;
+  display: inline-flex;
+}
+.chat-nav-icon .notification-unread-dot {
+  top: -3px;
+  right: -4px;
+}
+
+.driver-pickups {
+  margin-block: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.driver-pickups h2,
+.driver-pickup-card h3,
+.driver-pickup-card p {
+  margin: 0;
+}
+.driver-pickup-card {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  border-color: #edbd90;
+  background: #fff3e8;
+}
+.driver-pickup-card[data-due="true"] {
+  border-color: #e7a39f;
+  background: #fff0ef;
+}
+.driver-pickup-time {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #893913;
+  font-weight: 700;
+}
+.driver-pickup-card[data-due="true"] .driver-pickup-time {
+  color: #a02022;
+}
+.freight-agreement-summary {
+  margin-block: 0.75rem;
+}
+
+.chat-service-completion {
+  flex-shrink: 0;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: #faf7f3;
+}
+.chat-service-completion p { margin: 0; }
+.chat-rating-stars {
+  display: flex;
+  justify-content: space-between;
+  border: 0;
+  padding: 0;
+  margin: 1rem 0;
+}
+.chat-rating-stars label {
+  position: relative;
+  color: #986112;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.chat-rating-stars input {
+  position: absolute;
+  opacity: 0;
+}
+.chat-rating-stars label:has(:focus-visible) {
+  outline: 2px solid currentColor;
+  border-radius: 6px;
+}
+.driver-rating-summary {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+}
+.driver-rating-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.driver-rating-summary svg { color: #986112; }

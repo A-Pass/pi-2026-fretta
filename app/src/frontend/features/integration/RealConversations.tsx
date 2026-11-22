@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, MessageCircle, Send, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  MessageCircle,
+  Send,
+  Star,
+  X,
+} from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -36,6 +43,7 @@ type Negotiation = {
   status: string;
   owner: boolean;
   updatedAt: string;
+  completion?: { conversationId: string; pickupAt: string; reviewed: boolean };
   proposals: { id: string; conversationId: string | null; offers: Offer[] }[];
 };
 const price = new Intl.NumberFormat("pt-BR", {
@@ -73,15 +81,18 @@ function Chat({
   offers,
   freightStatus,
   onReview,
+  onRead,
 }: {
   id: string;
   role: Role;
   offers: Offer[];
   freightStatus?: string;
   onReview?: (offer: Offer) => void;
+  onRead: () => void;
 }) {
   const timeline = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
+  const markedThrough = useRef<string | null>(null);
   const olderRequest = useRef<AbortController | null>(null);
   const oldestInitialized = useRef(false);
   const scrollAnchor = useRef<{ height: number; offset: number } | null>(null);
@@ -111,6 +122,30 @@ function Chat({
             setOlderCursor(p.nextCursor);
           }
           setLoaded(true);
+          const notificationIds = p.readableNotificationIds ?? [];
+          const batch = notificationIds.join("|");
+          if (
+            p.items.length &&
+            batch &&
+            document.visibilityState === "visible" &&
+            followLatest.current &&
+            markedThrough.current !== batch
+          ) {
+            markedThrough.current = batch;
+            void http
+              .request(`/conversations/${encodeURIComponent(id)}/read`, {
+                method: "POST",
+                body: { notificationIds },
+                signal: controller.signal,
+              })
+              .then(() => {
+                if (!controller.signal.aborted) onRead();
+              })
+              .catch(() => {
+                if (markedThrough.current === batch)
+                  markedThrough.current = null;
+              });
+          }
         })
         .catch(() => {
           if (!controller.signal.aborted)
@@ -123,7 +158,7 @@ function Chat({
       olderRequest.current?.abort();
       clearInterval(timer);
     };
-  }, [id]);
+  }, [id, onRead]);
   const events = [
     ...messages.map((message) => ({
       kind: "message" as const,
@@ -341,11 +376,13 @@ export function RealConversations({
   conversationId,
   vehicles,
   canOffer,
+  onRead,
 }: {
   role: Role;
   conversationId: string;
   vehicles: Vehicle[];
   canOffer: boolean;
+  onRead: () => void;
 }) {
   const [items, setItems] = useState<Conversation[]>([]);
   const [error, setError] = useState("");
@@ -380,6 +417,7 @@ export function RealConversations({
         current={current}
         vehicles={vehicles}
         canOffer={canOffer}
+        onRead={onRead}
       />
     );
   return (
@@ -416,14 +454,28 @@ function ConversationThread({
   current,
   vehicles,
   canOffer,
+  onRead,
 }: {
   id: string;
   role: Role;
   current?: Conversation;
   vehicles: Vehicle[];
   canOffer: boolean;
+  onRead: () => void;
 }) {
   const [data, setData] = useState<Negotiation | null>(null);
+  const [finishStep, setFinishStep] = useState<"confirm" | "rating" | null>(
+    null,
+  );
+  const [score, setScore] = useState(0);
+  const [finishError, setFinishError] = useState("");
+  const finishDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = finishDialog.current;
+    if (finishStep && !element?.open) element?.showModal();
+    if (!finishStep) element?.close();
+  }, [finishStep]);
+
   const [review, setReview] = useState<Offer | null>(null);
   const [newOffer, setNewOffer] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -466,6 +518,42 @@ function ConversationThread({
   }, [review]);
 
   const proposal = data?.proposals.find((p) => p.conversationId === id);
+  const completion =
+    data?.completion?.conversationId === id ? data.completion : undefined;
+  const waitingForConfirmation =
+    completion?.reviewed &&
+    ["AGENDADO", "EM_TRANSPORTE"].includes(data?.status ?? "");
+  const canFinish =
+    completion &&
+    !completion.reviewed &&
+    ["AGENDADO", "EM_TRANSPORTE"].includes(data?.status ?? "") &&
+    Date.parse(completion.pickupAt) <= Date.now();
+
+  async function finish(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!path || busy || !score) return;
+    queryVersion.current++;
+    setBusy(true);
+    setFinishError("");
+    try {
+      setData(
+        await http.request<Negotiation>(`${path}/complete`, {
+          method: "POST",
+          body: { score },
+        }),
+      );
+      setFinishStep(null);
+    } catch (error) {
+      setFinishError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar a avaliação.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const mayDecide =
     role === "cliente" && data?.owner === true && data.status === "ABERTO";
   const active = mayDecide
@@ -548,6 +636,115 @@ function ConversationThread({
           </button>
         )}
       </div>
+      {completion &&
+        (canFinish ||
+          waitingForConfirmation ||
+          data?.status === "CONCLUIDO") && (
+          <div className="chat-service-completion">
+            {data?.status === "CONCLUIDO" ? (
+              <p role="status">Serviço encerrado.</p>
+            ) : waitingForConfirmation ? (
+              <p role="status">
+                Avaliação enviada. Aguardando a confirmação da outra parte.
+              </p>
+            ) : (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setScore(0);
+                  setFinishError("");
+                  setFinishStep("confirm");
+                }}
+              >
+                Serviço concluído
+              </button>
+            )}
+          </div>
+        )}
+      <dialog
+        ref={finishDialog}
+        className="confirm-dialog"
+        aria-labelledby="chat-finish-title"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (!busy) setFinishStep(null);
+        }}
+      >
+        {finishStep === "confirm" && (
+          <>
+            <h2 id="chat-finish-title">O serviço foi concluído?</h2>
+            <p>
+              Confirme após a entrega. Em seguida, avalie{" "}
+              {role === "cliente" ? "o motorista" : "o cliente"} para registrar
+              sua confirmação.
+            </p>
+            <div className="confirm-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setFinishStep(null)}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setFinishStep("rating")}
+              >
+                Sim, avaliar
+              </button>
+            </div>
+          </>
+        )}
+        {finishStep === "rating" && (
+          <form onSubmit={finish}>
+            <h2 id="chat-finish-title">
+              Avalie {role === "cliente" ? "o motorista" : "o cliente"}
+            </h2>
+            <fieldset className="chat-rating-stars" disabled={busy}>
+              <legend>Selecione de 1 a 5 estrelas</legend>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name="serviceScore"
+                    value={value}
+                    checked={score === value}
+                    onChange={() => setScore(value)}
+                    required
+                    aria-label={value === 1 ? "1 estrela" : `${value} estrelas`}
+                  />
+                  <Star
+                    size={27}
+                    aria-hidden="true"
+                    fill={value <= score ? "currentColor" : "none"}
+                  />
+                </label>
+              ))}
+            </fieldset>
+            {finishError && (
+              <p className="alert" role="alert">
+                {finishError}
+              </p>
+            )}
+            <div className="confirm-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => setFinishStep("confirm")}
+              >
+                Voltar
+              </button>
+              <button className="primary" disabled={busy || !score}>
+                {busy ? "Enviando…" : "Enviar avaliação"}
+              </button>
+            </div>
+          </form>
+        )}
+      </dialog>
       {error && !review && (
         <p className="alert real-chat-error" role="alert">
           {error}
@@ -558,6 +755,7 @@ function ConversationThread({
         role={role}
         offers={proposal?.offers ?? []}
         freightStatus={data?.status}
+        onRead={onRead}
         onReview={
           mayDecide
             ? (offer) => {

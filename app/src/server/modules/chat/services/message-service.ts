@@ -66,6 +66,37 @@ export async function verificarAcessoConversa(
   return conversa;
 }
 
+export async function marcarMensagensLidas(
+  conversaId: string,
+  usuarioId: string,
+  notificationIds: unknown,
+) {
+  await verificarAcessoConversa(conversaId, usuarioId);
+  if (
+    !Array.isArray(notificationIds) ||
+    !notificationIds.length ||
+    notificationIds.length > 100 ||
+    !notificationIds.every(
+      (id) => typeof id === "string" && id.length > 0 && id.length <= 100,
+    )
+  )
+    throw new ChatError(
+      "INVALID_NOTIFICATIONS",
+      "Notificações inválidas.",
+      422,
+    );
+  await prisma.notificacao.updateMany({
+    where: {
+      id: { in: notificationIds },
+      conversaId,
+      destinatarioId: usuarioId,
+      evento: "NOVA_MENSAGEM",
+      lida: false,
+    },
+    data: { lida: true },
+  });
+}
+
 const LIMITE_MENSAGENS = 20;
 
 export async function listarMensagens(
@@ -103,6 +134,18 @@ export async function listarMensagens(
     }
   }
 
+  const notificacoes = cursor
+    ? []
+    : await prisma.notificacao.findMany({
+        where: {
+          conversaId,
+          destinatarioId: usuarioId,
+          evento: "NOVA_MENSAGEM",
+          lida: false,
+        },
+        take: 100,
+        select: { id: true },
+      });
   const mensagens = await prisma.mensagem.findMany({
     where: {
       conversaId,
@@ -140,6 +183,7 @@ export async function listarMensagens(
   const pagina = mensagens.slice(0, LIMITE_MENSAGENS);
 
   return {
+    readableNotificationIds: notificacoes.map((notificacao) => notificacao.id),
     items: pagina.map((mensagem) => ({
       id: mensagem.id,
       freightId: mensagem.conversa.proposta.freteId,
