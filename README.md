@@ -17,8 +17,8 @@ npm run dev
 ```
 
 Para autenticação Google local, configure no `app/.env.local` as variáveis
-`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Gere um segredo com
+`DB_URL`, `APP_BETTER_AUTH_SECRET`, `APP_URL`,
+`APP_GOOGLE_CLIENT_ID` e `APP_GOOGLE_CLIENT_SECRET`. Gere um segredo com
 `openssl rand -base64 32` e registre no cliente OAuth do Google a URI
 `http://localhost:3100/api/auth/callback/google`. Não compartilhe nem versione
 segredos. O `database/env.example` contém os nomes das variáveis; preserve

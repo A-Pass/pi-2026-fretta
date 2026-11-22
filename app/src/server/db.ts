@@ -5,9 +5,9 @@ const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
 };
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DB_URL;
 if (!connectionString) {
-  throw new Error("DATABASE_URL is required to initialize Prisma.");
+  throw new Error("DB_URL is required to initialize Prisma.");
 }
 
 const adapter = new PrismaPg({

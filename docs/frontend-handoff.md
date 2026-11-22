@@ -10,7 +10,7 @@ O perfil público contém somente campos permitidos. Média e contagem vêm dos 
 
 ## Autenticação Google (17/11/2026)
 
-Login OAuth Google e sessão de servidor estão implementados com Better Auth e Prisma/PostgreSQL. O callback autorizado é `${BETTER_AUTH_URL}/api/auth/callback/google`; a tela de retorno confirma a identidade da sessão e permite encerrá-la. Configure as variáveis indicadas no [README](../README.md) e garanta que as tabelas Better Auth previstas em `database/schema.prisma` já existam no banco. Nenhuma migração foi aplicada nesta alteração.
+Login OAuth Google e sessão de servidor estão implementados com Better Auth e Prisma/PostgreSQL. O callback autorizado é `${APP_URL}/api/auth/callback/google`; a tela de retorno confirma a identidade da sessão e permite encerrá-la. Configure as variáveis indicadas no [README](../README.md) e garanta que as tabelas Better Auth previstas em `database/schema.prisma` já existam no banco. Nenhuma migração foi aplicada nesta alteração.
 
 Após o login, os fluxos de frete permanecem na demonstração local e não são associados à identidade Google. A sessão não concede acesso a dados privados nem isola a demonstração; cadastro complementar, autorização e endpoints de domínio seguem pendentes. Não use dados reais até esses fluxos serem integrados.
 

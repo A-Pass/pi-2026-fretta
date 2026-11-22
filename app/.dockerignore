@@ -2,3 +2,5 @@ Dockfile
 .env*
 node_modules
 *.md
+.next
+.windsurf

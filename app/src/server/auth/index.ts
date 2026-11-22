@@ -9,16 +9,16 @@ if (configurationError) {
 }
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL!,
-  secret: process.env.BETTER_AUTH_SECRET!,
-  trustedOrigins: [process.env.BETTER_AUTH_URL!],
+  baseURL: process.env.APP_URL!,
+  secret: process.env.APP_BETTER_AUTH_SECRET!,
+  trustedOrigins: [process.env.APP_URL!],
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.APP_GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.APP_GOOGLE_CLIENT_SECRET!,
     },
   },
   session: {

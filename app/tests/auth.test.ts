@@ -14,14 +14,14 @@ test("cadastro concluído ou conta legada não volta para a conclusão", () => {
 });
 
 test("Google OAuth exige banco, segredo forte e credenciais do provedor", () => {
-  assert.match(getAuthConfigurationError({}) ?? "", /DATABASE_URL/);
+  assert.match(getAuthConfigurationError({}) ?? "", /DB_URL/);
 
   const configuration = {
-    DATABASE_URL: "postgresql://localhost/fretta",
-    BETTER_AUTH_SECRET: "short",
-    BETTER_AUTH_URL: "http://localhost:3000",
-    GOOGLE_CLIENT_ID: "client-id",
-    GOOGLE_CLIENT_SECRET: "client-secret",
+    DB_URL: "postgresql://localhost/fretta",
+    APP_BETTER_AUTH_SECRET: "short",
+    APP_URL: "http://localhost:3000",
+    APP_GOOGLE_CLIENT_ID: "client-id",
+    APP_GOOGLE_CLIENT_SECRET: "client-secret",
   };
   assert.match(
     getAuthConfigurationError(configuration) ?? "",
@@ -30,7 +30,7 @@ test("Google OAuth exige banco, segredo forte e credenciais do provedor", () => 
   assert.equal(
     getAuthConfigurationError({
       ...configuration,
-      BETTER_AUTH_SECRET: "x".repeat(32),
+      APP_BETTER_AUTH_SECRET: "x".repeat(32),
     }),
     null,
   );
@@ -38,11 +38,11 @@ test("Google OAuth exige banco, segredo forte e credenciais do provedor", () => 
 
 test("endpoint OAuth informa configuração ausente sem iniciar sessão demonstrativa", async () => {
   const names = [
-    "DATABASE_URL",
-    "BETTER_AUTH_SECRET",
-    "BETTER_AUTH_URL",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
+    "DB_URL",
+    "APP_BETTER_AUTH_SECRET",
+    "APP_URL",
+    "APP_GOOGLE_CLIENT_ID",
+    "APP_GOOGLE_CLIENT_SECRET",
   ];
   const previous = new Map(names.map((name) => [name, process.env[name]]));
   for (const name of names) delete process.env[name];
@@ -67,12 +67,12 @@ test("Docker Compose encaminha as credenciais Google para o servidor", () => {
     "utf8",
   );
 
-  assert.match(compose, /DATABASE_URL:\s+\$\{DB_URL\}/);
+  assert.match(compose, /DB_URL:\s+\$\{DB_URL\}/);
   assert.match(compose, /condition:\s+service_healthy/);
-  assert.match(compose, /BETTER_AUTH_URL:\s+\$\{APP_URL:-\}/);
-  assert.match(compose, /BETTER_AUTH_SECRET:\s+\$\{APP_BETTER_AUTH_SECRET:-\}/);
-  assert.match(compose, /GOOGLE_CLIENT_ID:\s+\$\{APP_GOOGLE_CLIENT_ID:-\}/);
-  assert.match(compose, /GOOGLE_CLIENT_SECRET:\s+\$\{APP_GOOGLE_CLIENT_SECRET:-\}/);
+  assert.match(compose, /APP_URL:\s+\$\{APP_URL:-\}/);
+  assert.match(compose, /APP_BETTER_AUTH_SECRET:\s+\$\{APP_BETTER_AUTH_SECRET:-\}/);
+  assert.match(compose, /APP_GOOGLE_CLIENT_ID:\s+\$\{APP_GOOGLE_CLIENT_ID:-\}/);
+  assert.match(compose, /APP_GOOGLE_CLIENT_SECRET:\s+\$\{APP_GOOGLE_CLIENT_SECRET:-\}/);
 });
 
 test("migrações do Prisma são aplicadas antes de iniciar e incluem verification", () => {

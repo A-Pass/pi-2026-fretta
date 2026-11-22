@@ -35,4 +35,9 @@ CMD ["npm", "run", "dev"]
 # Estágio de produção (enxuto, apenas dependências de produção)
 FROM base AS production
 ENV NODE_ENV=production
+# A coleta de rotas importa auth e Prisma; valores descartáveis existem só durante o build.
+RUN --mount=type=secret,id=dot_env,uid=1000 \
+    set -a && . /run/secrets/dot_env && set +a && \
+    npm run build
+
 CMD ["npm", "start"]

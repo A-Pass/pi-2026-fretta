@@ -3,9 +3,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const ADMIN_COOKIE = "fretta_admin";
 
 function secret() {
-  const configured = process.env.FRETTA_ADMIN_SECRET || process.env.BETTER_AUTH_SECRET;
+  const configured = process.env.FRETTA_ADMIN_SECRET || process.env.APP_BETTER_AUTH_SECRET;
   if (!configured)
-    throw new Error("FRETTA_ADMIN_SECRET or BETTER_AUTH_SECRET is required.");
+    throw new Error("FRETTA_ADMIN_SECRET or APP_BETTER_AUTH_SECRET is required.");
   return configured;
 }
 
@@ -15,7 +15,7 @@ export function adminCredentialsConfigured(
   return Boolean(
     env.FRETTA_ADMIN_USERNAME &&
       env.FRETTA_ADMIN_PASSWORD &&
-      (env.FRETTA_ADMIN_SECRET || env.BETTER_AUTH_SECRET),
+      (env.FRETTA_ADMIN_SECRET || env.APP_BETTER_AUTH_SECRET),
   );
 }
 

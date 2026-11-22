@@ -2,7 +2,7 @@
 
 Base /api/v1, JSON, IDs strings, dinheiro em centavos inteiros, instantes ISO 8601 com fuso. Listas paginadas: {items,nextCursor}. Erros {code,message}; 401 sem sessão, 403 sem permissão, 404 indisponível, 409 conflito, 422 inválido. Cookie HttpOnly de sessão. Tipos de demonstração em app/src/contracts; expandir com schemas e DTOs privados/públicos na integração.
 
-Autenticação Google é servida separadamente pelo Better Auth em `/api/auth/*`, com sessão persistida no PostgreSQL e cookie HttpOnly. O callback do Google é `${BETTER_AUTH_URL}/api/auth/callback/google`. Isso não implementa os endpoints de domínio `/api/v1` nem conecta o Store demonstrativo à conta autenticada.
+Autenticação Google é servida separadamente pelo Better Auth em `/api/auth/*`, com sessão persistida no PostgreSQL e cookie HttpOnly. O callback do Google é `${APP_URL}/api/auth/callback/google`. Isso não implementa os endpoints de domínio `/api/v1` nem conecta o Store demonstrativo à conta autenticada.
 
 | Operação                                                | Resultado                                                                                                 |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
