@@ -55,8 +55,7 @@ jobs:
             printf 'NODE_ENV="production"\n'
             printf 'APP_HOST="%s"\n' "${APP_HOST//\$/\$\$}"
             printf 'APP_PORT="%s"\n' "${APP_PORT//\$/\$\$}"
-            printf 'APP_URL="https://%s:%s"\n' "${APP_HOST//\$/\$\$}" "${APP_PORT//\$/\$\$}"
-            printf 'APP_URL="https://%s:%s"\n' "${APP_HOST//\$/\$\$}" "${APP_PORT//\$/\$\$}"
+            printf 'APP_URL="https://%s"\n' "${APP_HOST//\$/\$\$}"
             printf 'APP_BETTER_AUTH_SECRET="%s"\n' "${APP_BETTER_AUTH_SECRET//\$/\$\$}"
             printf 'APP_GOOGLE_CLIENT_ID="%s"\n' "${APP_GOOGLE_CLIENT_ID//\$/\$\$}"
             printf 'APP_GOOGLE_CLIENT_SECRET="%s"\n' "${APP_GOOGLE_CLIENT_SECRET//\$/\$\$}"

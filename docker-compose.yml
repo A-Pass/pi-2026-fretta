@@ -21,8 +21,8 @@ services:
         mode: 0400
     labels:
       - traefik.enable=true
-      - traefik.http.routers.agendadepae-app.entrypoints=websecure
       - traefik.http.routers.fretta-app.rule=Host(`${APP_HOST}`)
+      - traefik.http.routers.agendadepae-app.entrypoints=websecure
       - traefik.http.routers.fretta-app.tls.certresolver=letsencrypt
       - traefik.http.routers.fretta-app.tls=true
       - traefik.http.services.fretta-app.loadbalancer.server.port=${APP_PORT}
