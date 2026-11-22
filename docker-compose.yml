@@ -11,6 +11,7 @@ services:
     container_name: fretta-app
     labels:
       - traefik.enable=true
+      - traefik.docker.network=fretta-network
       - 'traefik.http.routers.fretta-app.rule=Host(`${APP_HOST}`)'
       - traefik.http.routers.fretta-app.tls=true
       - traefik.http.services.fretta-app.loadbalancer.server.port=${APP_PORT}
