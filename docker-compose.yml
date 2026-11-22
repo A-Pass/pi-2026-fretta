@@ -15,6 +15,8 @@ services:
       - "127.0.0.1:${APP_PORT}:${APP_PORT}"
     secrets:
       - source: dot_env
+        uid: "65532"
+        gid: "65532"
         target: /run/secrets/dot_env
         mode: 0400
     labels:
