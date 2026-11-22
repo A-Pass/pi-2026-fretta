@@ -54,6 +54,8 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           {
+            printf 'APP_NODE_ENV="production"\n'
+
             printf 'APP_HOST="%s"\n' "${APP_HOST//\$/\$\$}"
 
             printf 'APP_PORT="%s"\n' "${APP_PORT//\$/\$\$}"
