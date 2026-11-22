@@ -107,8 +107,8 @@ jobs:
             exit 1
           fi
 
-          # Remove tanto o código fonte quanto o .env da RAM, mesmo se o deploy falhar
-          ssh deploy-server "rm -rf -- '$REMOTE_PATH' '$APP_MEM_PATH'" || true
+          # Remove o código fonte mesmo se o deploy falhar
+          ssh deploy-server "rm -rf -- '$REMOTE_PATH'" || true
 
           # Encerra o ssh-agent na memória do runner
           ssh-agent -k || true
