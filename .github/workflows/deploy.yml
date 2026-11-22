@@ -96,7 +96,7 @@ jobs:
           # Sobe os contêineres lendo o .env diretamente da RAM
           ssh deploy-server "
             cd '$REMOTE_PATH' &&
-            docker compose --env-file '$APP_MEM_PATH/$APP_ENV_MEM_FILE' up -d --build --remove-orphans
+            docker compose --env-file '$APP_MEM_PATH/$APP_ENV_MEM_FILE' up -d --build --force-recreate --remove-orphans
           "
 
       - name: Limpar arquivos temporários na VPS e encerrar SSH Agent
