@@ -33,8 +33,8 @@ ENV NODE_ENV=development
 EXPOSE 9229
 CMD ["npm", "run", "dev"]
 
-# Estágio de produção (enxuto, apenas dependências de produção)
-FROM base AS production
+# Gera o servidor standalone e mantém o Prisma CLI disponível para as migrações.
+FROM base AS production-build
 ENV NODE_ENV=production
 ENV ENV_FILE=/run/secrets/dot_env
 # A coleta de rotas importa auth e Prisma; valores descartáveis existem só durante o build.
@@ -45,4 +45,13 @@ RUN --mount=type=secret,id=dot_env,uid=1000 \
     cp -R public .next/standalone/ && \
     cp -R .next/static .next/standalone/.next/
 
-CMD ["node", "scripts/start.mjs"]
+FROM gcr.io/distroless/nodejs22-debian13:nonroot AS production
+WORKDIR /app
+ARG APP_PORT=3000
+ENV NODE_ENV=production
+ENV ENV_FILE=/run/secrets/dot_env
+ENV PORT=$APP_PORT
+EXPOSE $APP_PORT
+COPY --from=production-build --chown=1000:1000 /app/ /app/
+USER 1000:1000
+CMD ["scripts/start.mjs"]
