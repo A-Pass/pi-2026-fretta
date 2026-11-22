@@ -10,6 +10,12 @@ if (process.env.ENV_FILE) {
   loadEnvFile(process.env.ENV_FILE);
 }
 
+if (process.getuid() === 0) {
+  process.setgroups([]);
+  process.setgid(65532);
+  process.setuid(65532);
+}
+
 function runNodeScript(scriptPath, args) {
   const child = spawn(
     process.execPath,

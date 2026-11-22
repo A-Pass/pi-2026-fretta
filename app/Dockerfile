@@ -52,6 +52,7 @@ ENV NODE_ENV=production
 ENV ENV_FILE=/run/secrets/dot_env
 ENV PORT=$APP_PORT
 EXPOSE $APP_PORT
-COPY --from=production-build --chown=1000:1000 /app/ /app/
-USER 1000:1000
+COPY --from=production-build --chown=65532:65532 /app/ /app/
+# File-backed Compose secrets retain host ownership; the launcher drops privileges after loading them.
+USER 0:0
 CMD ["scripts/start.mjs"]
