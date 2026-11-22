@@ -9,6 +9,8 @@ services:
         - dot_env
     image: fretta-app:prod
     container_name: fretta-app
+    ports:
+      - "127.0.0.1:${APP_PORT}:${APP_PORT}"
     labels:
       - traefik.enable=true
       - traefik.docker.network=fretta-network
