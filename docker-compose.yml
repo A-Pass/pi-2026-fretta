@@ -9,21 +9,20 @@ services:
         - dot_env
     image: fretta-app:prod
     container_name: fretta-app
+    environment:
+      ENV_FILE: /run/secrets/dot_env
     ports:
       - "127.0.0.1:${APP_PORT}:${APP_PORT}"
+    secrets:
+      - source: dot_env
+        target: /run/secrets/dot_env
+        mode: 0400
     labels:
       - traefik.enable=true
       - traefik.docker.network=fretta-network
       - 'traefik.http.routers.fretta-app.rule=Host(`${APP_HOST}`)'
       - traefik.http.routers.fretta-app.tls=true
       - traefik.http.services.fretta-app.loadbalancer.server.port=${APP_PORT}
-    environment:
-      NODE_ENV: ${NODE_ENV}
-      DB_URL: ${DB_URL}
-      APP_URL: ${APP_URL}
-      APP_BETTER_AUTH_SECRET: ${APP_BETTER_AUTH_SECRET}
-      APP_GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID}
-      APP_GOOGLE_CLIENT_SECRET: ${APP_GOOGLE_CLIENT_SECRET}
     depends_on:
       database:
         condition: service_healthy

@@ -24,6 +24,7 @@ RUN npm ci
 COPY --chown=node:node . .
 
 ARG APP_PORT=3000
+ENV PORT=$APP_PORT
 EXPOSE $APP_PORT
 
 # Estágio de desenvolvimento (com devDependencies, watch e debug)
@@ -35,9 +36,13 @@ CMD ["npm", "run", "dev"]
 # Estágio de produção (enxuto, apenas dependências de produção)
 FROM base AS production
 ENV NODE_ENV=production
+ENV ENV_FILE=/run/secrets/dot_env
 # A coleta de rotas importa auth e Prisma; valores descartáveis existem só durante o build.
 RUN --mount=type=secret,id=dot_env,uid=1000 \
     set -a && . /run/secrets/dot_env && set +a && \
-    npm run build
+    npm run build && \
+    mkdir -p .next/standalone/.next && \
+    cp -R public .next/standalone/ && \
+    cp -R .next/static .next/standalone/.next/
 
-CMD ["npm", "start"]
+CMD ["node", "scripts/start.mjs"]
