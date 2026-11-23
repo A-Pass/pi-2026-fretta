@@ -3,6 +3,7 @@ node_modules/
 out/
 .env*
 !.env.example
+!.env-sample
 *.tsbuildinfo
 
 
@@ -10,17 +11,5 @@ PI 2026.2 - Fretta
 
 # Docker
 _storage_
-# Prisma Client gerado automaticamente
-/app/src/generated/prisma/
-
-# Arquivo auxiliar do Better Auth
-/app/prisma/auth-generated.prisma
-
-# Documentos privados enviados pelos usuarios
-/app/storage/private/
-
-# Imagens enviadas pelos usuarios
-/app/storage/uploads/
-
-# Cópia privada da apresentação
-/backup-fretta/
+dist/
+.env

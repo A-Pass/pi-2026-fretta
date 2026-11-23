@@ -8,12 +8,12 @@ import { NextRequest } from "next/server";
 import { prisma } from "../../../db/prisma";
 import { GET } from "../../../../app/api/v1/driver/registration/documents/[id]/route";
 test("documentos privados: dono e admin autorizados, terceiros e anônimos bloqueados", async () => {
-  const url = new URL(process.env.DATABASE_URL!);
+  const url = new URL(process.env.DB_URL!);
   assert.equal(url.pathname, "/fretta_test");
   assert.ok(["localhost", "127.0.0.1"].includes(url.hostname));
   const auth = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, { provider: "postgresql" }),
     emailAndPassword: { enabled: true },
   });
@@ -39,18 +39,25 @@ test("documentos privados: dono e admin autorizados, terceiros e anônimos bloqu
           .join("; "),
       });
     }
-    await prisma.motorista.create({ data: { userId: users[0].id } });
+    await prisma.motorista.create({
+      data: {
+        user_id: users[0].id,
+        codigo_publico: randomUUID(),
+        atualizado_em: new Date(),
+      },
+    });
     await prisma.user.update({
       where: { id: users[2].id },
       data: { papel: "ADMIN" },
     });
-    const doc = await prisma.arquivoPrivado.create({
+    const doc = await prisma.arquivo_privado.create({
       data: {
-        motoristaId: users[0].id,
+        id: randomUUID(),
+        motorista_id: users[0].id,
         tipo: "CNH",
-        chaveArmazenamento: key,
-        mimeType: "image/jpeg",
-        tamanhoBytes: 4,
+        chave_armazenamento: key,
+        mime_type: "image/jpeg",
+        tamanho_bytes: 4,
       },
     });
     await mkdir("storage/private", { recursive: true });

@@ -152,6 +152,8 @@ export function RealPortal() {
   const [welcomeRole, setWelcomeRole] = useState<Role>("cliente");
   const role = route.role,
     tab = route.tab;
+  const hasSelectedRole =
+    role === "empresa" ? !!viewer?.managesCompany : !!viewer?.roles[role];
   const driverHome =
     role === "motorista" &&
     tab === "inicio" &&
@@ -343,15 +345,12 @@ export function RealPortal() {
     return (
       <LoginView
         role={role}
-        real
-        busy={busy}
-        error={error}
         onBack={() => {
           setWelcomeRole(role);
           setError("");
           router.push("/");
         }}
-        onContinue={async () => {
+        onGoogleSignIn={async () => {
           setBusy(true);
           setError("");
           try {
@@ -370,6 +369,8 @@ export function RealPortal() {
             setBusy(false);
           }
         }}
+        googleSignInPending={busy}
+        googleSignInError={error}
       />
     );
   if (viewer && viewer.id !== session.user.id)
@@ -398,7 +399,7 @@ export function RealPortal() {
   }
   if (editingRegistration && viewer?.roles.motorista) {
     const store: Store = {
-      profile: { name: viewer.name, photo: viewer.image || "" },
+      profile: { id: viewer.id, name: viewer.name, photo: viewer.image || "" },
       vehicles,
       freights: [],
       proposals: [],
@@ -406,7 +407,6 @@ export function RealPortal() {
     };
     return (
       <DriverOnboardingView
-        mode="real"
         store={store}
         onClient={() => {
           setEditingRegistration(false);
@@ -694,7 +694,7 @@ export function RealPortal() {
             />
           ) : tab === "chat" &&
             viewer &&
-            (viewer.roles[role] ||
+            (hasSelectedRole ||
               (role === "motorista" && viewer.managesCompany)) ? (
             <RealConversations
               key={viewer.id}
@@ -709,7 +709,7 @@ export function RealPortal() {
             />
           ) : (tab === "fretes" || tab === "inicio") &&
             viewer &&
-            (viewer.roles[role] ||
+            (hasSelectedRole ||
               (role === "motorista" &&
                 viewer.managesCompany &&
                 !!route.selected)) &&

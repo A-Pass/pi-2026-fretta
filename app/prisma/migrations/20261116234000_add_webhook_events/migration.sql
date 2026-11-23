@@ -1,18 +1,18 @@
 -- CreateTable
-CREATE TABLE "EventoWebhook" (
+CREATE TABLE "evento_webhook" (
     "id" TEXT NOT NULL,
     "provedor" TEXT NOT NULL,
-    "eventoId" TEXT NOT NULL,
+    "evento_id" TEXT NOT NULL,
     "tipo" TEXT NOT NULL,
-    "processadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "processado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "EventoWebhook_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "evento_webhook_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "EventoWebhook_provedor_eventoId_key"
-ON "EventoWebhook"("provedor", "eventoId");
+CREATE UNIQUE INDEX "evento_webhook_provedor_evento_id_key"
+ON "evento_webhook"("provedor", "evento_id");
 
 -- CreateIndex
-CREATE INDEX "EventoWebhook_processadoEm_idx"
-ON "EventoWebhook"("processadoEm");
+CREATE INDEX "evento_webhook_processado_em_idx"
+ON "evento_webhook"("processado_em");

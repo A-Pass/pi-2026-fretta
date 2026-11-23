@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { correctionItems } from "@/contracts/driver-corrections";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/server/generated/prisma/client";
 import { prisma } from "../../../db/prisma";
 import { podeAlterarStatusCadastro } from "./registration-status";
 import type { CadastroMotoristaInput } from "../validators/driver-registration";
@@ -10,14 +11,14 @@ type DadosCadastroCompleto = CadastroMotoristaInput & {
 };
 
 export async function salvarCadastroMotorista(
-  motoristaId: string,
+  motorista_id: string,
   dados: DadosCadastroCompleto,
   correctionVersion?: Date,
 ) {
   return prisma.$transaction(
     async (tx) => {
-      const cadastroExistente = await tx.cadastroMotorista.findUnique({
-        where: { motoristaId },
+      const cadastroExistente = await tx.cadastro_motorista.findUnique({
+        where: { motorista_id },
       });
 
       if (
@@ -33,68 +34,71 @@ export async function salvarCadastroMotorista(
 
       if (
         correctionVersion &&
-        cadastroExistente?.atualizadoEm.getTime() !==
+        cadastroExistente?.atualizado_em.getTime() !==
           correctionVersion.getTime()
       )
         throw new Error("REGISTRATION_NOT_EDITABLE");
-      if (cadastroExistente?.itensAjuste.length && !correctionVersion)
+      if (cadastroExistente?.itens_ajuste.length && !correctionVersion)
         throw new Error("REGISTRATION_NOT_EDITABLE");
 
       await tx.pessoa.upsert({
-        where: { userId: motoristaId },
+        where: { user_id: motorista_id },
         update: {
-          nomeCompleto: dados.nomeCompleto.trim(),
+          nome_completo: dados.nome_completo.trim(),
           cpf: dados.cpf.replace(/\D/g, ""),
         },
         create: {
-          userId: motoristaId,
-          nomeCompleto: dados.nomeCompleto.trim(),
+          user_id: motorista_id,
+          nome_completo: dados.nome_completo.trim(),
           cpf: dados.cpf.replace(/\D/g, ""),
+          atualizado_em: new Date(),
         },
       });
 
       const dadosCadastro = {
-        tipoPessoa: dados.tipoPessoa,
+        id: cadastroExistente?.id ?? randomUUID(),
+        tipo_pessoa: dados.tipoPessoa,
         cnpj:
           dados.tipoPessoa === "PJ"
             ? (dados.cnpj?.replace(/\D/g, "") ?? null)
             : null,
-        razaoSocial:
+        razao_social:
           dados.tipoPessoa === "PJ"
-            ? (dados.razaoSocial?.trim() ?? null)
+            ? (dados.razao_social?.trim() ?? null)
             : null,
-        cnhNumero: dados.cnhNumero.trim(),
-        cnhCategoria: dados.cnhCategoria.trim(),
-        cnhValidade: new Date(`${dados.cnhValidade}T12:00:00Z`),
-        fotoPerfilId: dados.fotoPerfilId,
-        documentoCnhId: dados.documentoCnhId,
-        veiculoId: dados.veiculoId,
+        cnh_numero: dados.cnh_numero.trim(),
+        cnh_categoria: dados.cnh_categoria.trim(),
+        cnh_validade: new Date(`${dados.cnh_validade}T12:00:00Z`),
+        foto_perfil_id: dados.fotoPerfilId,
+        documento_cnh_id: dados.documentoCnhId,
+        veiculo_id: dados.veiculoId,
+        atualizado_em: new Date(),
         status: "EM_ANALISE" as const,
-        motivoAjuste: null,
-        itensAjuste: [],
-        itensConferidos:
+        motivo_ajuste: null,
+        itens_ajuste: [],
+        itens_conferidos:
           correctionVersion && cadastroExistente
             ? correctionItems
                 .filter(
-                  (item) => !cadastroExistente.itensAjuste.includes(item.id),
+                  (item) => !cadastroExistente.itens_ajuste.includes(item.id),
                 )
                 .map((item) => item.id)
             : [],
-        analisadoEm: null,
-        enviadoEm: new Date(),
+        analisado_em: null,
+        enviado_em: new Date(),
       };
 
       if (cadastroExistente) {
-        return tx.cadastroMotorista.update({
-          where: { motoristaId },
+        return tx.cadastro_motorista.update({
+          where: { motorista_id },
           data: dadosCadastro,
         });
       }
 
-      return tx.cadastroMotorista.create({
+      return tx.cadastro_motorista.create({
         data: {
           ...dadosCadastro,
-          motoristaId,
+          motorista_id,
         },
       });
     },

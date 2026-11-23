@@ -1,4 +1,9 @@
-import type { Address, FreightRequestDraft, Schedule } from "@/contracts";
+import type {
+  Address,
+  FreightRequestDraft,
+  MapPoint,
+  Schedule,
+} from "@/contracts";
 export function emptyAddress(): Address {
   return {
     label: "",
@@ -7,8 +12,150 @@ export function emptyAddress(): Address {
     neighborhood: "",
     street: "",
     number: "",
+    postalCode: "",
     complement: "",
     point: null,
+  };
+}
+
+export type ReverseGeocodeAddress = Record<string, string | undefined>;
+
+export type PostalCodeAddress = {
+  cep?: string;
+  logradouro?: string;
+  complemento?: string;
+  bairro?: string;
+  localidade?: string;
+  uf?: string;
+  erro?: boolean;
+};
+
+export function postalCodeMapPoint(data: {
+  location?: {
+    coordinates?: {
+      latitude?: string | number;
+      longitude?: string | number;
+    };
+  };
+}): MapPoint | null {
+  const rawLatitude = data.location?.coordinates?.latitude;
+  const rawLongitude = data.location?.coordinates?.longitude;
+  if (
+    rawLatitude === undefined ||
+    rawLongitude === undefined ||
+    (typeof rawLatitude === "string" && !rawLatitude.trim()) ||
+    (typeof rawLongitude === "string" && !rawLongitude.trim())
+  )
+    return null;
+  const latitude = Number(rawLatitude);
+  const longitude = Number(rawLongitude);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  )
+    return null;
+  return { lat: latitude, lng: longitude };
+}
+
+export function formatPostalCode(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  return digits.length > 5
+    ? `${digits.slice(0, 5)}-${digits.slice(5)}`
+    : digits;
+}
+
+export function fillAddressFromPostalCode(
+  address: Address,
+  postal: PostalCodeAddress,
+): Address {
+  const state = postal.uf?.trim().toUpperCase() || "";
+  return {
+    ...address,
+    city: postal.localidade?.trim() || address.city,
+    state: /^[A-Z]{2}$/.test(state) ? state : address.state,
+    neighborhood: postal.bairro?.trim() || address.neighborhood,
+    street: postal.logradouro?.trim() || address.street,
+    postalCode: postal.cep?.trim() || address.postalCode,
+  };
+}
+
+const brazilStates: Record<string, string> = {
+  acre: "AC",
+  alagoas: "AL",
+  amapa: "AP",
+  amazonas: "AM",
+  bahia: "BA",
+  ceara: "CE",
+  "distrito federal": "DF",
+  "espirito santo": "ES",
+  goias: "GO",
+  maranhao: "MA",
+  "mato grosso": "MT",
+  "mato grosso do sul": "MS",
+  "minas gerais": "MG",
+  para: "PA",
+  paraiba: "PB",
+  parana: "PR",
+  pernambuco: "PE",
+  piaui: "PI",
+  "rio de janeiro": "RJ",
+  "rio grande do norte": "RN",
+  "rio grande do sul": "RS",
+  rondonia: "RO",
+  roraima: "RR",
+  "santa catarina": "SC",
+  "sao paulo": "SP",
+  sergipe: "SE",
+  tocantins: "TO",
+};
+
+export function fillAddressFromReverseGeocode(
+  address: Address,
+  geocoded: ReverseGeocodeAddress,
+): Address {
+  const stateCode = geocoded.state_code
+    ?.trim()
+    .toUpperCase()
+    .replace(/^BR-/, "");
+  const normalizedState =
+    (stateCode && /^[A-Z]{2}$/.test(stateCode) ? stateCode : "") ||
+    brazilStates[
+      geocoded.state
+        ?.normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase() || ""
+    ] ||
+    "";
+  const city =
+    geocoded.city ||
+    geocoded.town ||
+    geocoded.village ||
+    geocoded.municipality ||
+    "";
+  const neighborhood =
+    geocoded.suburb ||
+    geocoded.neighbourhood ||
+    geocoded.quarter ||
+    geocoded.city_district ||
+    "";
+  const street =
+    geocoded.road ||
+    geocoded.pedestrian ||
+    geocoded.residential ||
+    geocoded.street ||
+    geocoded.path ||
+    "";
+
+  return {
+    ...address,
+    city: city.trim() || address.city,
+    state: normalizedState || address.state,
+    neighborhood: neighborhood.trim() || address.neighborhood,
+    street: street.trim() || address.street,
+    number: geocoded.house_number?.trim() || address.number,
+    postalCode: geocoded.postcode?.trim() || address.postalCode || "",
   };
 }
 export function publicRegion(a: Address) {

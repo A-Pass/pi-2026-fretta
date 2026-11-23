@@ -9,9 +9,9 @@ import { criarNotificacao } from "./notification-service";
 
 test("criação segura e transacional de notificações", async () => {
   // Garantir que o teste utilize apenas o banco fretta_test.
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DB_URL;
 
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -27,27 +27,27 @@ test("criação segura e transacional de notificações", async () => {
 
   assert.equal(banco[0]?.banco, "fretta_test");
 
-  const destinatarioId = randomUUID();
+  const destinatario_id = randomUUID();
   const autorId = randomUUID();
 
   try {
     await prisma.user.create({
       data: {
-        id: destinatarioId,
+        id: destinatario_id,
         name: "Destinatário Teste",
-        email: `notificacao-${destinatarioId}@fretta.invalid`,
+        email: `notificacao-${destinatario_id}@fretta.invalid`,
         emailVerified: false,
       },
     });
 
     const dados = {
-      destinatarioId,
-      papelDestinatario: "motorista" as const,
+      destinatario_id,
+      papel_destinatario: "motorista" as const,
       evento: "PROPOSTA_ACEITA",
       titulo: "Proposta aceita",
       corpo: "Sua proposta foi aceita.",
-      freteId: randomUUID(),
-      propostaId: randomUUID(),
+      frete_id: randomUUID(),
+      proposta_id: randomUUID(),
       autorId,
     };
 
@@ -57,17 +57,17 @@ test("criação segura e transacional de notificações", async () => {
     });
 
     assert.ok(criada);
-    assert.equal(criada.destinatarioId, destinatarioId);
+    assert.equal(criada.destinatario_id, destinatario_id);
     assert.equal(criada.evento, "PROPOSTA_ACEITA");
-    assert.equal(criada.freteId, dados.freteId);
-    assert.equal(criada.propostaId, dados.propostaId);
+    assert.equal(criada.frete_id, dados.frete_id);
+    assert.equal(criada.proposta_id, dados.proposta_id);
     assert.equal(criada.lida, false);
 
     // TESTE 2: Não notificar o próprio autor.
     const notificacaoPropria = await prisma.$transaction(async (tx) => {
       return criarNotificacao(tx, {
         ...dados,
-        autorId: destinatarioId,
+        autorId: destinatario_id,
       });
     });
 
@@ -88,7 +88,7 @@ test("criação segura e transacional de notificações", async () => {
 
     const notificacaoRevertida = await prisma.notificacao.findFirst({
       where: {
-        destinatarioId,
+        destinatario_id,
         evento: "EVENTO_COM_FALHA",
       },
     });
@@ -110,7 +110,7 @@ test("criação segura e transacional de notificações", async () => {
 
     // TESTE 5: Confirmar que só uma notificação foi salva.
     const quantidade = await prisma.notificacao.count({
-      where: { destinatarioId },
+      where: { destinatario_id },
     });
 
     assert.equal(quantidade, 1);
@@ -121,11 +121,11 @@ test("criação segura e transacional de notificações", async () => {
     console.log("Validação de dados - OK");
   } finally {
     await prisma.notificacao.deleteMany({
-      where: { destinatarioId },
+      where: { destinatario_id },
     });
 
     await prisma.user.deleteMany({
-      where: { id: destinatarioId },
+      where: { id: destinatario_id },
     });
   }
 });

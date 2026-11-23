@@ -1,33 +1,85 @@
 # FRETTA
 
-Aplicação do IFBA Eunápolis para conectar clientes e motoristas de frete. O modo real roda localmente com Next.js, Better Auth, Prisma e PostgreSQL. O pagamento da apresentação usa Pix simulado.
+Este repositório contém o código e a documentação técnica da aplicação.
 
-## Apresentação local
+Aplicação Next.js + TypeScript do IFBA Eunápolis para clientes e motoristas. Login Google, sessão persistida e estado privado por conta são implementados com Better Auth e PostgreSQL.
 
-Siga o [guia da apresentação](docs/apresentacao-local.md) para configurar o Google, preparar duas contas, demonstrar o Pix e ensaiar da publicação à avaliação. O guia também cobre migrações, backup e restauração do banco e das imagens.
+## Executar
 
-Para uma instalação Docker nova, copie o `.env.example` da raiz para `.env`, preencha os valores locais e execute `docker compose up --build`. O servidor fica em http://localhost:3000 por padrão. A configuração do Google deve usar o mesmo endereço e a mesma porta. Para instalar sem Docker, siga a alternativa no guia.
+Node.js 20.19+ e npm:
+Docker Engine
 
-O modo real usa contas, permissões e registros do banco. O modo demonstrativo separado (`NEXT_PUBLIC_API_MODE=demo`) usa exemplos do navegador. O Pix de teste no modo real depende de `FRETTA_DEMO_PIX=true`. A confirmação de teste libera o acesso no banco e não movimenta dinheiro.
+Executar localmente (precisa de um banco de dados configurado)
+```sh
+cd app
+npm ci
+npm run dev
+```
 
-## Código e testes
+Para autenticação Google local, configure no `app/.env.local` as variáveis
+`DB_URL`, `APP_BETTER_AUTH_SECRET`, `APP_URL`,
+`APP_GOOGLE_CLIENT_ID` e `APP_GOOGLE_CLIENT_SECRET`. Gere um segredo com
+`openssl rand -base64 32` e registre no cliente OAuth do Google a URI
+`http://localhost:3100/api/auth/callback/google`. Não compartilhe nem versione
+segredos. O `database/env.example` contém os nomes das variáveis; preserve
+valores locais já existentes ao configurá-las.
+Para executar via Docker Compose, configure essas variáveis também no `.env` da
+raiz do produto; preserve as configurações de banco já existentes.
 
-- `app/src/frontend` contém telas, componentes e clientes da API.
-- `app/src/app` contém as páginas e rotas HTTP.
-- `app/src/server` contém serviços, permissões e regras de negócio.
-- `app/prisma` contém o esquema oficial e as migrações. O SQL legado em `database` não é usado na instalação atual.
-- `app/storage` contém os arquivos enviados. No Docker, eles ficam em volume separado do PostgreSQL.
+No Google Cloud Console, cadastre `http://localhost:3100` como origem
+JavaScript autorizada e a URI de callback acima como redirecionamento
+autorizado. Em produção, substitua ambas pelas origens HTTPS publicadas.
 
-Na pasta `app`, instale com `npm ci` e use `npm run generate` para gerar o cliente Prisma. Execute `npm test`, `npm run typecheck` e `npm run build`. Para `npm run test:server`, use um banco PostgreSQL local separado chamado `fretta_test`, aplique as migrações e configure a sessão conforme o modelo de ambiente. Os testes do servidor criam e removem registros fictícios.
+### Via Docker
 
-## Escopo da entrega
+Executa a aplicação em um container com debug ativado - <small>executa a aplicação, banco de dados e inicializa banco de dados automaticamente)</small>.
 
-O roteiro cobre publicar e localizar uma solicitação, propor, negociar no chat, contratar, iniciar, concluir e avaliar. No cadastro do motorista, o administrador pode aprovar ou pedir correções específicas. Gateway real, equipes de empresas e perfil público com avaliações estão fora da apresentação local. Google e o carregamento do mapa precisam de internet.
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --rm --build --force-recreate --remove-orphans
+```
 
-## Versão anterior
+Abra http://localhost:3000. Cada conta autenticada utiliza sua própria sessão e estado persistido no PostgreSQL. O OAuth Google redireciona ao Google e recebe a identidade básica. Nenhuma assinatura é cobrada sem integração explícita com um gateway.
 
-A tag `backup/homeclean-before-fretta-2026-10-28` preserva a base anterior. A versão de trabalho fica em `feat/fretta-rebuild`. Para consultar a base anterior em outra pasta:
+Verificações: `npm run typecheck`, `npm test`, `npm run build` dentro de app.
+
+## Estrutura
+
+`app/src/frontend`: componentes, funcionalidades, cliente HTTP e mocks.
+`app/src/contracts`: tipos compartilhados sem dependências do banco.
+`app/src/server`: sessão Better Auth e conexão Prisma; os módulos de domínio continuam pendentes.
+`app/prisma.config.ts`: configuração do Prisma CLI; o cliente é gerado em `app/src/server/generated/prisma` durante a instalação.
+`app/src/app`: páginas, estilos, manifest e entradas HTTP.
+`database/schema.prisma`: modelo de dados e geração do cliente Prisma.
+`docs`: regras, contratos e tarefas do grupo.
+
+O protótipo final não pôde ser aberto como projeto navegável. A interface interpreta a identidade e os fluxos recuperados do histórico do Figma; não promete reprodução exata das telas.
+
+## Versão anterior e retorno
+
+A tag `backup/homeclean-before-fretta-2026-10-28` preserva o commit anterior 0561e8e. A nova base está na branch `feat/fretta-rebuild`. A main permanece preservada.
+
+Para consultar a antiga em outra pasta:
 
 ```sh
 git worktree add ../fretta-versao-anterior backup/homeclean-before-fretta-2026-10-28
 ```
+
+Para executar main: faça commit de seu trabalho e use `git switch main`. Não use reset destrutivo.
+
+## Estado do front-end
+
+O front-end possui veículos, perfil, negociação, chat, notificações, acordo e avaliação. As telas usam segmentos do App Router (`/motorista/veiculos`, `/cliente/fretes/{id}` e `/cliente/chat/{id}`); links antigos com parâmetros de consulta são redirecionados para as rotas equivalentes. Voltar/Avançar e recarregar preservam o contexto da conta autenticada.
+
+No primeiro uso do perfil motorista, um cadastro guiado solicita dados, foto de perfil, CNH e veículo. O envio fica em análise. Dados sensíveis devem ser tratados por uploads privados autorizados.
+
+Confira a entrega e as pendências em [docs/frontend-checklist.md](docs/frontend-checklist.md).
+
+## Limites conhecidos
+
+Autenticação Google e sessão persistida via Better Auth/PostgreSQL estão implementadas. Os dados da conta são carregados e salvos pela API em tabelas relacionais vinculadas ao usuário, com autorização por sessão; a migração `relational_user_data` transfere os dados legados e remove `app_states`. Cadastro complementar, autorização administrativa completa, uploads privados, chat remoto e pagamentos continuam pendentes nos módulos de domínio.
+
+PWA: manifest e ícones preparados; em produção (`npm run build` e `npm start`) o service worker fornece apenas um aviso offline. APIs, dados privados e mapas não são cacheados. O sistema não funciona integralmente offline. A homologação em Android/iPhone físicos e em HTTPS publicado permanece pendente. Use `http://localhost:3000` em desenvolvimento; outros hosts podem ser bloqueados pela proteção de origem do Next.js.
+
+## Solicitações e endereços
+
+Novo fluxo: Itens e fotos → Retirada → Entrega → Veículo → Quando → Datas/confirmação. A opção A combinar dispensa datas na etapa final. Endereços salvos em Meu perfil → Meus Endereços podem ser reutilizados, editados e excluídos. A caixa Salvar este endereço associa uma cópia privada ao pedido publicado. O mapa Leaflet/OpenStreetMap permite zoom, marcação e consulta pontual de GPS mediante permissão. Não há pesquisa automática de endereço. Consulte docs/domain.md para os limites de privacidade e integração.

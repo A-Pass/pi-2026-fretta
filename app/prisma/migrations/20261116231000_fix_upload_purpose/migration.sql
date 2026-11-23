@@ -1,1 +1,1 @@
-ALTER TABLE "ArquivoUpload" ADD COLUMN IF NOT EXISTS "finalidade" TEXT NOT NULL DEFAULT 'freight';
+ALTER TABLE "arquivo_upload" ADD COLUMN IF NOT EXISTS "finalidade" TEXT NOT NULL DEFAULT 'freight';

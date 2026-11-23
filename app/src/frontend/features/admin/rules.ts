@@ -5,13 +5,16 @@ import type {
   CorrectionItem,
 } from "@/contracts";
 import { licenseDateValid } from "../onboarding/rules";
+
 export type { AdminCase, AdminReview } from "@/contracts";
+
 export const correctionLabels: Record<CorrectionItem, string> = {
   dados: "Dados pessoais",
   foto: "Foto do motorista",
   cnh: "CNH",
   veiculo: "Veículo",
 };
+
 export function caseWarnings(c: AdminCase) {
   const warnings: string[] = [];
   if (!c.photo) warnings.push("Foto do motorista ausente.");
@@ -29,6 +32,7 @@ export function caseWarnings(c: AdminCase) {
     warnings.push("Há um veículo com dados incompletos.");
   return warnings;
 }
+
 export const reviewVersion = (c: AdminCase) =>
   [
     c.registration.submittedAt,
@@ -36,6 +40,7 @@ export const reviewVersion = (c: AdminCase) =>
     c.registration.status,
     String(c.registration.submissionCount || 1),
   ].join("|");
+
 export function demoCases(store: Store): AdminCase[] {
   const examples: AdminCase[] = ["Carlos Almeida", "Marina Souza"].map(
     (fullName, i) => ({
@@ -99,6 +104,7 @@ export function demoCases(store: Store): AdminCase[] {
         ...fleetCases,
       ];
 }
+
 export function reviewDemo(
   store: Store,
   caseId: string,

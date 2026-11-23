@@ -18,17 +18,17 @@ export async function GET(
       { status: 401 },
     );
   const { id } = await params;
-  const document = await prisma.arquivoPrivado.findUnique({ where: { id } });
+  const document = await prisma.arquivo_privado.findUnique({ where: { id } });
   if (
     !document ||
-    (document.motoristaId !== session.user.id &&
+    (document.motorista_id !== session.user.id &&
       !(await verificarAdministrador(session.user.id)))
   )
     return Response.json(
       { code: "NOT_FOUND", message: "Documento indisponível." },
       { status: 404 },
     );
-  if (!/^[0-9a-f-]{36}\.jpg$/i.test(document.chaveArmazenamento))
+  if (!/^[0-9a-f-]{36}\.jpg$/i.test(document.chave_armazenamento))
     return Response.json(
       { code: "NOT_FOUND", message: "Documento indisponível." },
       { status: 404 },
@@ -39,7 +39,7 @@ export async function GET(
         process.cwd(),
         "storage",
         "private",
-        document.chaveArmazenamento,
+        document.chave_armazenamento,
       ),
       constants.O_RDONLY | constants.O_NOFOLLOW,
     );

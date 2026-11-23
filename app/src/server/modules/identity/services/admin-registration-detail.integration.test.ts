@@ -5,8 +5,8 @@ import { test } from "node:test";
 import { prisma } from "../../../db/prisma";
 
 function verificarBancoDeTeste() {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -26,15 +26,15 @@ test("consulta detalhada exige administrador e protege dados privados", async ()
   const { GET } = await import("../../../../app/api/v1/[...path]/route");
 
   const autenticacaoTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, { provider: "postgresql" }),
     emailAndPassword: { enabled: true },
   });
 
   const identificador = randomUUID();
   const usuarioIds: string[] = [];
-  const motoristaId = `motorista-detalhe-${identificador}`;
+  const motorista_id = `motorista-detalhe-${identificador}`;
 
   const base = "http://localhost:3002/api/v1/admin/driver-registrations";
 
@@ -110,18 +110,21 @@ test("consulta detalhada exige administrador e protege dados privados", async ()
     assert.equal(inexistente.status, 404);
 
     // Motorista fictício
-    usuarioIds.push(motoristaId);
+    usuarioIds.push(motorista_id);
 
     await prisma.user.create({
       data: {
-        id: motoristaId,
+        id: motorista_id,
         name: "Motorista Detalhe Teste",
-        email: `${motoristaId}@fretta.invalid`,
-        motorista: { create: {} },
+        email: `${motorista_id}@fretta.invalid`,
+        motorista: {
+          create: { codigo_publico: randomUUID(), atualizado_em: new Date() },
+        },
         pessoa: {
           create: {
-            nomeCompleto: "Motorista Detalhe Teste",
+            nome_completo: "Motorista Detalhe Teste",
             cpf: "CPF_FICTICIO_TESTE",
+            atualizado_em: new Date(),
           },
         },
       },
@@ -129,25 +132,30 @@ test("consulta detalhada exige administrador e protege dados privados", async ()
 
     const veiculo = await prisma.veiculo.create({
       data: {
-        motoristaId,
+        id: randomUUID(),
+        motorista_id,
         categoria: "UTILITARIO",
         modelo: "Veículo Fictício",
         placa: `D${identificador.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
         descricao: "Teste de detalhes administrativos",
+        categoria_porte: "PEQUENO",
+        atualizado_em: new Date(),
       },
     });
 
-    const cadastro = await prisma.cadastroMotorista.create({
+    const cadastro = await prisma.cadastro_motorista.create({
       data: {
-        motoristaId,
-        tipoPessoa: "PF",
-        cnhNumero: "CNH_PRIVADA_TESTE",
-        cnhCategoria: "B",
-        cnhValidade: new Date("2030-12-31T12:00:00Z"),
-        fotoPerfilId: "FOTO_PRIVADA_TESTE",
-        documentoCnhId: "DOCUMENTO_PRIVADO_TESTE",
-        veiculoId: veiculo.id,
+        id: randomUUID(),
+        motorista_id,
+        tipo_pessoa: "PF",
+        cnh_numero: "CNH_PRIVADA_TESTE",
+        cnh_categoria: "B",
+        cnh_validade: new Date("2030-12-31T12:00:00Z"),
+        foto_perfil_id: "FOTO_PRIVADA_TESTE",
+        documento_cnh_id: "DOCUMENTO_PRIVADO_TESTE",
+        veiculo_id: veiculo.id,
         status: "EM_ANALISE",
+        atualizado_em: new Date(),
       },
     });
 
@@ -164,7 +172,7 @@ test("consulta detalhada exige administrador e protege dados privados", async ()
     const dados = await resposta.json();
 
     assert.equal(dados.id, cadastro.id);
-    assert.equal(dados.nomeCompleto, "Motorista Detalhe Teste");
+    assert.equal(dados.nome_completo, "Motorista Detalhe Teste");
     assert.equal(dados.cpf, "CPF_FICTICIO_TESTE");
     assert.equal(dados.cnh.numero, "CNH_PRIVADA_TESTE");
     assert.equal(dados.veiculo.id, veiculo.id);

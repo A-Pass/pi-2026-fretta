@@ -3,24 +3,24 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { prisma } from "@/server/db/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/server/generated/prisma/client";
 import { freightOperation, FreightError } from "./service";
 
 test("somente uma proposta pode ser aceita simultaneamente", async () => {
   // SEGURANÇA: executar somente no banco local de testes.
-  const url = new URL(process.env.DATABASE_URL!);
+  const url = new URL(process.env.DB_URL!);
 
   assert.equal(url.pathname, "/fretta_test");
   assert.ok(["localhost", "127.0.0.1"].includes(url.hostname));
 
-  const clienteId = randomUUID();
+  const cliente_id = randomUUID();
   const motoristaAId = randomUUID();
   const motoristaBId = randomUUID();
 
   const motoristas = [motoristaAId, motoristaBId];
-  const veiculos = new Map<string, string>();
+  const veiculosPorMotorista = new Map<string, string>();
 
-  let freteId: string | undefined;
+  let frete_id: string | undefined;
 
   // Usar transações com isolamento Serializable,
   // assim como a API do projeto.
@@ -49,7 +49,7 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
     // 1. CRIAR CLIENTE E MOTORISTAS
 
     await prisma.user.createMany({
-      data: [clienteId, ...motoristas].map((id) => ({
+      data: [cliente_id, ...motoristas].map((id) => ({
         id,
         name: id,
         email: `${id}@fretta.invalid`,
@@ -58,7 +58,7 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
 
     await prisma.cliente.create({
       data: {
-        userId: clienteId,
+        user_id: cliente_id,
       },
     });
 
@@ -66,44 +66,53 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
 
     // 2. PREPARAR OS DOIS MOTORISTAS
 
-    for (const motoristaId of motoristas) {
+    for (const motorista_id of motoristas) {
       await prisma.motorista.create({
         data: {
-          userId: motoristaId,
+          user_id: motorista_id,
+          codigo_publico: randomUUID(),
+          atualizado_em: new Date(),
         },
       });
 
-      const veiculo = await prisma.veiculo.create({
+      const createdVehicle = await prisma.veiculo.create({
         data: {
-          motoristaId,
+          id: randomUUID(),
+          motorista_id,
           categoria: "Utilitário",
           modelo: "Veículo de teste",
           placa: randomUUID(),
+          categoria_porte: "PEQUENO",
+          atualizado_em: new Date(),
         },
       });
 
-      veiculos.set(motoristaId, veiculo.id);
+      veiculosPorMotorista.set(motorista_id, createdVehicle.id);
 
-      await prisma.cadastroMotorista.create({
+      await prisma.cadastro_motorista.create({
         data: {
-          motoristaId,
-          tipoPessoa: "PF",
-          cnhNumero: "teste",
-          cnhCategoria: "B",
-          cnhValidade: new Date("2099-01-01"),
-          fotoPerfilId: randomUUID(),
-          documentoCnhId: randomUUID(),
-          veiculoId: veiculo.id,
+          id: randomUUID(),
+          motorista_id,
+          tipo_pessoa: "PF",
+          cnh_numero: "teste",
+          cnh_categoria: "B",
+          cnh_validade: new Date("2099-01-01"),
+          foto_perfil_id: randomUUID(),
+          documento_cnh_id: randomUUID(),
+          veiculo_id: createdVehicle.id,
           status: "APROVADO",
+          atualizado_em: new Date(),
         },
       });
 
-      await prisma.vinculoAssinatura.create({
+      await prisma.vinculo_assinatura.create({
         data: {
-          motoristaId,
+          id: randomUUID(),
+          motorista_id,
           status: "ATIVA",
-          inicioEm: new Date(Date.now() - 60000),
-          fimEm: new Date(Date.now() + 2 * 86400000),
+          inicio_em: new Date(Date.now() - 60000),
+          fim_em: new Date(Date.now() + 2 * 86400000),
+          atualizado_em: new Date(),
         },
       });
     }
@@ -124,7 +133,7 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
       },
     };
 
-    const frete = await executar(clienteId, "POST", [], {
+    const frete = await executar(cliente_id, "POST", [], {
       title: "Frete para teste de concorrência",
       description: "Transporte de caixas",
       vehicle: "Utilitário",
@@ -137,7 +146,7 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
 
     assert.ok("id" in frete);
 
-    freteId = frete.id;
+    frete_id = frete.id;
 
     console.log("Frete criado - OK");
 
@@ -155,11 +164,11 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
     const propostaA = await executar(
       motoristaAId,
       "POST",
-      [freteId, "propose"],
+      [frete_id, "propose"],
       {
         expectedUpdatedAt,
         priceCents: 22000,
-        vehicleId: veiculos.get(motoristaAId),
+        vehicleId: veiculosPorMotorista.get(motoristaAId),
         availableAt,
         message: "Proposta do motorista A.",
       },
@@ -176,11 +185,11 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
     const propostaB = await executar(
       motoristaBId,
       "POST",
-      [freteId, "propose"],
+      [frete_id, "propose"],
       {
         expectedUpdatedAt,
         priceCents: 25000,
-        vehicleId: veiculos.get(motoristaBId),
+        vehicleId: veiculosPorMotorista.get(motoristaBId),
         availableAt,
         message: "Proposta do motorista B.",
       },
@@ -205,35 +214,35 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
 
     const quantidadePropostas = await prisma.proposta.count({
       where: {
-        freteId,
+        frete_id,
       },
     });
 
     assert.equal(quantidadePropostas, 2);
 
-    console.log("Duas propostas registradas - OK");
+    console.log("Duas proposta registradas - OK");
 
     // 8. TESTE DE CONCORRÊNCIA
     //
-    // O cliente tenta aceitar as duas propostas ao mesmo tempo.
+    // O cliente tenta aceitar as duas proposta ao mesmo tempo.
     // Somente uma operação deve ser concluída.
 
     console.log("Iniciando duas tentativas simultâneas...");
 
     const resultados = await Promise.allSettled([
       executar(
-        clienteId,
+        cliente_id,
         "POST",
-        [freteId, "accept", propostaAId],
+        [frete_id, "accept", propostaAId],
         {
           offerId: ofertaAId,
         },
       ),
 
       executar(
-        clienteId,
+        cliente_id,
         "POST",
-        [freteId, "accept", propostaBId],
+        [frete_id, "accept", propostaBId],
         {
           offerId: ofertaBId,
         },
@@ -295,31 +304,31 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
 
     const freteAtualizado = await prisma.frete.findUnique({
       where: {
-        id: freteId,
+        id: frete_id,
       },
       select: {
-        status: true,
-        propostaAceitaId: true,
+        status_frete_enum: true,
+        proposta_aceita_id: true,
       },
     });
 
     assert.ok(freteAtualizado);
 
-    assert.equal(freteAtualizado.status, "AGENDADO");
+    assert.equal(freteAtualizado.status_frete_enum, "ACEITO");
 
-    assert.ok(freteAtualizado.propostaAceitaId);
+    assert.ok(freteAtualizado.proposta_aceita_id);
 
     assert.ok(
       [propostaAId, propostaBId].includes(
-        freteAtualizado.propostaAceitaId,
+        freteAtualizado.proposta_aceita_id,
       ),
     );
 
     // Somente uma proposta deve estar aceita.
     const propostasAceitas = await prisma.proposta.count({
       where: {
-        freteId,
-        status: "ACEITA",
+        frete_id,
+        status_proposta: "ACEITA",
       },
     });
 
@@ -330,10 +339,10 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
     );
 
     // Somente uma oferta deve estar aceita.
-    const ofertasAceitas = await prisma.oferta.count({
+    const ofertasAceitas = await prisma.ofertaProposta.count({
       where: {
         proposta: {
-          freteId,
+          frete_id,
         },
         status: "ACEITA",
       },
@@ -352,40 +361,33 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
   } finally {
     // 11. LIMPAR OS DADOS DO TESTE
 
-    if (freteId) {
+    if (frete_id) {
       const where = {
-        freteId,
+        frete_id,
       };
 
       // Desvincular a proposta aceita antes de excluí-la.
       await prisma.frete.update({
         where: {
-          id: freteId,
+          id: frete_id,
         },
         data: {
-          propostaAceitaId: null,
+          proposta_aceita_id: null,
         },
       });
 
+      const proposalRows = await prisma.proposta.findMany({
+        where,
+        select: { id: true },
+      });
+      const proposalIds = proposalRows.map((proposal) => proposal.id);
       await prisma.mensagem.deleteMany({
-        where: {
-          conversa: {
-            proposta: where,
-          },
-        },
+        where: { proposta_id: { in: proposalIds } },
       });
-
-      await prisma.oferta.deleteMany({
-        where: {
-          proposta: where,
-        },
-      });
-
       await prisma.conversa.deleteMany({
-        where: {
-          proposta: where,
-        },
+        where: { proposta_id: { in: proposalIds } },
       });
+      await prisma.ofertaProposta.deleteMany({ where: { proposta: where } });
 
       await prisma.proposta.deleteMany({
         where,
@@ -393,22 +395,22 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
 
       await prisma.frete.delete({
         where: {
-          id: freteId,
+          id: frete_id,
         },
       });
     }
 
-    await prisma.vinculoAssinatura.deleteMany({
+    await prisma.vinculo_assinatura.deleteMany({
       where: {
-        motoristaId: {
+        motorista_id: {
           in: motoristas,
         },
       },
     });
 
-    await prisma.cadastroMotorista.deleteMany({
+    await prisma.cadastro_motorista.deleteMany({
       where: {
-        motoristaId: {
+        motorista_id: {
           in: motoristas,
         },
       },
@@ -416,7 +418,7 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
 
     await prisma.veiculo.deleteMany({
       where: {
-        motoristaId: {
+        motorista_id: {
           in: motoristas,
         },
       },
@@ -425,7 +427,7 @@ test("somente uma proposta pode ser aceita simultaneamente", async () => {
     await prisma.user.deleteMany({
       where: {
         id: {
-          in: [clienteId, ...motoristas],
+          in: [cliente_id, ...motoristas],
         },
       },
     });

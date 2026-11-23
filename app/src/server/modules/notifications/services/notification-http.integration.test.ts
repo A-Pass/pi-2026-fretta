@@ -12,9 +12,9 @@ import { GET, PATCH, POST } from "../../../../app/api/v1/[...path]/route";
 
 test("protege e integra as rotas HTTP de notificacoes", async () => {
   // Garantir que somente o banco local de testes seja utilizado.
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DB_URL;
 
-  assert.ok(databaseUrl, "DATABASE_URL nao configurada.");
+  assert.ok(databaseUrl, "DB_URL nao configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -32,8 +32,8 @@ test("protege e integra as rotas HTTP de notificacoes", async () => {
 
   // Configuracao de autenticacao utilizada somente no teste.
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -101,26 +101,27 @@ test("protege e integra as rotas HTTP de notificacoes", async () => {
     await prisma.notificacao.createMany({
       data: Array.from({ length: 22 }, (_, indice) => ({
         id: randomUUID(),
-        destinatarioId: cliente.id,
-        papelDestinatario: "cliente",
+        destinatario_id: cliente.id,
+        papel_destinatario: "cliente",
         evento: "NOVA_MENSAGEM",
         titulo: `Notificacao ${indice + 1}`,
         corpo: "Mensagem ficticia para teste.",
-        freteId: randomUUID(),
+        frete_id: randomUUID(),
         lida: false,
-        criadoEm: new Date(Date.now() - indice * 60_000),
+        criado_em: new Date(Date.now() - indice * 60_000),
       })),
     });
 
     // Criar notificacao exclusiva do motorista.
     const notificacaoMotorista = await prisma.notificacao.create({
       data: {
-        destinatarioId: motorista.id,
-        papelDestinatario: "motorista",
+        id: randomUUID(),
+        destinatario_id: motorista.id,
+        papel_destinatario: "motorista",
         evento: "NOVA_PROPOSTA",
         titulo: "Notificacao do motorista",
         corpo: "Conteudo privado.",
-        freteId: randomUUID(),
+        frete_id: randomUUID(),
       },
     });
 
@@ -251,7 +252,7 @@ test("protege e integra as rotas HTTP de notificacoes", async () => {
     // TESTE 10: cliente nao possui notificacoes nao lidas.
     const naoLidas = await prisma.notificacao.count({
       where: {
-        destinatarioId: cliente.id,
+        destinatario_id: cliente.id,
         lida: false,
       },
     });
@@ -272,7 +273,7 @@ test("protege e integra as rotas HTTP de notificacoes", async () => {
     // Remover apenas os dados ficticios deste teste.
     await prisma.notificacao.deleteMany({
       where: {
-        destinatarioId: {
+        destinatario_id: {
           in: usuarios,
         },
       },

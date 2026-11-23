@@ -5,9 +5,9 @@ import { test } from "node:test";
 import { prisma } from "../../../db/prisma";
 
 function verificarBancoDeTeste() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DB_URL;
 
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -27,8 +27,8 @@ test("listagem administrativa exige permissão e protege dados privados", async 
   const { GET } = await import("../../../../app/api/v1/[...path]/route");
 
   const autenticacaoTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -106,39 +106,46 @@ test("listagem administrativa exige permissão e protege dados privados", async 
     assert.ok(cookieAdmin);
 
     // 4. Criar motorista fictício
-    const motoristaId = `motorista-lista-${identificador}`;
-    usuarioIds.push(motoristaId);
+    const motorista_id = `motorista-lista-${identificador}`;
+    usuarioIds.push(motorista_id);
 
     await prisma.user.create({
       data: {
-        id: motoristaId,
+        id: motorista_id,
         name: "Motorista Listagem Teste",
-        email: `${motoristaId}@fretta.invalid`,
-        motorista: { create: {} },
+        email: `${motorista_id}@fretta.invalid`,
+        motorista: {
+          create: { codigo_publico: randomUUID(), atualizado_em: new Date() },
+        },
       },
     });
 
     const veiculo = await prisma.veiculo.create({
       data: {
-        motoristaId,
+        id: randomUUID(),
+        motorista_id,
         categoria: "UTILITARIO",
         modelo: "Veículo de Teste",
         placa: `L${identificador.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
         descricao: "Teste de listagem administrativa",
+        categoria_porte: "PEQUENO",
+        atualizado_em: new Date(),
       },
     });
 
-    const cadastro = await prisma.cadastroMotorista.create({
+    const cadastro = await prisma.cadastro_motorista.create({
       data: {
-        motoristaId,
-        tipoPessoa: "PF",
-        cnhNumero: "CNH_PRIVADA_TESTE",
-        cnhCategoria: "B",
-        cnhValidade: new Date("2030-12-31T12:00:00Z"),
-        fotoPerfilId: "FOTO_PRIVADA_TESTE",
-        documentoCnhId: "DOCUMENTO_PRIVADO_TESTE",
-        veiculoId: veiculo.id,
+        id: randomUUID(),
+        motorista_id,
+        tipo_pessoa: "PF",
+        cnh_numero: "CNH_PRIVADA_TESTE",
+        cnh_categoria: "B",
+        cnh_validade: new Date("2030-12-31T12:00:00Z"),
+        foto_perfil_id: "FOTO_PRIVADA_TESTE",
+        documento_cnh_id: "DOCUMENTO_PRIVADO_TESTE",
+        veiculo_id: veiculo.id,
         status: "EM_ANALISE",
+        atualizado_em: new Date(),
       },
     });
 
@@ -207,8 +214,8 @@ test("listagem administrativa pagina 21 cadastros sem repetir registros", async 
   const { GET } = await import("../../../../app/api/v1/[...path]/route");
 
   const autenticacaoTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, { provider: "postgresql" }),
     emailAndPassword: { enabled: true },
   });
@@ -246,21 +253,24 @@ test("listagem administrativa pagina 21 cadastros sem repetir registros", async 
 
     // Cria 21 cadastros fictícios para testar duas páginas.
     for (let i = 0; i < 21; i++) {
-      const motoristaId = `motorista-pag-${identificador}-${i}`;
-      usuarioIds.push(motoristaId);
+      const motorista_id = `motorista-pag-${identificador}-${i}`;
+      usuarioIds.push(motorista_id);
 
       await prisma.user.create({
         data: {
-          id: motoristaId,
+          id: motorista_id,
           name: `Motorista Paginação ${i}`,
-          email: `${motoristaId}@fretta.invalid`,
-          motorista: { create: {} },
+          email: `${motorista_id}@fretta.invalid`,
+          motorista: {
+            create: { codigo_publico: randomUUID(), atualizado_em: new Date() },
+          },
         },
       });
 
       const veiculo = await prisma.veiculo.create({
         data: {
-          motoristaId,
+          id: randomUUID(),
+          motorista_id,
           categoria: "UTILITARIO",
           modelo: "Veículo Fictício",
           placa: `P${identificador.slice(0, 5).toUpperCase()}${i
@@ -268,21 +278,25 @@ test("listagem administrativa pagina 21 cadastros sem repetir registros", async 
             .toUpperCase()
             .padStart(2, "0")}`,
           descricao: "Teste de paginação",
+          categoria_porte: "PEQUENO",
+          atualizado_em: new Date(),
         },
       });
 
-      const cadastro = await prisma.cadastroMotorista.create({
+      const cadastro = await prisma.cadastro_motorista.create({
         data: {
-          motoristaId,
-          tipoPessoa: "PF",
-          cnhNumero: `CNH_TESTE_${i}`,
-          cnhCategoria: "B",
-          cnhValidade: new Date("2030-12-31T12:00:00Z"),
-          fotoPerfilId: `foto-teste-${i}`,
-          documentoCnhId: `cnh-teste-${i}`,
-          veiculoId: veiculo.id,
+          id: randomUUID(),
+          motorista_id,
+          tipo_pessoa: "PF",
+          cnh_numero: `CNH_TESTE_${i}`,
+          cnh_categoria: "B",
+          cnh_validade: new Date("2030-12-31T12:00:00Z"),
+          foto_perfil_id: `foto-teste-${i}`,
+          documento_cnh_id: `cnh-teste-${i}`,
+          veiculo_id: veiculo.id,
           status: "EM_ANALISE",
-          enviadoEm: new Date(Date.UTC(2026, 10, 17, 12, 0, i)),
+          atualizado_em: new Date(),
+          enviado_em: new Date(Date.UTC(2026, 10, 17, 12, 0, i)),
         },
       });
 

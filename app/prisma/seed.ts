@@ -4,13 +4,14 @@ import { prisma } from "../src/server/db/prisma";
 
 const USUARIO_ID = "fretta-seed-cliente-001";
 const ENDERECO_ID = "00000000-0000-4000-8000-000000000101";
+const DESTINO_ID = "00000000-0000-4000-8000-000000000103";
 const FRETE_ID = "00000000-0000-4000-8000-000000000102";
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DB_URL;
 
   if (!databaseUrl) {
-    throw new Error("DATABASE_URL não configurada.");
+    throw new Error("DB_URL não configurada.");
   }
 
   const url = new URL(databaseUrl);
@@ -37,10 +38,10 @@ async function main() {
   });
 
   const cliente = await prisma.cliente.upsert({
-    where: { userId: usuario.id },
+    where: { user_id: usuario.id },
     update: {},
     create: {
-      userId: usuario.id,
+      user_id: usuario.id,
     },
   });
 
@@ -49,45 +50,43 @@ async function main() {
     update: {},
     create: {
       id: ENDERECO_ID,
-      clienteId: cliente.userId,
-      nome: "Endereço Teste FRETTA",
       logradouro: "Rua Exemplo",
       numero: "100",
       bairro: "Centro",
       cidade: "Eunápolis",
-      uf: "BA",
+      estado: "BA",
+      cep: "45880000",
       latitude: -16.3775,
       longitude: -39.58,
     },
   });
-
-  const origemSnapshot = {
-    logradouro: endereco.logradouro,
-    numero: endereco.numero,
-    bairro: endereco.bairro,
-    cidade: endereco.cidade,
-    uf: endereco.uf,
-  };
+  const destino = await prisma.endereco.upsert({
+    where: { id: DESTINO_ID },
+    update: {},
+    create: {
+      id: DESTINO_ID,
+      logradouro: "Avenida Exemplo",
+      numero: "200",
+      bairro: "Centro",
+      cidade: "Porto Seguro",
+      estado: "BA",
+      cep: "45810000",
+    },
+  });
 
   const frete = await prisma.frete.upsert({
     where: { id: FRETE_ID },
     update: {},
     create: {
       id: FRETE_ID,
-      clienteId: cliente.userId,
+      cliente_id: cliente.user_id,
       titulo: "Frete de teste FRETTA",
       descricao: "Carga fictícia para testes de desenvolvimento.",
-      categoriaVeiculo: "UTILITARIO",
-      tipoAgendamento: "COMBINAR",
-      origemId: endereco.id,
-      origemSnapshot,
-      destinoSnapshot: {
-        logradouro: "Avenida Exemplo",
-        numero: "200",
-        bairro: "Centro",
-        cidade: "Porto Seguro",
-        uf: "BA",
-      },
+      categoria_porte: "PEQUENO",
+      tipo_agendamento_enum: "COMBINAR",
+      endereco_origem_id: endereco.id,
+      endereco_destino_id: destino.id,
+      atualizado_em: new Date(),
     },
   });
 

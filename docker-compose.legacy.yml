@@ -9,7 +9,7 @@ services:
       - "127.0.0.1:${APP_PORT}:3000"
     environment:
       NODE_ENV: ${APP_NODE_ENV}
-      DATABASE_URL: ${DB_URL}
+      DB_URL: ${DB_URL}
     depends_on:
       - database
 

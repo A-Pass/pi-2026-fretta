@@ -1,0 +1,113 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  REMOTE_PATH: /opt/fretta
+  APP_MEM_PATH: /dev/shm/fretta-app
+  APP_ENV_MEM_FILE: .env
+
+jobs:
+  deploy_production:
+    environment: hostinger-fretta
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar SSH
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" | ssh-add -
+
+          cat > ~/.ssh/config <<EOF
+          Host deploy-server
+            HostName ${{ secrets.SSH_HOST }}
+            User ${{ secrets.SSH_USER }}
+            Port ${{ secrets.SSH_PORT }}
+            StrictHostKeyChecking accept-new
+          EOF
+
+      - name: Gerar arquivo .env na RAM da VPS
+        env:
+          APP_HOST: ${{ secrets.APP_HOST }}
+          APP_PORT: ${{ secrets.APP_PORT }}
+          APP_BETTER_AUTH_SECRET: ${{ secrets.APP_BETTER_AUTH_SECRET }}
+          APP_GOOGLE_CLIENT_ID: ${{ secrets.APP_GOOGLE_CLIENT_ID }}
+          APP_GOOGLE_CLIENT_SECRET: ${{ secrets.APP_GOOGLE_CLIENT_SECRET }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          {
+            printf 'NODE_ENV="production"\n'
+            printf 'APP_HOST="%s"\n' "${APP_HOST//\$/\$\$}"
+            printf 'APP_PORT="%s"\n' "${APP_PORT//\$/\$\$}"
+            printf 'APP_URL="https://%s"\n' "${APP_HOST//\$/\$\$}"
+            printf 'APP_BETTER_AUTH_SECRET="%s"\n' "${APP_BETTER_AUTH_SECRET//\$/\$\$}"
+            printf 'APP_GOOGLE_CLIENT_ID="%s"\n' "${APP_GOOGLE_CLIENT_ID//\$/\$\$}"
+            printf 'APP_GOOGLE_CLIENT_SECRET="%s"\n' "${APP_GOOGLE_CLIENT_SECRET//\$/\$\$}"
+            printf 'DB_HOST="%s"\n' "${DB_HOST//\$/\$\$}"
+            printf 'DB_PORT="%s"\n' "${DB_PORT//\$/\$\$}"
+            printf 'DB_USER="%s"\n' "${DB_USER//\$/\$\$}"
+            printf 'DB_NAME="%s"\n' "${DB_NAME//\$/\$\$}"
+            printf 'DB_PASSWORD="%s"\n' "${DB_PASSWORD//\$/\$\$}"
+            printf 'DB_URL="postgresql://%s:%s@%s:%s/%s"\n' \
+              "${DB_USER//\$/\$\$}" \
+              "${DB_PASSWORD//\$/\$\$}" \
+              "${DB_HOST//\$/\$\$}" \
+              "${DB_PORT//\$/\$\$}" \
+              "${DB_NAME//\$/\$\$}"
+          } | ssh deploy-server "umask 077 && mkdir -p '$APP_MEM_PATH' && cat > '$APP_MEM_PATH/$APP_ENV_MEM_FILE'"
+
+          # 2. Envia a senha isolada do Postgres (sem quebra de linha)
+          printf '%s' "$DB_PASSWORD" | ssh deploy-server "umask 077 && cat > '$APP_MEM_PATH/db_password'"
+
+          # 2. Envia a user isolada do Postgres (sem quebra de linha)
+          printf '%s' "$DB_USER" | ssh deploy-server "umask 077 && cat > '$APP_MEM_PATH/db_user'"
+
+          # 2. Envia a db isolada do Postgres (sem quebra de linha)
+          printf '%s' "$DB_NAME" | ssh deploy-server "umask 077 && cat > '$APP_MEM_PATH/db_name'"
+
+      - name: Enviar arquivos e subir contêineres
+        run: |
+          # Compacta localmente, envia via SSH e extrai no remoto
+          tar -czf - \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.env' \
+            --exclude='node_modules' \
+            --exclude='target' \
+            . | ssh deploy-server "mkdir -p '$REMOTE_PATH' && tar -xzf - -C '$REMOTE_PATH'"
+
+          # Sobe os contêineres lendo o .env diretamente da RAM
+          ssh deploy-server "
+            cd '$REMOTE_PATH' &&
+            docker compose --env-file '$APP_MEM_PATH/$APP_ENV_MEM_FILE' up -d --build --force-recreate --remove-orphans
+          "
+
+      - name: Limpar arquivos temporários na VPS e encerrar SSH Agent
+        if: always()
+        run: |
+          if [ -z "$REMOTE_PATH" ] || [ "$REMOTE_PATH" = "/" ] || [ -z "$APP_MEM_PATH" ] || [ "$APP_MEM_PATH" = "/dev/shm" ]; then
+            echo "Caminho de limpeza inválido; recusando remover." >&2
+            exit 1
+          fi
+
+          # Remove o código fonte mesmo se o deploy falhar
+          ssh deploy-server "rm -rf -- '$REMOTE_PATH'" || true
+
+          # Encerra o ssh-agent na memória do runner
+          ssh-agent -k || true

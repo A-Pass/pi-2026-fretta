@@ -15,10 +15,10 @@ export async function verificarPermissaoUpload(headers: Headers) {
 
   const motorista = await prisma.motorista.findUnique({
     where: {
-      userId: session.user.id,
+      user_id: session.user.id,
     },
     select: {
-      userId: true,
+      user_id: true,
     },
   });
 
@@ -33,6 +33,6 @@ export async function verificarPermissaoUpload(headers: Headers) {
 
   return {
     autorizado: true as const,
-    motoristaId: motorista.userId,
+    motorista_id: motorista.user_id,
   };
 }

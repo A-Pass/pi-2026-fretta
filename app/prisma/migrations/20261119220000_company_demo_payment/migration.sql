@@ -1,3 +1,3 @@
-ALTER TABLE "Empresa"
-  ADD COLUMN "pixDemoId" TEXT,
-  ADD COLUMN "pixDemoVagas" INTEGER;
+ALTER TABLE "empresa"
+  ADD COLUMN "pix_demo_id" TEXT,
+  ADD COLUMN "pix_demo_vagas" INTEGER;

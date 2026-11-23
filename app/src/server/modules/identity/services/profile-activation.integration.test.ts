@@ -11,9 +11,9 @@ import { prisma } from "../../../db/prisma";
 import { POST } from "../../../../app/api/v1/[...path]/route";
 
 test("ativa os perfis de cliente e motorista sem duplicidade", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DB_URL;
 
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -33,8 +33,8 @@ test("ativa os perfis de cliente e motorista sem duplicidade", async () => {
   const email = `perfil-${identificador}@fretta.invalid`;
 
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -98,11 +98,11 @@ test("ativa os perfis de cliente e motorista sem duplicidade", async () => {
     assert.equal(segundaRespostaMotorista.status, 200);
 
     const quantidadeClientes = await prisma.cliente.count({
-      where: { userId: usuarioId },
+      where: { user_id: usuarioId },
     });
 
     const quantidadeMotoristas = await prisma.motorista.count({
-      where: { userId: usuarioId },
+      where: { user_id: usuarioId },
     });
 
     assert.equal(quantidadeClientes, 1);

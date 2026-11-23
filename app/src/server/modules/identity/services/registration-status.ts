@@ -1,10 +1,10 @@
-import type { StatusCadastroMotorista } from "@/generated/prisma/client";
+import type { status_cadastro_motorista } from "@/server/generated/prisma/client";
 
 export type AtorCadastro = "MOTORISTA" | "ADMIN";
 
 export function podeAlterarStatusCadastro(
-  statusAtual: StatusCadastroMotorista,
-  novoStatus: StatusCadastroMotorista,
+  statusAtual: status_cadastro_motorista,
+  novoStatus: status_cadastro_motorista,
   ator: AtorCadastro,
 ): boolean {
   // O motorista apenas reenvia um cadastro

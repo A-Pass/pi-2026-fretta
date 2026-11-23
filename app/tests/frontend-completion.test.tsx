@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import { seed } from "../src/frontend/mocks/seed";
+import { seed } from "./fixtures/seed";
 import {
   acceptProposal,
   submitReview,
@@ -20,6 +20,9 @@ import {
   routeUrl,
 } from "../src/frontend/features/navigation/routes";
 import { FreightDetailsView } from "../src/frontend/features/FreightDetailsView";
+import { LoginView } from "../src/frontend/features/LoginView";
+import { AuthCompleteView } from "../src/frontend/auth/AuthCompleteView";
+import { identityDocumentError } from "../src/frontend/auth/registration";
 import type { Address, Store, Vehicle } from "../src/contracts";
 
 const vehicle: Vehicle = {
@@ -30,6 +33,45 @@ const vehicle: Vehicle = {
   description: "Fechado",
   capacityKg: 600,
 };
+test("tela de acesso oferece os campos e ações de autenticação sem simular credenciais reais", () => {
+  const html = renderToStaticMarkup(
+    <LoginView
+      role="cliente"
+      onBack={() => {}}
+      onGoogleSignIn={() => {}}
+      googleSignInPending={false}
+      googleSignInError=""
+    />,
+  );
+  assert.match(html, /Continuar com Google/);
+  assert.match(html, /sessão/);
+});
+test("cadastro pós-Google mostra nome, foto e documento conforme o perfil", () => {
+  const html = renderToStaticMarkup(
+    <AuthCompleteView
+      name="Pessoa de Teste"
+      email="teste@example.com"
+      image="https://example.com/foto.jpg"
+      role="motorista"
+    />,
+  );
+  assert.match(html, /Complete seu cadastro/);
+  assert.match(html, /Pessoa de Teste/);
+  assert.match(html, /Carteira de motorista \(CNH\)/);
+  assert.match(html, /validado somente neste navegador/);
+  assert.match(html, /Concluir cadastro/);
+});
+test("documentos são validados sem armazenar seus valores", () => {
+  assert.equal(identityDocumentError("cliente", "cpf", "529.982.247-25"), "");
+  assert.notEqual(
+    identityDocumentError("cliente", "cpf", "111.111.111-11"),
+    "",
+  );
+  assert.equal(identityDocumentError("cliente", "rg", "MG1234567"), "");
+  assert.notEqual(identityDocumentError("cliente", "rg", "AB"), "");
+  assert.equal(identityDocumentError("motorista", "cnh", "12345678901"), "");
+  assert.notEqual(identityDocumentError("motorista", "cnh", "11111111111"), "");
+});
 test("veículos rejeitam placa duplicada, categoria inválida e capacidade negativa", () => {
   assert.equal(validateVehicle(vehicle, []), "");
   assert.notEqual(validateVehicle({ ...vehicle, id: "v2" }, [vehicle]), "");
@@ -67,10 +109,7 @@ test("rotas usam segmentos do App Router e preservam IDs escapados", () => {
   );
   assert.equal(isAppRoute("/motorista/tela-desconhecida"), false);
   assert.equal(isAppRoute("/cliente/prestador/provider-1/unknown/p1"), false);
-  assert.equal(
-    parseLegacyRoute("?perfil=motorista&frete=f1").selected,
-    "f1",
-  );
+  assert.equal(parseLegacyRoute("?perfil=motorista&frete=f1").selected, "f1");
   assert.equal(parseLegacyRoute("?tela=desconhecida").tab, "inicio");
 });
 test("aceite registra snapshot e rejeita confirmação de oferta substituída", () => {
@@ -106,7 +145,8 @@ test("avaliação exige conclusão, nota válida e impede novo envio por partici
 });
 test("notificações de recusa pertencem ao motorista e não duplicam ao marcar leitura", () => {
   const previous = structuredClone(seed);
-  previous.proposals[0].driverId = "demo-driver";
+  previous.profile = { id: "driver-1", name: "Carlos Santos", photo: "" };
+  previous.proposals[0].driverId = "driver-1";
   const next = withNotifications(previous, declineOffer(previous, "p1", "p1"));
   const notification = next.notifications!.find(
     (n) => n.title === "Proposta recusada",
@@ -136,17 +176,24 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
     },
   };
   function html(store: Store, role: "cliente" | "motorista", name: string) {
-    const f = store.freights[0];
-    const accepted = store.proposals.find((p) => p.id === f.acceptedProposalId);
+    const viewerStore = {
+      ...store,
+      profile: {
+        id: role === "motorista" && name === "Carlos Santos" ? "driver-1" : "client-1",
+        name,
+        photo: "",
+      },
+    };
+    const f = viewerStore.freights[0];
+    const accepted = viewerStore.proposals.find((p) => p.id === f.acceptedProposalId);
     return renderToStaticMarkup(
       <FreightDetailsView
         f={f}
-        store={store}
+        store={viewerStore}
         role={role}
         name={name}
         proposals={store.proposals}
         accepted={accepted}
-        subscription
         canPropose
         onRegistration={() => {}}
         setModal={() => {}}
@@ -161,7 +208,14 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
     html(s, "motorista", "Carlos Santos").includes("Rua Privada de Teste"),
     false,
   );
+  s.proposals[0].driverId = "driver-1";
   const accepted = acceptProposal(s, "p1");
+  assert.equal(html(s, "cliente", "Cleiton").includes("Aceitar proposta"), true);
+  assert.equal(html(s, "cliente", "Cleiton").includes("Recusar proposta"), true);
+  assert.equal(
+    html(accepted, "cliente", "Cleiton").includes("Recusar proposta"),
+    false,
+  );
   assert.equal(
     html(accepted, "cliente", "Cleiton").includes("Rua Privada de Teste"),
     true,
@@ -178,4 +232,31 @@ test("interface só mostra snapshot privado após aceite ao cliente ou motorista
     ),
     false,
   );
+});
+test("motorista pode enviar proposta sem assinatura", () => {
+  const store = structuredClone(seed);
+  const freight = store.freights.find((item) => item.status === "ABERTO")!;
+  const html = renderToStaticMarkup(
+    <FreightDetailsView
+      f={freight}
+      role="motorista"
+      name="Carlos Santos"
+      store={{
+        ...store,
+        profile: { id: "driver-1", name: "Carlos Santos", photo: "" },
+      }}
+      proposals={[]}
+      accepted={undefined}
+      canPropose
+      onRegistration={() => {}}
+      setModal={() => {}}
+      setSelected={() => {}}
+      onChat={() => {}}
+      save={async () => true}
+      schedule={() => "A combinar"}
+    />,
+  );
+  assert.match(html, /Enviar proposta/);
+  assert.doesNotMatch(html, /Ative sua assinatura/);
+  assert.doesNotMatch(html, /disabled=""/);
 });

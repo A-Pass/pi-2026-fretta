@@ -1,7 +1,6 @@
-node_modules
-.next
-.git
+Dockfile
 .env*
-storage
-src/generated/prisma
-*.tsbuildinfo
+node_modules
+*.md
+.next
+.windsurf

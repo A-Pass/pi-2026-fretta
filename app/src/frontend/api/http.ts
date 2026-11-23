@@ -118,10 +118,22 @@ export function createHttpTransport({
       signal?.removeEventListener("abort", abort);
     }
   }
-  async function page<T>(path: string, cursor?: string, signal?: AbortSignal) {
+  async function page<T, Metadata extends object = {}>(
+    path: string,
+    cursor?: string,
+    signal?: AbortSignal,
+    filters?: Record<string, string | number | undefined>,
+  ) {
     const query = new URLSearchParams();
     if (cursor) query.set("cursor", cursor);
-    const result = await request<{ items: T[]; nextCursor: string | null }>(
+    if (filters) {
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined) query.set(key, String(value));
+      }
+    }
+    const result = await request<
+      { items: T[]; nextCursor: string | null } & Metadata
+    >(
       `${path}${query.size ? `?${query}` : ""}`,
       { signal },
     );

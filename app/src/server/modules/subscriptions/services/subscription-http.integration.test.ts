@@ -13,9 +13,9 @@ import { GET } from "../../../../app/api/v1/[...path]/route";
 
 test("protege e consulta assinaturas de motoristas", async () => {
   // Garantir que o teste utilize apenas o banco local fretta_test.
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DB_URL;
 
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -32,8 +32,8 @@ test("protege e consulta assinaturas de motoristas", async () => {
   assert.equal(banco[0]?.banco, "fretta_test");
 
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -70,7 +70,9 @@ test("protege e consulta assinaturas de motoristas", async () => {
 
     await prisma.motorista.create({
       data: {
-        userId: usuarioId,
+        user_id: usuarioId,
+        codigo_publico: randomUUID(),
+        atualizado_em: new Date(),
       },
     });
 
@@ -119,23 +121,28 @@ test("protege e consulta assinaturas de motoristas", async () => {
       );
       const vehicle = await prisma.veiculo.create({
         data: {
-          motoristaId: motorista.id,
+          id: randomUUID(),
+          motorista_id: motorista.id,
           categoria: "Utilitário",
           modelo: "Veículo de teste",
           placa: randomUUID(),
+          categoria_porte: "PEQUENO",
+          atualizado_em: new Date(),
         },
       });
-      await prisma.cadastroMotorista.create({
+      await prisma.cadastro_motorista.create({
         data: {
-          motoristaId: motorista.id,
-          tipoPessoa: "PF",
-          cnhNumero: "teste",
-          cnhCategoria: "B",
-          cnhValidade: new Date("2099-01-01"),
-          fotoPerfilId: randomUUID(),
-          documentoCnhId: randomUUID(),
-          veiculoId: vehicle.id,
+          id: randomUUID(),
+          motorista_id: motorista.id,
+          tipo_pessoa: "PF",
+          cnh_numero: "teste",
+          cnh_categoria: "B",
+          cnh_validade: new Date("2099-01-01"),
+          foto_perfil_id: randomUUID(),
+          documento_cnh_id: randomUUID(),
+          veiculo_id: vehicle.id,
           status: "APROVADO",
+          atualizado_em: new Date(),
         },
       });
       const response = await demoPix(
@@ -170,11 +177,11 @@ test("protege e consulta assinaturas de motoristas", async () => {
     } finally {
       if (previousDemoFlag === undefined) delete process.env.FRETTA_DEMO_PIX;
       else process.env.FRETTA_DEMO_PIX = previousDemoFlag;
-      await prisma.vinculoAssinatura.deleteMany({
-        where: { motoristaId: motorista.id, id: { startsWith: "pix-demo-" } },
+      await prisma.vinculo_assinatura.deleteMany({
+        where: { motorista_id: motorista.id, id: { startsWith: "pix-demo-" } },
       });
-      await prisma.cadastroMotorista.deleteMany({
-        where: { motoristaId: motorista.id },
+      await prisma.cadastro_motorista.deleteMany({
+        where: { motorista_id: motorista.id },
       });
     }
 
@@ -194,10 +201,12 @@ test("protege e consulta assinaturas de motoristas", async () => {
     assert.equal(dadosSemAssinatura.expiresAt, null);
 
     // 3. Criar assinatura pendente.
-    const assinatura = await prisma.vinculoAssinatura.create({
+    const assinatura = await prisma.vinculo_assinatura.create({
       data: {
-        motoristaId: motorista.id,
+        id: randomUUID(),
+        motorista_id: motorista.id,
         status: "PENDENTE",
+        atualizado_em: new Date(),
       },
     });
 
@@ -208,12 +217,12 @@ test("protege e consulta assinaturas de motoristas", async () => {
     // 4. Ativar assinatura com validade de 30 dias.
     const vencimento = new Date(agora + 30 * dia);
 
-    await prisma.vinculoAssinatura.update({
+    await prisma.vinculo_assinatura.update({
       where: { id: assinatura.id },
       data: {
         status: "ATIVA",
-        inicioEm: new Date(agora - dia),
-        fimEm: vencimento,
+        inicio_em: new Date(agora - dia),
+        fim_em: vencimento,
       },
     });
 
@@ -232,12 +241,12 @@ test("protege e consulta assinaturas de motoristas", async () => {
     assert.equal((await consultaOutro.json()).active, false);
 
     // 6. Assinatura com início no futuro.
-    await prisma.vinculoAssinatura.update({
+    await prisma.vinculo_assinatura.update({
       where: { id: assinatura.id },
       data: {
         status: "ATIVA",
-        inicioEm: new Date(agora + dia),
-        fimEm: new Date(agora + 30 * dia),
+        inicio_em: new Date(agora + dia),
+        fim_em: new Date(agora + 30 * dia),
       },
     });
 
@@ -245,12 +254,12 @@ test("protege e consulta assinaturas de motoristas", async () => {
     assert.equal((await futura.json()).active, false);
 
     // 7. Assinatura vencida.
-    await prisma.vinculoAssinatura.update({
+    await prisma.vinculo_assinatura.update({
       where: { id: assinatura.id },
       data: {
         status: "ATIVA",
-        inicioEm: new Date(agora - 60 * dia),
-        fimEm: new Date(agora - dia),
+        inicio_em: new Date(agora - 60 * dia),
+        fim_em: new Date(agora - dia),
       },
     });
 
@@ -258,12 +267,12 @@ test("protege e consulta assinaturas de motoristas", async () => {
     assert.equal((await vencida.json()).active, false);
 
     // 8. Assinatura cancelada.
-    await prisma.vinculoAssinatura.update({
+    await prisma.vinculo_assinatura.update({
       where: { id: assinatura.id },
       data: {
         status: "CANCELADA",
-        inicioEm: new Date(agora - dia),
-        fimEm: new Date(agora + 30 * dia),
+        inicio_em: new Date(agora - dia),
+        fim_em: new Date(agora + 30 * dia),
       },
     });
 
@@ -271,7 +280,7 @@ test("protege e consulta assinaturas de motoristas", async () => {
     assert.equal((await cancelada.json()).active, false);
 
     // 9. Assinatura expirada.
-    await prisma.vinculoAssinatura.update({
+    await prisma.vinculo_assinatura.update({
       where: { id: assinatura.id },
       data: {
         status: "EXPIRADA",
@@ -285,12 +294,12 @@ test("protege e consulta assinaturas de motoristas", async () => {
   } finally {
     // Limpar somente os dados fictícios deste teste.
     for (const usuarioId of usuarios) {
-      await prisma.vinculoAssinatura.deleteMany({
-        where: { motoristaId: usuarioId },
+      await prisma.vinculo_assinatura.deleteMany({
+        where: { motorista_id: usuarioId },
       });
 
       await prisma.motorista.deleteMany({
-        where: { userId: usuarioId },
+        where: { user_id: usuarioId },
       });
 
       await prisma.session.deleteMany({

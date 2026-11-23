@@ -1,8 +1,8 @@
-ALTER TABLE "CadastroMotorista" ADD COLUMN "itensConferidos" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "cadastro_motorista" ADD COLUMN "itens_conferidos" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 
-UPDATE "CadastroMotorista"
-SET "itensConferidos" = ARRAY(
+UPDATE "cadastro_motorista"
+SET "itens_conferidos" = ARRAY(
   SELECT item FROM unnest(ARRAY['dados', 'foto', 'cnh', 'veiculo']) AS items(item)
-  WHERE NOT (item = ANY ("itensAjuste"))
+  WHERE NOT (item = ANY ("itens_ajuste"))
 )
-WHERE status = 'AJUSTES_SOLICITADOS' AND cardinality("itensAjuste") > 0;
+WHERE status = 'AJUSTES_SOLICITADOS' AND cardinality("itens_ajuste") > 0;

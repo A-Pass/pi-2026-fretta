@@ -1,5 +1,25 @@
-import { Truck, Package, ArrowRight, Building2 } from "lucide-react";
-import type { Role } from "@/contracts";
+import type { FormEvent } from "react";
+import {
+  Truck,
+  Home,
+  Building2,
+  Package,
+  MessageCircle,
+  User,
+  ArrowRight,
+  ArrowLeft,
+  MapPin,
+  Plus,
+  Star,
+  Bell,
+  Check,
+  Search,
+  X,
+} from "lucide-react";
+import type { Role, Store, Freight, Proposal } from "@/contracts";
+import { acceptProposal, money } from "./freights/rules";
+import { statusLabels as labels, StatusBadge } from "../components/StatusBadge";
+import { EmptyState } from "../components/EmptyState";
 
 type Props = {
   role: Role;
@@ -14,7 +34,7 @@ export function WelcomeView({
   setRole,
   onEnter,
   real = false,
-  companySelected,
+  companySelected = false,
   onSelectCompany,
 }: Props) {
   return (
@@ -69,12 +89,8 @@ export function WelcomeView({
           )}
         </div>
         <button className="primary" onClick={() => onEnter()}>
-          {real ? "Continuar" : "Explorar demonstração"}{" "}
-          <ArrowRight size={18} />
+          {real ? "Continuar" : "Entrar na FRETTA"} <ArrowRight size={18} />
         </button>
-        {!real && (
-          <small>Ambiente demonstrativo · sem cadastro ou cobrança real</small>
-        )}
       </div>
       <div className="road-art">
         <Truck size={170} strokeWidth={1} />

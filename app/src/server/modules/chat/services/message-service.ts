@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/server/generated/prisma/client";
 import { validarNovaMensagem } from "../validators/message-validator";
+import { randomUUID } from "node:crypto";
 
 export class ChatError extends Error {
   constructor(
@@ -18,25 +19,8 @@ export async function verificarAcessoConversa(
   usuarioId: string,
 ) {
   const conversa = await prisma.conversa.findUnique({
-    where: {
-      id: conversaId,
-    },
-    select: {
-      id: true,
-      propostaId: true, // Adicione este campo
-      proposta: {
-        select: {
-          motoristaId: true,
-          empresa: { select: { gestorId: true } },
-          frete: {
-            select: {
-              id: true, // Adicione este campo também
-              clienteId: true,
-            },
-          },
-        },
-      },
-    },
+    where: { id: conversaId },
+    select: { id: true, proposta_id: true },
   });
 
   if (!conversa) {
@@ -47,14 +31,26 @@ export async function verificarAcessoConversa(
     );
   }
 
-  const ehMotorista = conversa.proposta.motoristaId === usuarioId;
+  const proposta = await prisma.proposta.findUnique({
+    where: { id: conversa.proposta_id },
+    select: {
+      id: true,
+      motorista_id: true,
+      empresa: { select: { gestor_id: true } },
+      frete: { select: { id: true, cliente_id: true } },
+    },
+  });
+  if (!proposta) {
+    throw new ChatError("CONVERSATION_NOT_FOUND", "Conversa não encontrada.", 404);
+  }
 
-  const ehCliente = conversa.proposta.frete.clienteId === usuarioId;
+  const ehMotorista = proposta.motorista_id === usuarioId;
+  const ehCliente = proposta.frete.cliente_id === usuarioId;
 
   if (
     !ehMotorista &&
     !ehCliente &&
-    conversa.proposta.empresa?.gestorId !== usuarioId
+    proposta.empresa?.gestor_id !== usuarioId
   ) {
     throw new ChatError(
       "CONVERSATION_NOT_FOUND",
@@ -63,7 +59,7 @@ export async function verificarAcessoConversa(
     );
   }
 
-  return conversa;
+  return { ...conversa, proposta };
 }
 
 export async function marcarMensagensLidas(
@@ -71,7 +67,7 @@ export async function marcarMensagensLidas(
   usuarioId: string,
   notificationIds: unknown,
 ) {
-  await verificarAcessoConversa(conversaId, usuarioId);
+  const conversa = await verificarAcessoConversa(conversaId, usuarioId);
   if (
     !Array.isArray(notificationIds) ||
     !notificationIds.length ||
@@ -88,8 +84,8 @@ export async function marcarMensagensLidas(
   await prisma.notificacao.updateMany({
     where: {
       id: { in: notificationIds },
-      conversaId,
-      destinatarioId: usuarioId,
+      conversa_id: conversaId,
+      destinatario_id: usuarioId,
       evento: "NOVA_MENSAGEM",
       lida: false,
     },
@@ -104,7 +100,7 @@ export async function listarMensagens(
   usuarioId: string,
   cursor?: string,
 ) {
-  await verificarAcessoConversa(conversaId, usuarioId);
+  const conversa = await verificarAcessoConversa(conversaId, usuarioId);
 
   if (cursor !== undefined) {
     if (typeof cursor !== "string" || cursor.trim().length === 0) {
@@ -118,7 +114,7 @@ export async function listarMensagens(
     const mensagemCursor = await prisma.mensagem.findFirst({
       where: {
         id: cursor,
-        conversaId,
+        proposta_id: conversa.proposta_id,
       },
       select: {
         id: true,
@@ -138,8 +134,8 @@ export async function listarMensagens(
     ? []
     : await prisma.notificacao.findMany({
         where: {
-          conversaId,
-          destinatarioId: usuarioId,
+          conversa_id: conversaId,
+          destinatario_id: usuarioId,
           evento: "NOVA_MENSAGEM",
           lida: false,
         },
@@ -148,9 +144,9 @@ export async function listarMensagens(
       });
   const mensagens = await prisma.mensagem.findMany({
     where: {
-      conversaId,
+      proposta_id: conversa.proposta_id,
     },
-    orderBy: [{ criadoEm: "desc" }, { id: "desc" }],
+    orderBy: [{ criado_em: "desc" }, { id: "desc" }],
     take: LIMITE_MENSAGENS + 1,
     ...(cursor
       ? {
@@ -160,21 +156,12 @@ export async function listarMensagens(
       : {}),
     select: {
       id: true,
-      texto: true,
-      criadoEm: true,
-      autorId: true,
-      conversa: {
-        select: {
-          propostaId: true,
-          proposta: {
-            select: {
-              freteId: true,
-              motoristaId: true,
-              frete: { select: { clienteId: true } },
-            },
-          },
-        },
-      },
+      conteudo: true,
+      criado_em: true,
+      remetente_id: true,
+      frete_id: true,
+      proposta_id: true,
+      perfil_remetente: true,
     },
   });
 
@@ -184,18 +171,19 @@ export async function listarMensagens(
 
   return {
     readableNotificationIds: notificacoes.map((notificacao) => notificacao.id),
-    items: pagina.map((mensagem) => ({
-      id: mensagem.id,
-      freightId: mensagem.conversa.proposta.freteId,
-      proposalId: mensagem.conversa.propostaId,
-      role:
-        mensagem.autorId === mensagem.conversa.proposta.frete.clienteId
-          ? "cliente"
-          : "motorista",
-      mine: mensagem.autorId === usuarioId,
-      text: mensagem.texto,
-      createdAt: mensagem.criadoEm.toISOString(),
-    })),
+    items: pagina.flatMap((mensagem) => {
+      const autorId = mensagem.remetente_id;
+      return [{
+        id: mensagem.id,
+        freightId: conversa.proposta.frete.id,
+        proposalId: conversa.proposta.id,
+        role:
+          autorId === conversa.proposta.frete.cliente_id ? "cliente" : "motorista",
+        mine: autorId === usuarioId,
+        text: mensagem.conteudo,
+        createdAt: mensagem.criado_em.toISOString(),
+      }];
+    }),
     nextCursor: temProximaPagina ? pagina[pagina.length - 1].id : null,
   };
 }
@@ -224,20 +212,21 @@ export async function enviarMensagem(
   // Converte o registro do banco para o contrato do frontend.
   const formatarMensagem = (mensagem: {
     id: string;
-    autorId: string;
-    texto: string;
-    criadoEm: Date;
+    remetente_id: string;
+    conteudo: string;
+    criado_em: Date;
   }) => ({
     id: mensagem.id,
     freightId: conversa.proposta.frete.id,
-    proposalId: conversa.propostaId,
+    proposalId: conversa.proposta_id,
     role:
-      mensagem.autorId === conversa.proposta.frete.clienteId
+      mensagem.remetente_id ===
+      conversa.proposta.frete.cliente_id
         ? "cliente"
         : "motorista",
-    mine: mensagem.autorId === usuarioId,
-    text: mensagem.texto,
-    createdAt: mensagem.criadoEm.toISOString(),
+    mine: mensagem.remetente_id === usuarioId,
+    text: mensagem.conteudo,
+    createdAt: mensagem.criado_em.toISOString(),
   });
 
   // Busca uma mensagem anterior com o mesmo identificador.
@@ -248,9 +237,7 @@ export async function enviarMensagem(
 
     return prisma.mensagem.findFirst({
       where: {
-        conversaId,
-        autorId: usuarioId,
-        clientMessageId,
+        id: clientMessageId,
       },
     });
   }
@@ -258,7 +245,7 @@ export async function enviarMensagem(
   const existente = await buscarMensagemExistente();
 
   if (existente) {
-    if (existente.texto !== text) {
+    if (existente.conteudo !== text) {
       throw new ChatError(
         "MESSAGE_ID_CONFLICT",
         "Identificador já utilizado em outra mensagem.",
@@ -274,9 +261,9 @@ export async function enviarMensagem(
 
     const recipients = [
       ...new Set([
-        conversa.proposta.frete.clienteId,
-        conversa.proposta.motoristaId,
-        conversa.proposta.empresa?.gestorId,
+        conversa.proposta.frete.cliente_id,
+        conversa.proposta.motorista_id,
+        conversa.proposta.empresa?.gestor_id,
       ]),
     ].filter((id): id is string => !!id && id !== usuarioId);
 
@@ -284,27 +271,37 @@ export async function enviarMensagem(
       // Salvar a mensagem enviada.
       const novaMensagem = await tx.mensagem.create({
         data: {
-          conversaId,
-          autorId: usuarioId,
-          texto: text,
-          clientMessageId,
+          id: randomUUID(),
+          frete_id: conversa.proposta.frete.id,
+          remetente_id: usuarioId,
+          destinatario_id:
+            usuarioId === conversa.proposta.frete.cliente_id
+              ? conversa.proposta.motorista_id
+              : conversa.proposta.frete.cliente_id,
+          proposta_id: conversa.proposta_id,
+          conteudo: text,
+          perfil_remetente:
+            usuarioId === conversa.proposta.frete.cliente_id
+              ? "cliente"
+              : "motorista",
         },
       });
 
       if (recipients.length)
         await tx.notificacao.createMany({
-          data: recipients.map((destinatarioId) => ({
-            destinatarioId,
-            papelDestinatario:
-              destinatarioId === conversa.proposta.frete.clienteId
+          data: recipients.map((destinatario_id) => ({
+            id: randomUUID(),
+            destinatario_id,
+            papel_destinatario:
+              destinatario_id === conversa.proposta.frete.cliente_id
                 ? "cliente"
                 : "motorista",
             evento: "NOVA_MENSAGEM",
             titulo: "Nova mensagem",
             corpo: "Você recebeu uma nova mensagem sobre um frete.",
-            freteId: conversa.proposta.frete.id,
-            propostaId: conversa.propostaId,
-            conversaId,
+            frete_id: conversa.proposta.frete.id,
+            proposta_id: conversa.proposta_id,
+            conversa_id: conversaId,
           })),
         });
 
@@ -322,7 +319,7 @@ export async function enviarMensagem(
       const mensagemExistente = await buscarMensagemExistente();
 
       if (mensagemExistente) {
-        if (mensagemExistente.texto !== text) {
+        if (mensagemExistente.conteudo !== text) {
           throw new ChatError(
             "MESSAGE_ID_CONFLICT",
             "Identificador já utilizado em outra mensagem.",

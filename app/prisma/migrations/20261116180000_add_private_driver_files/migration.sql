@@ -1,32 +1,32 @@
 
 -- CreateEnum
-CREATE TYPE "TipoArquivoPrivado" AS ENUM ('FOTO_PERFIL', 'CNH');
+CREATE TYPE "tipo_arquivo_privado" AS ENUM ('FOTO_PERFIL', 'CNH');
 
 -- CreateTable
-CREATE TABLE "ArquivoPrivado" (
+CREATE TABLE "arquivo_privado" (
     "id" TEXT NOT NULL,
-    "motoristaId" TEXT NOT NULL,
-    "tipo" "TipoArquivoPrivado" NOT NULL,
-    "chaveArmazenamento" TEXT NOT NULL,
-    "mimeType" TEXT NOT NULL,
-    "tamanhoBytes" INTEGER NOT NULL,
-    "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "motorista_id" TEXT NOT NULL,
+    "tipo" "tipo_arquivo_privado" NOT NULL,
+    "chave_armazenamento" TEXT NOT NULL,
+    "mime_type" TEXT NOT NULL,
+    "tamanho_bytes" INTEGER NOT NULL,
+    "criado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "ArquivoPrivado_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "arquivo_privado_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ArquivoPrivado_chaveArmazenamento_key"
-ON "ArquivoPrivado"("chaveArmazenamento");
+CREATE UNIQUE INDEX "arquivo_privado_chave_armazenamento_key"
+ON "arquivo_privado"("chave_armazenamento");
 
 -- CreateIndex
-CREATE INDEX "ArquivoPrivado_motoristaId_tipo_idx"
-ON "ArquivoPrivado"("motoristaId", "tipo");
+CREATE INDEX "arquivo_privado_motorista_id_tipo_idx"
+ON "arquivo_privado"("motorista_id", "tipo");
 
 -- AddForeignKey
-ALTER TABLE "ArquivoPrivado"
-ADD CONSTRAINT "ArquivoPrivado_motoristaId_fkey"
-FOREIGN KEY ("motoristaId")
-REFERENCES "Motorista"("userId")
+ALTER TABLE "arquivo_privado"
+ADD CONSTRAINT "arquivo_privado_motorista_id_fkey"
+FOREIGN KEY ("motorista_id")
+REFERENCES "motorista"("user_id")
 ON DELETE CASCADE
 ON UPDATE CASCADE;

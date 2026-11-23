@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import QRCode from "qrcode";
 import { auth } from "@/server/auth/auth";
 import { prisma } from "@/server/db/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/server/generated/prisma/client";
 
 const failure = (message: string, status: number) =>
   Response.json(
@@ -13,7 +13,7 @@ const failure = (message: string, status: number) =>
 export async function POST(request: Request) {
   if (process.env.FRETTA_DEMO_PIX !== "true")
     return failure("Pix de demonstração indisponível.", 404);
-  const origin = new URL(process.env.BETTER_AUTH_URL || request.url).origin;
+  const origin = new URL(process.env.APP_URL || request.url).origin;
   if (request.headers.get("origin") !== origin)
     return failure("Origem inválida.", 403);
   const session = await auth.api.getSession({ headers: request.headers });
@@ -37,16 +37,16 @@ export async function POST(request: Request) {
         });
         const eligible = await tx.motorista.findFirst({
           where: {
-            userId,
-            vinculoEmpresa: null,
+            user_id: userId,
+            vinculo_empresa: null,
             disponivel: true,
-            cadastro: {
+            cadastro_motorista: {
               status: "APROVADO",
-              cnhValidade: { gte: new Date(today) },
-              veiculo: { ativo: true },
+              cnh_validade: { gte: new Date(today) },
+              veiculo: { is: { ativo: true } },
             },
           },
-          select: { userId: true },
+          select: { user_id: true },
         });
         if (!eligible)
           return {
@@ -55,8 +55,8 @@ export async function POST(request: Request) {
             status: 422,
           };
         if (body.action === "confirm") {
-          const invoice = await tx.vinculoAssinatura.findFirst({
-            where: { id: body.id, motoristaId: userId },
+          const invoice = await tx.vinculo_assinatura.findFirst({
+            where: { id: body.id, motorista_id: userId },
           });
           if (!invoice)
             return {
@@ -65,59 +65,60 @@ export async function POST(request: Request) {
             };
           if (
             invoice.status === "ATIVA" &&
-            invoice.fimEm &&
-            invoice.fimEm > now
+            invoice.fim_em &&
+            invoice.fim_em > now
           )
-            return { active: true, expiresAt: invoice.fimEm };
+            return { active: true, expiresAt: invoice.fim_em };
           if (invoice.status !== "PENDENTE")
             return {
               error: "Gere uma nova cobrança de demonstração.",
               status: 422,
             };
-          const active = await tx.vinculoAssinatura.findFirst({
+          const active = await tx.vinculo_assinatura.findFirst({
             where: {
-              motoristaId: userId,
+              motorista_id: userId,
               status: "ATIVA",
-              inicioEm: { lte: now },
-              fimEm: { gt: now },
+              inicio_em: { lte: now },
+              fim_em: { gt: now },
             },
           });
-          if (active) return { active: true, expiresAt: active.fimEm };
+          if (active) return { active: true, expiresAt: active.fim_em };
           const expiry = new Date(+now + 30 * 86400000);
-          await tx.vinculoAssinatura.update({
+          await tx.vinculo_assinatura.update({
             where: { id: invoice.id },
             data: {
               status: "ATIVA",
-              inicioEm: now,
-              fimEm: expiry,
+              inicio_em: now,
+              fim_em: expiry,
             },
           });
           return { active: true, expiresAt: expiry };
         }
-        const active = await tx.vinculoAssinatura.findFirst({
+        const active = await tx.vinculo_assinatura.findFirst({
           where: {
-            motoristaId: userId,
+            motorista_id: userId,
             status: "ATIVA",
-            inicioEm: { lte: now },
-            fimEm: { gt: now },
+            inicio_em: { lte: now },
+            fim_em: { gt: now },
           },
         });
-        if (active) return { active: true, expiresAt: active.fimEm };
+        if (active) return { active: true, expiresAt: active.fim_em };
         // Only invoices created by this simulator are eligible for simulated confirmation.
-        const pending = await tx.vinculoAssinatura.findFirst({
+        const pending = await tx.vinculo_assinatura.findFirst({
           where: {
-            motoristaId: userId,
+            motorista_id: userId,
             status: "PENDENTE",
             id: { startsWith: "pix-demo-" },
           },
-          orderBy: { criadoEm: "desc" },
+          orderBy: { criado_em: "desc" },
         });
         const invoice =
           pending ??
-          (await tx.vinculoAssinatura.create({
+          (await tx.vinculo_assinatura.create({
             data: {
               id: `pix-demo-${randomUUID()}`,
-              motoristaId: userId,
+              motorista_id: userId,
+              atualizado_em: new Date(),
             },
           }));
         return { active: false, id: invoice.id };

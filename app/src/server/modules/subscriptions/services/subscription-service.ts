@@ -4,21 +4,17 @@ export async function consultarAssinatura(usuarioId: string) {
   const agora = new Date();
 
   // Consultar apenas assinaturas válidas do usuário autenticado.
-  const assinatura = await prisma.vinculoAssinatura.findFirst({
+  const assinatura = await prisma.vinculo_assinatura.findFirst({
     where: {
-      motoristaId: usuarioId,
+      motorista_id: usuarioId,
       status: "ATIVA",
-      inicioEm: {
-        lte: agora,
-      },
-      fimEm: {
-        gt: agora,
-      },
+      inicio_em: { lte: agora },
+      fim_em: { gt: agora },
     },
-    orderBy: [{ fimEm: "desc" }, { criadoEm: "desc" }],
+    orderBy: [{ fim_em: "desc" }, { criado_em: "desc" }],
     select: {
       id: true,
-      fimEm: true,
+      fim_em: true,
     },
   });
 
@@ -31,6 +27,6 @@ export async function consultarAssinatura(usuarioId: string) {
 
   return {
     active: true,
-    expiresAt: assinatura.fimEm!.toISOString(),
+    expiresAt: assinatura.fim_em!.toISOString(),
   };
 }

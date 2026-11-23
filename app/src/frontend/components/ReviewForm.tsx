@@ -58,7 +58,11 @@ export function ReviewForm({
     );
   return (
     <form className="review-form" onSubmit={submit}>
-      <h3>Como foi sua experiência?</h3>
+      <h3>
+        {role === "cliente"
+          ? "Como foi sua experiência com o motorista?"
+          : "Como foi sua experiência com o cliente?"}
+      </h3>
       <fieldset className="plain-fieldset" disabled={busy}>
         <legend>Sua nota</legend>
         <div className="review-stars">

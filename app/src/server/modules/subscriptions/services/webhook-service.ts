@@ -1,4 +1,5 @@
-import { Prisma } from "@/generated/prisma/client";
+import { randomUUID } from "node:crypto";
+import { Prisma } from "@/server/generated/prisma/client";
 import { prisma } from "@/server/db/prisma";
 
 type EventoWebhookVerificado = {
@@ -57,10 +58,11 @@ export async function processarEventoWebhookVerificado(
     return await prisma.$transaction(async (tx) => {
       // Registrar primeiro o identificador do evento.
       // A restrição única impede processamento concorrente duplicado.
-      await tx.eventoWebhook.create({
+      await tx.evento_webhook.create({
         data: {
+          id: randomUUID(),
           provedor,
-          eventoId,
+          evento_id: eventoId,
           tipo,
         },
       });
@@ -79,11 +81,11 @@ export async function processarEventoWebhookVerificado(
       error.code === "P2002"
     ) {
       // Confirmar que o conflito pertence ao evento recebido.
-      const existente = await prisma.eventoWebhook.findUnique({
+      const existente = await prisma.evento_webhook.findUnique({
         where: {
-          provedor_eventoId: {
+          provedor_evento_id: {
             provedor,
-            eventoId,
+            evento_id: eventoId,
           },
         },
         select: {

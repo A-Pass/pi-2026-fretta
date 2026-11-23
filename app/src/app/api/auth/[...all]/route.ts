@@ -1,24 +1,38 @@
 import { toNextJsHandler } from "better-auth/next-js";
-import { googleConfigurationIssue } from "@/server/auth/google-configuration";
 import type { NextRequest } from "next/server";
+import { getAuthConfigurationError } from "@/server/auth/env";
 
-async function handlers() {
-  const { auth } = await import("@/server/auth/auth");
-  return toNextJsHandler(auth);
+export const runtime = "nodejs";
+
+let handlers: ReturnType<typeof toNextJsHandler> | undefined;
+
+async function getHandlers() {
+  if (!handlers) {
+    const { auth } = await import("@/server/auth");
+    handlers = toNextJsHandler(auth);
+  }
+  return handlers;
+}
+
+function configurationResponse() {
+  if (!getAuthConfigurationError()) return null;
+  return Response.json(
+    {
+      code: "AUTH_NOT_CONFIGURED",
+      message: "Google authentication is not configured on this server.",
+    },
+    { status: 503 },
+  );
 }
 
 export async function GET(request: NextRequest) {
-  return (await handlers()).GET(request);
+  const response = configurationResponse();
+  if (response) return response;
+  return (await getHandlers()).GET(request);
 }
 
 export async function POST(request: NextRequest) {
-  if (request.nextUrl.pathname.endsWith("/sign-in/social")) {
-    const issue = googleConfigurationIssue(process.env);
-    if (issue)
-      return Response.json(
-        { code: "AUTH_NOT_CONFIGURED", message: issue },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
-      );
-  }
-  return (await handlers()).POST(request);
+  const response = configurationResponse();
+  if (response) return response;
+  return (await getHandlers()).POST(request);
 }

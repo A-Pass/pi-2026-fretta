@@ -1,19 +1,57 @@
-FROM node:22-slim AS base
+# Estágio base compartilhado
+FROM node:22-trixie-slim AS base
+
+# Alterna para root para ter permissão de instalar pacotes no sistema
+USER root
+
+# Instala o openssl sem pacotes recomendados extras e remove os caches do apt na mesma camada
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npm run generate
-FROM base AS development
-EXPOSE 3000
-CMD ["npm", "run", "dev"]
-FROM base AS production
-ARG NEXT_PUBLIC_API_MODE=demo
-ENV NEXT_PUBLIC_API_MODE=$NEXT_PUBLIC_API_MODE
-RUN DATABASE_URL=postgresql://build:build@localhost:5432/build BETTER_AUTH_URL=http://localhost:3000 BETTER_AUTH_SECRET=build-only-placeholder-secret-at-least-32-characters npm run build
-ENV NODE_ENV=production
-RUN mkdir -p storage/private storage/uploads && chown -R node:node /app
+RUN chown node:node /app
 USER node
-EXPOSE 3000
-CMD ["npm", "start"]
+
+# 1. Copia apenas arquivos de dependências e Prisma
+COPY --chown=node:node package*.json ./
+COPY --chown=node:node prisma/schema.prisma ./prisma/schema.prisma
+COPY --chown=node:node prisma.config.ts ./prisma.config.ts
+
+# 2. Instala dependências (fica em cache se package.json/prisma não mudarem)
+RUN npm ci
+
+COPY --chown=node:node . .
+
+# Estágio de desenvolvimento (com devDependencies, watch e debug)
+FROM base AS development
+ARG APP_PORT=3000
+ENV PORT=$APP_PORT
+ENV NODE_ENV=development
+EXPOSE 9229
+
+CMD ["sh", "-c", "set -a && [ -f \"$ENV_FILE\" ] && . \"$ENV_FILE\"; set +a && exec npm run dev"]
+
+# Gera o servidor standalone e mantém o Prisma CLI disponível para as migrações.
+FROM base AS production-build
+ENV NODE_ENV=production
+ENV ENV_FILE=/run/secrets/dot_env
+# A coleta de rotas importa auth e Prisma; valores descartáveis existem só durante o build.
+RUN --mount=type=secret,id=dot_env,uid=1000 \
+    set -a && . /run/secrets/dot_env && set +a && \
+    npm run build && \
+    mkdir -p .next/standalone/.next && \
+    cp -R public .next/standalone/ && \
+    cp -R .next/static .next/standalone/.next/
+
+FROM gcr.io/distroless/nodejs22-debian13:nonroot AS production
+WORKDIR /app
+ARG APP_PORT=3000
+ENV NODE_ENV=production
+ENV ENV_FILE=/run/secrets/dot_env
+ENV PORT=$APP_PORT
+EXPOSE $APP_PORT
+COPY --from=production-build --chown=65532:65532 /app/ /app/
+# File-backed Compose secrets retain host ownership; the launcher drops privileges after loading them.
+USER 0:0
+CMD ["scripts/start.mjs"]

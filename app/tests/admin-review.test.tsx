@@ -1,182 +1,61 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import { seed } from "../src/frontend/mocks/seed";
-import {
-  demoCases,
-  reviewDemo,
-  reviewVersion,
-  caseWarnings,
-} from "../src/frontend/features/admin/rules";
+import { NextRequest } from "next/server";
 import { AdminApp } from "../src/frontend/features/admin/AdminApp";
-import { driverCanPropose } from "../src/frontend/features/onboarding/rules";
-function pending() {
-  const s = structuredClone(seed),
-    example = demoCases(s)[0];
-  s.driverRegistration = { ...example.registration };
-  s.profile = {
-    name: "Motorista de Teste",
-    photo: "data:image/png;base64,TEST",
-  };
-  s.vehicles = example.vehicles;
-  return s;
-}
-test("admin decision updates the actual demo registration and retains audit without private documents", () => {
-  const s = pending(),
-    c = demoCases(s)[0];
-  assert.equal(driverCanPropose(s), false);
-  const next = reviewDemo(
-    s,
-    c.id,
-    reviewVersion(c),
-    "APROVADO",
-    "Conferência de exemplo",
-    "2026-11-16T13:00:00Z",
-  );
-  assert.equal(driverCanPropose(next), true);
-  assert.equal(next.adminReviews?.[0].actor, "Administrador de demonstração");
-  assert.equal(next.adminReviews?.[0].decision, "APROVADO");
-  assert.equal(s.driverRegistration?.status, "EM_ANALISE");
-  assert.equal("licensePhoto" in next.driverRegistration!, false);
+import { GET, POST } from "../src/app/api/v1/[...path]/route";
+import { adminCredentialsConfigured } from "../src/server/admin-auth";
+test("admin login never exposes local demo credentials or registrations", () => {
+  const markup = renderToStaticMarkup(<AdminApp />);
+  assert.match(markup, /Login administrativo/);
+  assert.doesNotMatch(markup, /admin123|Carlos Almeida|Marina Souza/);
 });
-test("corrections need a usable reason and remain visible to the driver", () => {
-  const s = pending(),
-    c = demoCases(s)[0];
-  assert.throws(
-    () => reviewDemo(s, c.id, reviewVersion(c), "AJUSTES_SOLICITADOS", " "),
-    /10 a 1000/,
-  );
-  const next = reviewDemo(
-    s,
-    c.id,
-    reviewVersion(c),
-    "AJUSTES_SOLICITADOS",
-    "Reenvie uma imagem legível da CNH.",
-    undefined,
-    ["cnh"],
+test("admin credentials require explicit credentials and a signing secret", () => {
+  assert.equal(adminCredentialsConfigured({}), false);
+  assert.equal(
+    adminCredentialsConfigured({
+      FRETTA_ADMIN_USERNAME: "operator",
+      FRETTA_ADMIN_PASSWORD: "not-a-real-password",
+    }),
+    false,
   );
   assert.equal(
-    next.driverRegistration?.feedback,
-    "Reenvie uma imagem legível da CNH.",
-  );
-  assert.equal(driverCanPropose(next), false);
-  assert.deepEqual(next.driverRegistration?.correctionItems, ["cnh"]);
-  assert.deepEqual(next.adminReviews?.[0].correctionItems, ["cnh"]);
-  assert.throws(
-    () => reviewDemo(next, c.id, reviewVersion(c), "APROVADO", ""),
-    /mudou/,
+    adminCredentialsConfigured({
+      FRETTA_ADMIN_USERNAME: "operator",
+      FRETTA_ADMIN_PASSWORD: "not-a-real-password",
+      FRETTA_ADMIN_SECRET: "a-test-secret",
+    }),
+    true,
   );
 });
-test("approval rejects incomplete or expired driver data; examples do not approve the driver", () => {
-  const s = pending(),
-    c = demoCases(s)[0];
-  s.driverRegistration!.license.expiresOn = "2020-01-01";
-  assert.throws(
-    () => reviewDemo(s, c.id, reviewVersion(c), "APROVADO", ""),
-    /validade/,
+test("admin registration records and reviews require the authenticated admin cookie", async () => {
+  const getResponse = await GET(
+    new NextRequest("http://localhost/api/v1/admin/registrations"),
+    { params: Promise.resolve({ path: ["admin", "registrations"] }) },
   );
-  const example = demoCases(s)[1];
-  const next = reviewDemo(
-    s,
-    example.id,
-    reviewVersion(example),
-    "APROVADO",
-    "",
+  assert.equal(getResponse.status, 401);
+  const documentResponse = await GET(
+    new NextRequest(
+      "http://localhost/api/v1/admin/registrations/user-1/documents",
+    ),
+    {
+      params: Promise.resolve({
+        path: ["admin", "registrations", "user-1", "documents"],
+      }),
+    },
   );
-  assert.equal(next.driverRegistration?.status, "EM_ANALISE");
-  assert.equal(demoCases(next)[1].registration.status, "APROVADO");
-  assert.equal(next.adminReviews?.length, 1);
-});
-test("resubmission invalidates old review version and audit survives later decisions", () => {
-  const s = pending(),
-    c = demoCases(s)[0];
-  const changed = reviewDemo(
-    s,
-    c.id,
-    reviewVersion(c),
-    "AJUSTES_SOLICITADOS",
-    "Confira os dados enviados.",
-    undefined,
-    ["dados"],
-  );
-  changed.driverRegistration = {
-    ...changed.driverRegistration!,
-    status: "EM_ANALISE",
-    submittedAt: "2026-11-17T12:00:00Z",
-    reviewedAt: undefined,
-  };
-  assert.throws(
-    () => reviewDemo(changed, c.id, reviewVersion(c), "APROVADO", ""),
-    /mudou/,
-  );
-  const current = demoCases(changed)[0];
-  const approved = reviewDemo(
-    changed,
-    c.id,
-    reviewVersion(current),
-    "APROVADO",
-    "",
-  );
-  assert.equal(approved.adminReviews?.length, 2);
-  assert.equal(approved.driverRegistration?.feedback, undefined);
-});
-test("admin workspace clearly labels demo and real mode never renders local records", () => {
-  const before = process.env.NEXT_PUBLIC_API_MODE;
-  try {
-    process.env.NEXT_PUBLIC_API_MODE = "real";
-    const markup = renderToStaticMarkup(<AdminApp />);
-    assert.match(markup, /Análise de motoristas/);
-    assert.doesNotMatch(markup, /Carlos Almeida|Aprovar cadastro/);
-  } finally {
-    if (before === undefined) delete process.env.NEXT_PUBLIC_API_MODE;
-    else process.env.NEXT_PUBLIC_API_MODE = before;
-  }
-});
+  assert.equal(documentResponse.status, 401);
 
-test("correction categories must be present and valid, and approval blocks incomplete data", () => {
-  const s = pending(),
-    c = demoCases(s)[0];
-  assert.throws(
-    () =>
-      reviewDemo(
-        s,
-        c.id,
-        reviewVersion(c),
-        "AJUSTES_SOLICITADOS",
-        "Reenvie os documentos.",
-      ),
-    /Selecione/,
+  const postResponse = await POST(
+    new NextRequest(
+      "http://localhost/api/v1/admin/registrations/user-1/review",
+      { method: "POST", body: JSON.stringify({ decision: "APROVADO" }) },
+    ),
+    {
+      params: Promise.resolve({
+        path: ["admin", "registrations", "user-1", "review"],
+      }),
+    },
   );
-  assert.throws(
-    () =>
-      reviewDemo(
-        s,
-        c.id,
-        reviewVersion(c),
-        "AJUSTES_SOLICITADOS",
-        "Reenvie os documentos.",
-        undefined,
-        ["invalid" as never],
-      ),
-    /Selecione/,
-  );
-  s.profile!.photo = "";
-  s.vehicles![0].model = "";
-  s.driverRegistration!.documentsSubmitted = false;
-  const warnings = caseWarnings(demoCases(s)[0]);
-  assert.ok(warnings.includes("Foto do motorista ausente."));
-  assert.ok(warnings.includes("Documentação não enviada."));
-  assert.ok(warnings.includes("Há um veículo com dados incompletos."));
-  assert.throws(
-    () => reviewDemo(s, c.id, reviewVersion(c), "APROVADO", ""),
-    /Não é possível/,
-  );
-});
-test("submission number changes review version even if timestamps are equal", () => {
-  const s = pending(),
-    c = demoCases(s)[0],
-    v = reviewVersion(c);
-  s.driverRegistration!.submissionCount = 2;
-  assert.notEqual(reviewVersion(demoCases(s)[0]), v);
-  assert.throws(() => reviewDemo(s, c.id, v, "APROVADO", ""), /mudou/);
+  assert.equal(postResponse.status, 401);
 });

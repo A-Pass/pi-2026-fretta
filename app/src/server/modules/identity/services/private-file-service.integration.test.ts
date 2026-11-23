@@ -14,8 +14,8 @@ import {
 import { removerArquivoPrivado } from "../storage/private-file-storage";
 
 test("salva documento privado vinculado ao motorista", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -31,18 +31,18 @@ test("salva documento privado vinculado ao motorista", async () => {
 
   assert.equal(banco[0]?.banco, "fretta_test");
 
-  const motoristaId = `motorista-arquivo-${randomUUID()}`;
+  const motorista_id = `motorista-arquivo-${randomUUID()}`;
   let arquivoId: string | undefined;
 
   try {
     await prisma.user.create({
       data: {
-        id: motoristaId,
+        id: motorista_id,
         name: "Motorista Fictício",
-        email: `${motoristaId}@fretta.invalid`,
+        email: `${motorista_id}@fretta.invalid`,
         emailVerified: false,
         motorista: {
-          create: {},
+          create: { codigo_publico: randomUUID(), atualizado_em: new Date() },
         },
       },
     });
@@ -59,27 +59,27 @@ test("salva documento privado vinculado ao motorista", async () => {
       .toBuffer();
 
     const documento = await salvarDocumentoMotorista({
-      motoristaId,
+      motorista_id,
       tipo: "CNH",
       bytes: imagem,
     });
 
     arquivoId = documento.id;
 
-    const registro = await prisma.arquivoPrivado.findUniqueOrThrow({
+    const registro = await prisma.arquivo_privado.findUniqueOrThrow({
       where: { id: arquivoId },
     });
 
-    assert.equal(registro.motoristaId, motoristaId);
+    assert.equal(registro.motorista_id, motorista_id);
     assert.equal(registro.tipo, "CNH");
-    assert.equal(registro.mimeType, "image/jpeg");
-    assert.ok(registro.tamanhoBytes > 0);
+    assert.equal(registro.mime_type, "image/jpeg");
+    assert.ok(registro.tamanho_bytes > 0);
 
     const caminho = path.join(
       process.cwd(),
       "storage",
       "private",
-      registro.chaveArmazenamento,
+      registro.chave_armazenamento,
     );
 
     const arquivoFisico = await readFile(caminho);
@@ -88,24 +88,24 @@ test("salva documento privado vinculado ao motorista", async () => {
     console.log("Documento salvo e vinculado ao motorista - OK");
   } finally {
     if (arquivoId) {
-      const registro = await prisma.arquivoPrivado.findUnique({
+      const registro = await prisma.arquivo_privado.findUnique({
         where: { id: arquivoId },
       });
 
       if (registro) {
-        await removerArquivoPrivado(registro.chaveArmazenamento);
+        await removerArquivoPrivado(registro.chave_armazenamento);
       }
     }
 
     await prisma.user.deleteMany({
-      where: { id: motoristaId },
+      where: { id: motorista_id },
     });
   }
 });
 
 test("remove arquivo físico quando a persistência falha", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -140,7 +140,7 @@ test("remove arquivo físico quando a persistência falha", async () => {
 
   await assert.rejects(
     salvarDocumentoMotorista({
-      motoristaId: motoristaInexistente,
+      motorista_id: motoristaInexistente,
       tipo: "CNH",
       bytes: imagem,
     }),
@@ -154,9 +154,9 @@ test("remove arquivo físico quando a persistência falha", async () => {
     "O arquivo físico deveria ser removido após a falha.",
   );
 
-  const registros = await prisma.arquivoPrivado.count({
+  const registros = await prisma.arquivo_privado.count({
     where: {
-      motoristaId: motoristaInexistente,
+      motorista_id: motoristaInexistente,
     },
   });
 
@@ -165,8 +165,8 @@ test("remove arquivo físico quando a persistência falha", async () => {
   console.log("Arquivo removido após falha no PostgreSQL - OK");
 });
 test("valida propriedade e tipos dos documentos privados", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -182,12 +182,12 @@ test("valida propriedade e tipos dos documentos privados", async () => {
 
   assert.equal(banco[0]?.banco, "fretta_test");
 
-  const motoristaId = `motorista-docs-${randomUUID()}`;
+  const motorista_id = `motorista-docs-${randomUUID()}`;
   const outroMotoristaId = `outro-motorista-${randomUUID()}`;
   const chavesArquivos: string[] = [];
 
   try {
-    for (const id of [motoristaId, outroMotoristaId]) {
+    for (const id of [motorista_id, outroMotoristaId]) {
       await prisma.user.create({
         data: {
           id,
@@ -195,7 +195,10 @@ test("valida propriedade e tipos dos documentos privados", async () => {
           email: `${id}@fretta.invalid`,
           emailVerified: false,
           motorista: {
-            create: {},
+            create: {
+              codigo_publico: randomUUID(),
+              atualizado_em: new Date(),
+            },
           },
         },
       });
@@ -217,45 +220,45 @@ test("valida propriedade e tipos dos documentos privados", async () => {
       tipo: "FOTO_PERFIL" | "CNH",
     ) {
       const documento = await salvarDocumentoMotorista({
-        motoristaId: proprietarioId,
+        motorista_id: proprietarioId,
         tipo,
         bytes: imagem,
       });
 
-      const registro = await prisma.arquivoPrivado.findUniqueOrThrow({
+      const registro = await prisma.arquivo_privado.findUniqueOrThrow({
         where: { id: documento.id },
       });
 
-      chavesArquivos.push(registro.chaveArmazenamento);
+      chavesArquivos.push(registro.chave_armazenamento);
 
       return documento.id;
     }
 
-    const fotoId = await criarDocumento(motoristaId, "FOTO_PERFIL");
-    const cnhId = await criarDocumento(motoristaId, "CNH");
+    const fotoId = await criarDocumento(motorista_id, "FOTO_PERFIL");
+    const cnhId = await criarDocumento(motorista_id, "CNH");
     const cnhAlheiaId = await criarDocumento(outroMotoristaId, "CNH");
 
     // Dois documentos corretos do mesmo motorista.
     assert.equal(
-      await verificarDocumentosMotorista(motoristaId, fotoId, cnhId),
+      await verificarDocumentosMotorista(motorista_id, fotoId, cnhId),
       true,
     );
 
     // Documentos com tipos trocados.
     assert.equal(
-      await verificarDocumentosMotorista(motoristaId, cnhId, fotoId),
+      await verificarDocumentosMotorista(motorista_id, cnhId, fotoId),
       false,
     );
 
     // Documento pertencente a outro motorista.
     assert.equal(
-      await verificarDocumentosMotorista(motoristaId, fotoId, cnhAlheiaId),
+      await verificarDocumentosMotorista(motorista_id, fotoId, cnhAlheiaId),
       false,
     );
 
     // Mesmo documento informado duas vezes.
     assert.equal(
-      await verificarDocumentosMotorista(motoristaId, fotoId, fotoId),
+      await verificarDocumentosMotorista(motorista_id, fotoId, fotoId),
       false,
     );
 
@@ -268,7 +271,7 @@ test("valida propriedade e tipos dos documentos privados", async () => {
     await prisma.user.deleteMany({
       where: {
         id: {
-          in: [motoristaId, outroMotoristaId],
+          in: [motorista_id, outroMotoristaId],
         },
       },
     });

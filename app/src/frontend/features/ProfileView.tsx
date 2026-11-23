@@ -1,14 +1,11 @@
 import { useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, Camera, LogOut, Pencil, User, X } from "lucide-react";
 import type { Role, DriverRegistration } from "@/contracts";
 import { prepareOnboardingPhoto } from "./onboarding/images";
 import { useDiscardChanges } from "../components/useDiscardChanges";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { resetDemo } from "../api/client";
 type Props = {
   onAddresses: () => void;
-  onTeam?: () => void;
-  companyMember?: boolean;
   onRegistration: () => void;
   registration?: DriverRegistration;
   photoRequired: boolean;
@@ -22,13 +19,10 @@ type Props = {
   onSubscription: () => void;
   photo: string;
   role: Role;
-  subscription: boolean;
   setEntered: (b: boolean) => void;
 };
 export function ProfileView({
   onAddresses,
-  onTeam,
-  companyMember = false,
   onRegistration,
   registration,
   photoRequired,
@@ -42,10 +36,8 @@ export function ProfileView({
   onSubscription,
   photo,
   role,
-  subscription,
   setEntered,
 }: Props) {
-  const [restoreOpen, setRestoreOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftName, setDraftName] = useState(name),
     [draftPhoto, setDraftPhoto] = useState(photo),
@@ -60,6 +52,7 @@ export function ProfileView({
         <button className="back" onClick={() => discard.leave(onEdit)}>
           <ArrowLeft size={18} /> Voltar ao meu perfil
         </button>
+        <span className="eyebrow">DO SEU JEITO</span>
         <h1>Editar perfil</h1>
         <section className="panel profile profile-editor">
           <form
@@ -189,10 +182,9 @@ export function ProfileView({
     );
   return (
     <>
-      <div className="profile-page-heading">
-        <h1>Meu perfil</h1>
-      </div>
-      <section className="panel profile profile-overview">
+      <span className="eyebrow">DO SEU JEITO</span>
+      <h1>Meu perfil</h1>
+      <section className="panel profile">
         {photo ? (
           <img className="profile-photo" src={photo} alt={`Foto de ${name}`} />
         ) : (
@@ -200,7 +192,7 @@ export function ProfileView({
         )}
         <h2>{name}</h2>
         <p>
-          {role === "cliente" ? "Cliente" : "Motorista"} · Conta de demonstração
+          {role === "cliente" ? "Cliente" : "Motorista"} · Conta FRETTA
         </p>
         <button
           className="primary"
@@ -217,19 +209,11 @@ export function ProfileView({
           Meus Endereços{" "}
           <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
         </button>
-
+        <Link className="secondary profile-return" href="/admin">
+          Painel administrativo
+        </Link>
         {role === "motorista" && (
           <div className="profile-driver-links">
-            {onTeam && (
-              <button className="secondary" onClick={onTeam}>
-                Minha equipe e convites
-              </button>
-            )}
-            {registration?.personType === "pj" && (
-              <a className="secondary" href="/empresa">
-                Gerenciar empresa · demonstração
-              </a>
-            )}
             <button className="secondary" onClick={onPublicProfile}>
               Ver meu perfil público
             </button>
@@ -241,7 +225,7 @@ export function ProfileView({
             <button className="secondary" onClick={onRegistration}>
               Cadastro do motorista ·{" "}
               {registration?.status === "APROVADO"
-                ? "Aprovado na demonstração"
+                ? "Aprovado"
                 : registration?.status === "EM_ANALISE"
                   ? "Em análise"
                   : registration?.status === "AJUSTES_SOLICITADOS"
@@ -252,18 +236,10 @@ export function ProfileView({
               Meus veículos{" "}
               <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
             </button>
-            {!companyMember && (
-              <button className="secondary" onClick={onSubscription}>
-                Minha assinatura · {subscription ? "Ativa" : "Inativa"}{" "}
-                <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
-              </button>
-            )}
-            {companyMember && (
-              <p>
-                O acesso aos serviços da equipe é responsabilidade da empresa.
-                Sem assinatura individual para estes serviços.
-              </p>
-            )}
+            <button className="secondary" onClick={onSubscription}>
+              Minha assinatura · Demonstração{" "}
+              <ArrowLeft size={16} style={{ transform: "rotate(180deg)" }} />
+            </button>
           </div>
         )}
         <button
@@ -272,22 +248,7 @@ export function ProfileView({
         >
           <LogOut size={18} /> Sair da conta
         </button>
-        <button className="danger" onClick={() => setRestoreOpen(true)}>
-          Restaurar demonstração
-        </button>
       </section>
-      <ConfirmDialog
-        open={restoreOpen}
-        onClose={() => setRestoreOpen(false)}
-        title="Restaurar demonstração?"
-        description="Solicitações, conversas, veículos, endereços e alterações de perfil salvos neste navegador serão apagados e substituídos pelos exemplos iniciais."
-        confirmLabel="Restaurar demonstração"
-        cancelLabel="Manter meus dados"
-        onConfirm={async () => {
-          resetDemo();
-          return true;
-        }}
-      />
     </>
   );
 }

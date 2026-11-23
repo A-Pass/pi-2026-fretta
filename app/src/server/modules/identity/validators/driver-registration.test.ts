@@ -8,11 +8,11 @@ import {
 // Dados fictícios para testar o validador
 const cadastroPF: CadastroMotoristaInput = {
   tipoPessoa: "PF",
-  nomeCompleto: "Motorista Teste",
+  nome_completo: "Motorista Teste",
   cpf: "529.982.247-25",
-  cnhNumero: "12345678901",
-  cnhCategoria: "B",
-  cnhValidade: "2099-12-31",
+  cnh_numero: "12345678901",
+  cnh_categoria: "B",
+  cnh_validade: "2099-12-31",
   veiculoId: "veiculo-teste",
 };
 
@@ -34,7 +34,7 @@ const cadastroPJ: CadastroMotoristaInput = {
   ...cadastroPF,
   tipoPessoa: "PJ",
   cnpj: "11.222.333/0001-81",
-  razaoSocial: "Empresa Teste",
+  razao_social: "Empresa Teste",
 };
 
 assert.deepEqual(validarCadastroMotorista(cadastroPJ), []);
@@ -52,7 +52,7 @@ console.log("Teste 4: PJ sem CNPJ - OK");
 // Teste 5: CNH vencida
 const cnhVencida = validarCadastroMotorista({
   ...cadastroPF,
-  cnhValidade: "2020-01-01",
+  cnh_validade: "2020-01-01",
 });
 
 assert.ok(cnhVencida.includes("CNH vencida ou data inválida."));

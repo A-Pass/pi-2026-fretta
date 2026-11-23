@@ -11,8 +11,8 @@ import { prisma } from "../../../db/prisma";
 import { GET, POST } from "../../../../app/api/v1/[...path]/route";
 
 test("protege e integra as rotas HTTP de mensagens", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
   assert.ok(
@@ -28,8 +28,8 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
   assert.equal(banco[0]?.banco, "fretta_test");
 
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -40,8 +40,8 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
 
   const usuarios: string[] = [];
   let conversaId: string | undefined;
-  let propostaId: string | undefined;
-  let freteId: string | undefined;
+  let proposta_id: string | undefined;
+  let frete_id: string | undefined;
 
   async function criarUsuario(nome: string) {
     const email = `chat-http-${randomUUID()}@fretta.invalid`;
@@ -97,42 +97,62 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
     const terceiro = await criarUsuario("Terceiro Fictício");
 
     await prisma.cliente.create({
-      data: { userId: cliente.id },
+      data: { user_id: cliente.id },
     });
 
     await prisma.motorista.create({
-      data: { userId: motorista.id },
+      data: {
+        user_id: motorista.id,
+        codigo_publico: randomUUID(),
+        atualizado_em: new Date(),
+      },
     });
 
     const frete = await prisma.frete.create({
       data: {
-        clienteId: cliente.id,
+        id: randomUUID(),
+        cliente: { connect: { user_id: cliente.id } },
         titulo: "Frete de teste HTTP",
-        categoriaVeiculo: "UTILITARIO",
-        origemSnapshot: {
-          cidade: "Eunápolis",
-          uf: "BA",
+        categoria_porte: "PEQUENO",
+        tipo_agendamento_enum: "COMBINAR",
+        atualizado_em: new Date(),
+        endereco_frete_endereco_origem_idToendereco: {
+          create: {
+            id: randomUUID(),
+            logradouro: "Rua Fictícia",
+            cidade: "Eunápolis",
+            estado: "BA",
+            cep: "45880000",
+          },
         },
-        destinoSnapshot: {
-          cidade: "Porto Seguro",
-          uf: "BA",
+        endereco_frete_endereco_destino_idToendereco: {
+          create: {
+            id: randomUUID(),
+            logradouro: "Avenida Fictícia",
+            cidade: "Porto Seguro",
+            estado: "BA",
+            cep: "45810000",
+          },
         },
       },
     });
 
-    freteId = frete.id;
+    frete_id = frete.id;
 
     const proposta = await prisma.proposta.create({
       data: {
-        freteId: frete.id,
-        motoristaId: motorista.id,
+        id: randomUUID(),
+        frete_id: frete.id,
+        motorista_id: motorista.id,
+        valor_proposto: 100,
+        atualizado_em: new Date(),
       },
     });
 
-    propostaId = proposta.id;
+    proposta_id = proposta.id;
 
     const conversa = await prisma.conversa.create({
-      data: { propostaId: proposta.id },
+      data: { id: randomUUID(), proposta_id: proposta.id, atualizado_em: new Date() },
     });
 
     conversaId = conversa.id;
@@ -177,23 +197,23 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
     // Uma mensagem enviada pelo motorista deve notificar o cliente.
     const notificacoesCliente = await prisma.notificacao.findMany({
       where: {
-        destinatarioId: cliente.id,
+        destinatario_id: cliente.id,
         evento: "NOVA_MENSAGEM",
-        conversaId,
+        conversa_id: conversaId,
       },
     });
 
     assert.equal(notificacoesCliente.length, 1);
 
-    assert.equal(notificacoesCliente[0].freteId, freteId);
-    assert.equal(notificacoesCliente[0].propostaId, propostaId);
+    assert.equal(notificacoesCliente[0].frete_id, frete_id);
+    assert.equal(notificacoesCliente[0].proposta_id, proposta_id);
     assert.equal(notificacoesCliente[0].lida, false);
 
     // O motorista não deve receber notificação da própria mensagem.
     const notificacoesMotorista = await prisma.notificacao.count({
       where: {
-        destinatarioId: motorista.id,
-        conversaId,
+        destinatario_id: motorista.id,
+        conversa_id: conversaId,
       },
     });
 
@@ -222,16 +242,16 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
     assert.equal(mensagemReenviada.id, mensagem.id);
 
     const total = await prisma.mensagem.count({
-      where: { conversaId },
+      where: { proposta_id },
     });
 
     assert.equal(total, 1);
     // Reenviar a mesma mensagem não pode duplicar a notificação.
     const totalNotificacoes = await prisma.notificacao.count({
       where: {
-        destinatarioId: cliente.id,
+        destinatario_id: cliente.id,
         evento: "NOVA_MENSAGEM",
-        conversaId,
+        conversa_id: conversaId,
       },
     });
 
@@ -267,15 +287,15 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
     // O motorista deve receber exatamente uma notificação.
     const notificacoesDoMotorista = await prisma.notificacao.findMany({
       where: {
-        destinatarioId: motorista.id,
+        destinatario_id: motorista.id,
         evento: "NOVA_MENSAGEM",
-        conversaId,
+        conversa_id: conversaId,
       },
     });
 
     assert.equal(notificacoesDoMotorista.length, 1);
-    assert.equal(notificacoesDoMotorista[0].freteId, freteId);
-    assert.equal(notificacoesDoMotorista[0].propostaId, propostaId);
+    assert.equal(notificacoesDoMotorista[0].frete_id, frete_id);
+    assert.equal(notificacoesDoMotorista[0].proposta_id, proposta_id);
     assert.equal(notificacoesDoMotorista[0].lida, false);
 
     // Reenviar a mesma mensagem não pode gerar outra notificação.
@@ -294,9 +314,9 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
 
     const totalNotificacoesMotorista = await prisma.notificacao.count({
       where: {
-        destinatarioId: motorista.id,
+        destinatario_id: motorista.id,
         evento: "NOVA_MENSAGEM",
-        conversaId,
+        conversa_id: conversaId,
       },
     });
 
@@ -304,11 +324,11 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
 
     // Devem existir duas mensagens e duas notificações na conversa.
     const totalMensagensConversa = await prisma.mensagem.count({
-      where: { conversaId },
+      where: { proposta_id },
     });
 
     const totalNotificacoesConversa = await prisma.notificacao.count({
-      where: { conversaId },
+      where: { conversa_id: conversaId },
     });
 
     assert.equal(totalMensagensConversa, 2);
@@ -347,14 +367,15 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
     assert.equal(await unread(motorista.cookie, "motorista"), true);
     const aceite = await prisma.notificacao.create({
       data: {
-        destinatarioId: motorista.id,
-        papelDestinatario: "motorista",
+        id: randomUUID(),
+        destinatario_id: motorista.id,
+        papel_destinatario: "motorista",
         evento: "ACEITE",
         titulo: "Proposta aceita",
         corpo: frete.titulo,
-        propostaId,
-        freteId,
-        conversaId,
+        proposta_id,
+        frete_id,
+        conversa_id: conversaId,
       },
     });
     async function acceptanceSummary(cookie: string) {
@@ -380,13 +401,13 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
     // Remover notificações fictícias criadas neste teste.
     if (conversaId) {
       await prisma.notificacao.deleteMany({
-        where: { conversaId },
+        where: { conversa_id: conversaId },
       });
     }
 
     if (conversaId) {
       await prisma.mensagem.deleteMany({
-        where: { conversaId },
+        where: { proposta_id },
       });
 
       await prisma.conversa.deleteMany({
@@ -395,15 +416,15 @@ test("protege e integra as rotas HTTP de mensagens", async () => {
     }
     // Mantenha o restante da limpeza que já existe.
 
-    if (propostaId) {
+    if (proposta_id) {
       await prisma.proposta.deleteMany({
-        where: { id: propostaId },
+        where: { id: proposta_id },
       });
     }
 
-    if (freteId) {
+    if (frete_id) {
       await prisma.frete.deleteMany({
-        where: { id: freteId },
+        where: { id: frete_id },
       });
     }
 

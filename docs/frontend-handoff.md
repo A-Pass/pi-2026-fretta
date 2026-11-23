@@ -8,7 +8,13 @@ Além dos fluxos de cliente e motorista já descritos no [checklist](frontend-ch
 
 O perfil público contém somente campos permitidos. Média e contagem vêm dos fretes concluídos do exemplo; nenhuma aprovação oficial é inferida. A empresa nesta versão tem um motorista responsável. Gerenciar vários funcionários com contas próprias requer um modelo de organização e permissões posterior.
 
-## Integração preparada, ainda não conectada
+## Autenticação Google (17/11/2026)
+
+Login OAuth Google e sessão de servidor estão implementados com Better Auth e Prisma/PostgreSQL. O callback autorizado é `${APP_URL}/api/auth/callback/google`; a tela de retorno confirma a identidade da sessão e permite encerrá-la. Configure as variáveis indicadas no [README](../README.md) e garanta que as tabelas Better Auth previstas em `database/schema.prisma` já existam no banco. Nenhuma migração foi aplicada nesta alteração.
+
+Após o login, os fluxos de frete permanecem na demonstração local e não são associados à identidade Google. A sessão não concede acesso a dados privados nem isola a demonstração; cadastro complementar, autorização e endpoints de domínio seguem pendentes. Não use dados reais até esses fluxos serem integrados.
+
+## Integração de domínio preparada, ainda não conectada
 
 `app/src/frontend/api/http.ts` centraliza cookies de mesma origem, timeout, cancelamento, erros e páginas com cursor. `backend.ts` descreve chamadas tipadas para as operações principais. Não repete mutações automaticamente nem troca falha real por dados simulados. Os DTOs são uma proposta baseada em `api.md`, a confirmar com os responsáveis pelo back-end. O modo real atual continua diagnóstico e recebe 501: não basta ativá-lo para ter uma aplicação integrada.
 
@@ -16,7 +22,7 @@ A integração final ainda precisa substituir a leitura/gravação do Store demo
 
 ## Checklist que depende do grupo ou de Cleiton
 
-- [ ] Back-end disponibilizar autenticação Google, sessão, cadastro/análise do motorista e endpoints funcionais com DTOs e erros acordados. Depois conectar e testar duas contas isoladas.
+- [ ] Back-end disponibilizar cadastro/análise do motorista e endpoints funcionais com DTOs e erros acordados. Depois conectar à sessão Google e testar duas contas isoladas.
 - [ ] Definir armazenamento privado, análise e acesso aos documentos; fornecer upload autenticado e IDs de arquivo. A interface não comprova autenticidade de CNH/CPF/CNPJ.
 - [ ] Disponibilizar chat/notificações entre contas com protocolo de atualização, reconexão e autorização. Decidir se notificações push entram no escopo.
 - [ ] Caso assinatura paga permaneça no escopo, definir provedor e ambiente de testes; estado da assinatura deve vir do servidor.

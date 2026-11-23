@@ -11,8 +11,8 @@ import { prisma } from "../../../db/prisma";
 import { GET } from "../../../../app/api/v1/[...path]/route";
 
 test("logout invalida a sessão e bloqueia acesso ao perfil", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -29,8 +29,8 @@ test("logout invalida a sessão e bloqueia acesso ao perfil", async () => {
   assert.equal(banco[0]?.banco, "fretta_test");
 
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),

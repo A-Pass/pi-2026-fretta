@@ -1,22 +1,11 @@
-import { useState } from "react";
 import { ArrowLeft, Check, ShieldCheck } from "lucide-react";
-import { ConfirmDialog } from "../../components/ConfirmDialog";
-export function SubscriptionView({
-  active,
-  onChange,
-  onBack,
-}: {
-  active: boolean;
-  onChange: (active: boolean) => Promise<boolean>;
-  onBack: () => void;
-}) {
-  const [confirm, setConfirm] = useState(false);
+export function SubscriptionView({ onBack }: { onBack: () => void }) {
   return (
     <>
       <button className="back" onClick={onBack}>
         <ArrowLeft size={18} /> Voltar ao meu perfil
       </button>
-      <span className="eyebrow">MAIS CAMINHOS PARA SEU TRABALHO</span>
+      <span className="eyebrow">TELA DEMONSTRATIVA</span>
       <h1>Minha assinatura</h1>
       <section className="panel subscription-page">
         <ShieldCheck size={34} color="var(--orange)" />
@@ -24,9 +13,7 @@ export function SubscriptionView({
         <p className="plan-price">
           R$ 49,90 <small>/ mês</small>
         </p>
-        <span className="badge">
-          {active ? "Ativa na demonstração" : "Inativa na demonstração"}
-        </span>
+        <span className="badge">Plano demonstrativo · sem cobrança</span>
         <ul>
           <li>
             <Check size={16} /> Buscar solicitações na sua área
@@ -39,39 +26,17 @@ export function SubscriptionView({
           </li>
         </ul>
         <p>
-          Seu histórico e o atendimento de fretes já contratados continuam
-          acessíveis quando a assinatura está inativa.
+          Você pode usar as funcionalidades do motorista sem assinatura. Esta
+          tela apresenta apenas uma demonstração do plano.
         </p>
-        <button className="primary" onClick={() => setConfirm(true)}>
-          {active ? "Simular vencimento" : "Experimentar ativação"}
+        <button className="primary" disabled>
+          Assinatura indisponível
         </button>
         <p className="muted">
-          Esta tela é uma demonstração. Nenhum pagamento será solicitado ou
-          cobrado.
+          A ativação ficará disponível quando houver uma integração de pagamento
+          e confirmação pelo servidor.
         </p>
       </section>
-      <ConfirmDialog
-        open={confirm}
-        onClose={() => setConfirm(false)}
-        title={
-          active
-            ? "Simular assinatura inativa?"
-            : "Ativar assinatura de demonstração?"
-        }
-        description={
-          active
-            ? "Você poderá conferir a experiência com a assinatura vencida, preservando os serviços contratados."
-            : "O acesso às oportunidades e novas propostas será liberado nesta demonstração. Não haverá cobrança."
-        }
-        confirmLabel={active ? "Simular vencimento" : "Ativar demonstração"}
-        cancelLabel="Voltar"
-        destructive={false}
-        onConfirm={async () => {
-          const ok = await onChange(!active);
-          if (ok) setConfirm(false);
-          return ok;
-        }}
-      />
     </>
   );
 }

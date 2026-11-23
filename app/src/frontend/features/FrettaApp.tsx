@@ -13,21 +13,29 @@ import {
 import type {
   AppNotification,
   FreightRequestDraft,
+  Freight,
   Proposal,
   ProposalOffer,
   Store,
 } from "@/contracts";
-import { api, resetDemo } from "../api/client";
+import { api } from "../api/client";
+import {
+  createBackendClient,
+  type FreightFeedItem,
+} from "../api/backend";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SuccessDialog } from "../components/SuccessDialog";
 import { ProposalFormDialog } from "../components/ProposalFormDialog";
 import { EmptyState } from "../components/EmptyState";
 import { RequestWizard } from "./RequestWizard";
 import { AddressBookView } from "./addresses/AddressBookView";
-import { createRequest as buildRequest } from "./addresses/createRequest";
 import { DriverHomeView } from "./driver/DriverHomeView";
 import { DriverServicesView } from "./driver/DriverServicesView";
-import { defaultArea, ownProposal } from "./driver/rules";
+import {
+  freightFromFeedItem,
+  isFreightFeedItem,
+  ownProposal,
+} from "./driver/rules";
 import { LoginView } from "./LoginView";
 import { WelcomeView } from "./WelcomeView";
 import { ProfileView } from "./ProfileView";
@@ -38,7 +46,7 @@ import { VehicleBookView } from "./vehicles/VehicleBookView";
 import { NotificationsView } from "./notifications/NotificationsView";
 import { withNotifications, unreadNotifications } from "./notifications/rules";
 import { SubscriptionView } from "./subscription/SubscriptionView";
-import { useDemoNavigation } from "./navigation/useDemoNavigation";
+import { useNavigation } from "./navigation/useNavigation";
 import { reviseOffer } from "./freights/negotiation";
 import { scheduleLabel } from "../lib/dates";
 import { DriverOnboardingView } from "./onboarding/DriverOnboardingView";
@@ -51,30 +59,19 @@ import {
   publicProvider,
 } from "./providers/rules";
 import { InstallApp } from "../components/InstallApp";
+import { authClient } from "../auth/client";
 
-import { editRequest, requestDraft } from "./requests/rules";
-
-import { FleetWorkspace } from "./fleet/FleetWorkspace";
-import { fleetState } from "./fleet/rules";
-
-import { RealPortal } from "./integration/RealPortal";
+const opportunityCache = new Map<string, FreightFeedItem>();
+const opportunityStorageKey = "fretta-selected-opportunity";
 
 export function FrettaApp() {
-  return process.env.NEXT_PUBLIC_API_MODE === "real" ? (
-    <RealPortal />
-  ) : (
-    <DemoFrettaApp />
-  );
-}
-function DemoFrettaApp() {
-  const navigation = useDemoNavigation();
+  const navigation = useNavigation();
   const {
     role,
     tab,
     selected,
     chatId,
     providerId,
-    entered,
     ready,
     loginRequested,
     setRole,
@@ -82,29 +79,65 @@ function DemoFrettaApp() {
     setChatId,
   } = navigation;
   const [store, setStore] = useState<Store | null>(null),
+    [selectedOpportunity, setSelectedOpportunity] = useState<Freight | null>(
+      null,
+    ),
+    [resolvedOpportunityId, setResolvedOpportunityId] = useState<string | null>(
+      null,
+    ),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [googleSignInPending, setGoogleSignInPending] = useState(false);
+  const [googleSignInError, setGoogleSignInError] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
   const [updatingDriver, setUpdatingDriver] = useState(false);
-  const [editingRequest, setEditingRequest] = useState<{
-    id: string;
-    revision: number;
-    draft: FreightRequestDraft;
-  } | null>(null);
   const [modal, setModal] = useState(""),
-    [success, setSuccess] = useState<"proposal" | "request" | "edit" | null>(
-      null,
-    );
+    [success, setSuccess] = useState<"proposal" | "request" | null>(null);
+  const [publishedRequestId, setPublishedRequestId] = useState<string | null>(
+    null,
+  );
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("TODOS");
   const latest = useRef<Store | null>(null),
     saving = useRef(false),
     main = useRef<HTMLElement>(null);
-  const name = store?.profile?.name || "Cleiton",
-    profilePhoto = store?.profile?.photo || "",
-    subscription = store?.subscriptionActive ?? true;
+  const name = store?.profile?.name || "",
+    profilePhoto = store?.profile?.photo || "";
   useEffect(() => {
+    if (role !== "motorista" || !selected) {
+      setResolvedOpportunityId(selected);
+      return;
+    }
+    if (selectedOpportunity?.id === selected) {
+      setResolvedOpportunityId(selected);
+      return;
+    }
+
+    let cached = opportunityCache.get(selected);
+    if (!cached) {
+      try {
+        const stored = sessionStorage.getItem(opportunityStorageKey);
+        const item: unknown = stored ? JSON.parse(stored) : null;
+        if (isFreightFeedItem(item) && item.id === selected) cached = item;
+      } catch {
+        cached = undefined;
+      }
+    }
+    if (cached) setSelectedOpportunity(freightFromFeedItem(cached));
+    setResolvedOpportunityId(selected);
+  }, [role, selected, selectedOpportunity?.id]);
+  useEffect(() => {
+    let active = true;
+    void authClient.getSession().then(({ data }) => {
+      if (active) setAuthenticated(Boolean(data));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!authenticated) return;
     let active = true;
     const load = () =>
       api
@@ -123,22 +156,65 @@ function DemoFrettaApp() {
           }
         });
     void load();
-    const sync = (e: StorageEvent) => {
-      if (e.key === "fretta-demo-v1" && !saving.current) void load();
-    };
-    window.addEventListener("storage", sync);
     return () => {
       active = false;
-      window.removeEventListener("storage", sync);
     };
-  }, []);
+  }, [authenticated]);
+  useEffect(() => {
+    if (!authenticated || role !== "cliente" || !selected) return;
+    let active = true;
+    let refreshing = false;
+    const refresh = () => {
+      if (refreshing || saving.current) return;
+      refreshing = true;
+      void api
+        .load()
+        .then((s) => {
+          if (!active) return;
+          const current = latest.current;
+          const updated = current
+            ? {
+                ...current,
+                proposals: [
+                  ...current.proposals.filter(
+                    (proposal) => proposal.freightId !== selected,
+                  ),
+                  ...s.proposals.filter(
+                    (proposal) => proposal.freightId === selected,
+                  ),
+                ],
+              }
+            : s;
+          latest.current = updated;
+          setStore(updated);
+        })
+        .catch((failure) => {
+          if (!active) return;
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : "Não foi possível atualizar as propostas recebidas.",
+          );
+        })
+        .finally(() => {
+          refreshing = false;
+        });
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    const interval = window.setInterval(refresh, 15000);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(interval);
+    };
+  }, [authenticated, role, selected]);
   useEffect(() => {
     setModal("");
-    setEditingRequest(null);
     setUpdatingDriver(false);
     setError("");
-    if (entered && !chatId) main.current?.focus({ preventScroll: true });
-  }, [role, tab, selected, chatId, providerId, entered]);
+    if (authenticated && !chatId) main.current?.focus({ preventScroll: true });
+  }, [role, tab, selected, chatId, providerId, authenticated]);
   async function save(next: Store): Promise<boolean> {
     if (saving.current) return false;
     saving.current = true;
@@ -165,65 +241,95 @@ function DemoFrettaApp() {
     setQuery("");
     setFilter("TODOS");
   }
-  const f = store?.freights.find((f) => f.id === selected);
+  const f =
+    store?.freights.find((f) => f.id === selected) ||
+    (role === "motorista" && selectedOpportunity?.id === selected
+      ? selectedOpportunity
+      : undefined);
   const proposals =
     store?.proposals.filter(
       (p) =>
         p.freightId === selected &&
-        (role === "cliente" || ownProposal(p, name)),
+        (role === "cliente" || ownProposal(p, store?.profile?.id || "")),
     ) || [];
   const accepted = proposals.find(
     (p) => p.id === f?.acceptedProposalId && p.status === "ACEITA",
   );
   const own = store?.proposals.find(
-    (p) => p.freightId === selected && ownProposal(p, name),
+    (p) =>
+      p.freightId === selected && ownProposal(p, store?.profile?.id || ""),
   );
   async function createRequest(draft: FreightRequestDraft) {
     if (!store) return false;
-    const next = buildRequest(store, draft);
-    if (!(await save(next))) return false;
-    setSelected(next.freights[0].id);
-    setModal("");
-    setSuccess("request");
-    return true;
+    try {
+      const { freight, savedAddresses = [] } = await createBackendClient().createFreight({
+        title: draft.title,
+        description: draft.description,
+        vehicle: draft.vehicle,
+        schedule: draft.schedule,
+        pickup: draft.pickup,
+        delivery: draft.delivery,
+        photoIds: draft.photos,
+        savePickup: draft.savePickup,
+        saveDelivery: draft.saveDelivery,
+      });
+      const next: Store = {
+        ...store,
+        addresses: [...(store.addresses || []), ...savedAddresses],
+        freights: [freight, ...store.freights.filter((item) => item.id !== freight.id)],
+        freightAddresses: {
+          ...store.freightAddresses,
+          [freight.id]: {
+            pickup: structuredClone(draft.pickup),
+            delivery: structuredClone(draft.delivery),
+          },
+        },
+      };
+      latest.current = next;
+      setStore(next);
+      setPublishedRequestId(freight.id);
+      setModal("");
+      setSuccess("request");
+      return true;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível publicar a solicitação.",
+      );
+      return false;
+    }
   }
   async function propose(offer: ProposalOffer) {
     if (
       !store ||
       !f ||
       role !== "motorista" ||
-      !subscription ||
       !driverCanPropose(store) ||
-      !!fleetState(store)?.members.some(
-        (m) => m.driverId === "demo-driver" && !m.leftAt,
-      ) ||
       f.status !== "ABERTO"
     )
       throw new Error("Não é possível enviar uma proposta agora.");
     const existing = store.proposals.find(
-      (p) => p.freightId === f.id && ownProposal(p, name),
+      (p) => p.freightId === f.id && ownProposal(p, store.profile?.id || ""),
     );
     let next: Store;
     if (existing) next = reviseOffer(store, existing.id, offer);
     else {
-      const p: Proposal = {
-        ...offer,
-        id: crypto.randomUUID(),
-        freightId: f.id,
-        requestRevision: f.revision || 0,
-        driver: name,
-        driverId: "demo-driver",
-        rating: publicProvider(store, "demo-driver")?.rating || 0,
-        providerName: publicProvider(store, "demo-driver")?.name || name,
-        providerKind: publicProvider(store, "demo-driver")?.kind || "autonomo",
-        providerLogo:
-          store.driverRegistration?.personType === "pj"
-            ? store.companyProfile?.logo
-            : undefined,
-        status: "PENDENTE",
-        offers: [offer],
-      };
+      const p = await createBackendClient().propose(f.id, {
+        priceCents: offer.priceCents,
+        vehicleId: offer.vehicleId || "",
+        availableAt: offer.availableAt,
+        message: offer.message,
+      });
       next = { ...store, proposals: [...store.proposals, p] };
+    }
+    if (!existing) {
+      const enriched = withNotifications(latest.current || next, next);
+      latest.current = enriched;
+      setStore(enriched);
+      setModal("");
+      setSuccess("proposal");
+      return true;
     }
     const ok = await save(next);
     if (ok) {
@@ -239,7 +345,7 @@ function DemoFrettaApp() {
       !p ||
       !text.trim() ||
       text.length > 2000 ||
-      (role === "motorista" && !ownProposal(p, name))
+      (role === "motorista" && !ownProposal(p, store.profile?.id || ""))
     )
       return false;
     return save({
@@ -258,13 +364,43 @@ function DemoFrettaApp() {
     });
   }
   function openNotification(n: AppNotification) {
-    if (n.companyInviteId) {
-      setRole("motorista");
-      navigation.nav("equipe");
-      return;
-    }
     if (n.proposalId) setChatId(n.proposalId);
     else setSelected(n.freightId);
+  }
+  async function signInWithGoogle() {
+    setGoogleSignInError("");
+    setGoogleSignInPending(true);
+    try {
+      const { error: signInError } = await authClient.signIn.social({
+        provider: "google",
+        callbackURL: `/auth/complete?perfil=${role}`,
+        additionalParams: { prompt: "select_account" },
+      });
+      if (signInError) {
+        setGoogleSignInError(
+          "Não foi possível iniciar o login Google. Confira a configuração do servidor e tente novamente.",
+        );
+      }
+    } catch {
+      setGoogleSignInError(
+        "Não foi possível iniciar o login Google. Confira a configuração do servidor e tente novamente.",
+      );
+    } finally {
+      setGoogleSignInPending(false);
+    }
+  }
+  async function signOut() {
+    try {
+      const { error: signOutError } = await authClient.signOut();
+      if (signOutError) {
+        setError("Não foi possível encerrar a sessão. Tente novamente.");
+        return;
+      }
+      setAuthenticated(false);
+      navigation.logout();
+    } catch {
+      setError("Não foi possível encerrar a sessão. Tente novamente.");
+    }
   }
   if (!ready)
     return (
@@ -272,19 +408,17 @@ function DemoFrettaApp() {
         Preparando seu caminho…
       </main>
     );
-  if (!entered && loginRequested)
+  if (!authenticated && loginRequested)
     return (
       <LoginView
         role={role}
         onBack={() => navigation.setLoginRequested(false)}
-        onContinue={() => {
-          navigation.login();
-          if (role === "motorista" && !store?.driverRegistration)
-            navigation.nav("cadastro-motorista");
-        }}
+        onGoogleSignIn={() => void signInWithGoogle()}
+        googleSignInPending={googleSignInPending}
+        googleSignInError={googleSignInError}
       />
     );
-  if (!entered)
+  if (!authenticated)
     return (
       <WelcomeView
         role={role}
@@ -302,46 +436,24 @@ function DemoFrettaApp() {
         {loadError && (
           <>
             <p role="alert">{loadError}</p>
+            {error && <p role="alert">{error}</p>}
             <button className="secondary" onClick={() => location.reload()}>
               Tentar novamente
             </button>
-            <button className="danger" onClick={() => setRestoreOpen(true)}>
-              Restaurar demonstração
-            </button>
-            <button className="secondary" onClick={() => navigation.logout()}>
-              Voltar ao início
+            <button className="secondary" onClick={() => void signOut()}>
+              Encerrar sessão
             </button>
           </>
         )}
-        <ConfirmDialog
-          open={restoreOpen}
-          onClose={() => setRestoreOpen(false)}
-          title="Restaurar demonstração?"
-          description="Os dados locais deste navegador serão apagados e substituídos pelos exemplos iniciais."
-          confirmLabel="Restaurar demonstração"
-          cancelLabel="Manter meus dados"
-          onConfirm={async () => {
-            resetDemo();
-            return true;
-          }}
-        />
       </main>
     );
-  if (
-    role === "motorista" &&
-    (tab === "cadastro-motorista" ||
-      (!driverCanPropose(store) &&
-        tab === "inicio" &&
-        !fleetState(store)?.members.some(
-          (m) => m.driverId === "demo-driver" && !m.leftAt,
-        )))
-  ) {
+  if (role === "motorista" && tab === "cadastro-motorista") {
     if (!store.driverRegistration || updatingDriver)
       return (
         <DriverOnboardingView
           store={store}
           onClient={() => setRole("cliente")}
-          onLogout={navigation.logout}
+          onLogout={() => void signOut()}
           onServices={() => nav("fretes")}
           onSubmit={async (draft) => {
             const ok = await save(submitDriverRegistration(store, draft));
@@ -364,7 +476,7 @@ function DemoFrettaApp() {
         onServices={() => nav("fretes")}
         onConversations={() => nav("chat")}
         onClient={() => setRole("cliente")}
-        onLogout={navigation.logout}
+        onLogout={() => void signOut()}
       />
     );
   }
@@ -407,7 +519,6 @@ function DemoFrettaApp() {
                   "veiculos",
                   "assinatura",
                   "empresa",
-                  "equipe",
                 ].includes(tab));
             return (
               <button
@@ -457,11 +568,10 @@ function DemoFrettaApp() {
               aria-label="Configurar área de operação"
             >
               <MapPin size={16} />
-              {(store.operatingArea || defaultArea).label}
+              {store.operatingArea?.label || "Definir área de operação"}
             </button>
           )}
           <div>
-            <span className="demo">DEMONSTRAÇÃO</span>
             <button
               className="notification-bell"
               aria-label={`Notificações${unread ? `, ${unread} ${unread === 1 ? "não lida" : "não lidas"}` : ""}`}
@@ -513,25 +623,11 @@ function DemoFrettaApp() {
               </button>
             </div>
           )}
-          {role === "motorista" &&
-          ["inicio", "fretes", "chat"].includes(tab) &&
-          fleetState(store)?.members.some(
-            (m) => m.driverId === "demo-driver" && !m.leftAt,
-          ) ? (
-            <FleetWorkspace
-              embeddedStore={store}
-              onSave={save}
-              initialActor="demo-driver"
-            />
-          ) : providerId ? (
+          {providerId ? (
             <ProviderProfileView
               key={providerId}
-              provider={publicProvider(
-                store,
-                providerId,
-                navigation.providerConversationId || undefined,
-              )}
-              preview={role === "motorista" && providerId === "demo-driver"}
+              provider={publicProvider(store, providerId)}
+              preview={role === "motorista" && providerId === store.profile?.id}
               onBack={() => navigation.back("fretes")}
               onConversation={
                 role === "cliente" &&
@@ -552,9 +648,16 @@ function DemoFrettaApp() {
                   : undefined
               }
             />
+          ) : selected &&
+            !f &&
+            role === "motorista" &&
+            resolvedOpportunityId !== selected ? (
+            <p className="muted" role="status">
+              Carregando oportunidade…
+            </p>
           ) : selected && !f ? (
             <EmptyState title="Solicitação não encontrada">
-              Ela pode ter sido removida da demonstração.
+              Ela não está mais disponível.
               <button className="primary" onClick={() => nav("fretes")}>
                 Ver meus fretes
               </button>
@@ -563,34 +666,22 @@ function DemoFrettaApp() {
             <FreightDetailsView
               key={`${f.id}:${role}`}
               f={f}
-              onEdit={() => {
-                setEditingRequest({
-                  id: f.id,
-                  revision: f.revision || 0,
-                  draft: requestDraft(store, f),
-                });
-                setModal("editar-pedido");
-              }}
               role={role}
               name={name}
               store={store}
               proposals={proposals}
               accepted={accepted}
-              subscription={subscription}
               canPropose={driverCanPropose(store)}
               onRegistration={() => nav("cadastro-motorista")}
               setModal={setModal}
-              setSelected={setSelected}
+              setSelected={(id) => {
+                if (!id) setSelectedOpportunity(null);
+                setSelected(id);
+              }}
               onChat={setChatId}
               onProvider={navigation.openProvider}
               save={save}
               schedule={(f) => scheduleLabel(f.schedule)}
-            />
-          ) : tab === "equipe" && role === "motorista" ? (
-            <FleetWorkspace
-              embeddedStore={store}
-              onSave={save}
-              initialActor="demo-driver"
             />
           ) : tab === "enderecos" ? (
             <AddressBookView
@@ -605,7 +696,7 @@ function DemoFrettaApp() {
               store={store}
               save={save}
               onBack={() => nav("perfil")}
-              onPreview={() => navigation.openProvider("demo-driver")}
+              onPreview={() => navigation.openProvider(store.profile?.id || "")}
             />
           ) : tab === "veiculos" && role === "motorista" ? (
             <VehicleBookView
@@ -615,10 +706,6 @@ function DemoFrettaApp() {
             />
           ) : tab === "assinatura" && role === "motorista" ? (
             <SubscriptionView
-              active={subscription}
-              onChange={(subscriptionActive) =>
-                save({ ...store, subscriptionActive })
-              }
               onBack={() => nav("perfil")}
             />
           ) : [
@@ -636,12 +723,6 @@ function DemoFrettaApp() {
                 photoRequired={!!store.driverRegistration}
                 registration={store.driverRegistration}
                 onRegistration={() => nav("cadastro-motorista")}
-                onTeam={() => nav("equipe")}
-                companyMember={
-                  !!fleetState(store)?.members.some(
-                    (m) => m.driverId === "demo-driver" && !m.leftAt,
-                  )
-                }
                 editing={tab === "editar-perfil"}
                 onEdit={() =>
                   nav(tab === "editar-perfil" ? "perfil" : "editar-perfil")
@@ -656,12 +737,17 @@ function DemoFrettaApp() {
                     profile.photo !== profilePhoto;
                   const ok = await save({
                     ...store,
-                    profile,
+                    profile: {
+                      ...store.profile,
+                      ...profile,
+                      id: store.profile?.id || "",
+                    },
                     ...(photoChanged
                       ? {
                           driverRegistration: {
                             ...store.driverRegistration!,
                             status: "EM_ANALISE",
+                            submittedAt: new Date().toISOString(),
                             reviewedAt: undefined,
                             feedback: undefined,
                           },
@@ -671,20 +757,19 @@ function DemoFrettaApp() {
                   if (ok)
                     setNotice(
                       photoChanged
-                        ? "Foto atualizada. Seu cadastro voltou para análise de demonstração."
+                        ? "Foto atualizada. Seu cadastro foi enviado para revisão."
                         : "Perfil atualizado.",
                     );
                   return ok;
                 }}
                 onAddresses={() => nav("enderecos")}
                 onVehicles={() => nav("veiculos")}
-                onPublicProfile={() => navigation.openProvider("demo-driver")}
+                onPublicProfile={() => navigation.openProvider(store.profile?.id || "")}
                 onCompany={() => nav("empresa")}
                 onSubscription={() => nav("assinatura")}
                 role={role}
-                subscription={subscription}
                 setEntered={() => {
-                  navigation.logout();
+                  void signOut();
                   setModal("");
                 }}
               />
@@ -715,7 +800,6 @@ function DemoFrettaApp() {
               setChatId={setChatId}
               send={send}
               save={save}
-              subscription={subscription}
               onManageVehicles={() => nav("veiculos")}
               onProvider={navigation.openProvider}
               onFreight={setSelected}
@@ -724,10 +808,21 @@ function DemoFrettaApp() {
             <DriverHomeView
               store={store}
               name={name}
-              subscription={subscription}
               save={save}
-              onSelect={setSelected}
-              onProfile={() => nav("assinatura")}
+              onSelect={(freight) => {
+                opportunityCache.clear();
+                opportunityCache.set(freight.id, freight);
+                try {
+                  sessionStorage.setItem(
+                    opportunityStorageKey,
+                    JSON.stringify(freight),
+                  );
+                } catch {
+                  // The in-memory cache still covers client-side navigation.
+                }
+                setSelectedOpportunity(freightFromFeedItem(freight));
+                setSelected(freight.id);
+              }}
               schedule={(f) => scheduleLabel(f.schedule)}
             />
           ) : role === "motorista" && tab === "fretes" ? (
@@ -751,8 +846,10 @@ function DemoFrettaApp() {
               nav={nav}
               setQuery={setQuery}
               setFilter={setFilter}
-              setSelected={setSelected}
-              subscription={subscription}
+              setSelected={(id) => {
+                if (!id) setSelectedOpportunity(null);
+                setSelected(id);
+              }}
               schedule={(f) => scheduleLabel(f.schedule)}
             />
           )}
@@ -762,34 +859,6 @@ function DemoFrettaApp() {
           FRETTA © 2026 · Conectando pessoas, movimentando histórias.
         </footer>
       </div>
-      {modal === "editar-pedido" && editingRequest && (
-        <RequestWizard
-          key={`edit:${editingRequest.id}:${editingRequest.revision}`}
-          addresses={store.addresses || []}
-          initialDraft={editingRequest.draft}
-          editId={editingRequest.id}
-          revision={editingRequest.revision}
-          onClose={() => {
-            setModal("");
-            setEditingRequest(null);
-          }}
-          onSubmit={async (draft) => {
-            const current = latest.current;
-            if (!current || role !== "cliente") return false;
-            const next = editRequest(
-              current,
-              editingRequest.id,
-              draft,
-              editingRequest.revision,
-            );
-            if (!(await save(next))) return false;
-            setModal("");
-            setEditingRequest(null);
-            setSuccess("edit");
-            return true;
-          }}
-        />
-      )}
       {modal === "pedido" && (
         <RequestWizard
           addresses={store.addresses || []}
@@ -812,20 +881,24 @@ function DemoFrettaApp() {
       <SuccessDialog
         open={success !== null}
         title={
-          success === "edit"
-            ? "Solicitação atualizada!"
-            : success === "request"
-              ? "Solicitação publicada!"
-              : "Proposta enviada!"
+          success === "request" ? "Solicitação publicada!" : "Proposta enviada!"
         }
         description={
-          success === "edit"
-            ? "As mudanças foram salvas. Confira novas propostas antes de contratar."
-            : success === "request"
-              ? "Agora você pode acompanhar as propostas recebidas."
-              : "Acompanhe a resposta em Meus serviços ou continue a conversa pelo chat."
+          success === "request"
+            ? "Sua solicitação foi publicada. Abra os detalhes para acompanhar as propostas recebidas."
+            : "Acompanhe a resposta em Meus serviços ou continue a conversa pelo chat."
         }
-        onClose={() => setSuccess(null)}
+        actionLabel={success === "request" ? "Ver solicitação" : "Entendi"}
+        onClose={() => {
+          setSuccess(null);
+          setPublishedRequestId(null);
+        }}
+        onAction={() => {
+          if (success === "request" && publishedRequestId)
+            setSelected(publishedRequestId);
+          setSuccess(null);
+          setPublishedRequestId(null);
+        }}
       />
     </div>
   );

@@ -1,8 +1,4 @@
-import { FreightProgress } from "./requests/FreightProgress";
-import { CancelRequestDialog } from "./requests/CancelRequestDialog";
-import { cancelClientRequest } from "./requests/rules";
-import { SuccessDialog } from "../components/SuccessDialog";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   ArrowLeft,
@@ -15,8 +11,18 @@ import type { Role, Store, Freight, Proposal, Address } from "@/contracts";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PhotoGallery } from "../components/PhotoGallery";
 import { ReviewForm } from "../components/ReviewForm";
-import { acceptProposal, money } from "./freights/rules";
-import { proposalOffers, proposalStatusLabel } from "./freights/negotiation";
+import {
+  acceptProposal,
+  cancelFreight,
+  completeFreight,
+  money,
+  startFreight,
+} from "./freights/rules";
+import {
+  declineOffer,
+  proposalOffers,
+  proposalStatusLabel,
+} from "./freights/negotiation";
 import { providerId, providerName } from "./providers/rules";
 import { ownProposal } from "./driver/rules";
 import { StatusBadge } from "../components/StatusBadge";
@@ -24,13 +30,11 @@ import { dateTime } from "../lib/dates";
 
 type Props = {
   f: Freight;
-  onEdit?: () => void;
   role: Role;
   name: string;
   store: Store;
   proposals: Proposal[];
   accepted: Proposal | undefined;
-  subscription: boolean;
   canPropose: boolean;
   onRegistration: () => void;
   setModal: (s: string) => void;
@@ -66,7 +70,7 @@ function FullAddress({ title, address }: { title: string; address?: Address }) {
           )}
         </>
       ) : (
-        <p className="muted">Endereço completo não informado neste exemplo.</p>
+        <p className="muted">Endereço completo ainda não foi carregado.</p>
       )}
     </article>
   );
@@ -78,7 +82,6 @@ export function FreightDetailsView({
   store,
   proposals,
   accepted,
-  subscription,
   canPropose,
   onRegistration,
   setModal,
@@ -87,70 +90,108 @@ export function FreightDetailsView({
   onProvider,
   save,
   schedule,
-  onEdit,
 }: Props) {
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelled, setCancelled] = useState(false);
   const [proposalToAccept, setProposalToAccept] = useState<{
+    proposal: Proposal;
+    offerId: string;
+  } | null>(null);
+  const [proposalToDecline, setProposalToDecline] = useState<{
     proposal: Proposal;
     offerId: string;
   } | null>(null);
   const [transition, setTransition] = useState<"start" | "complete" | null>(
     null,
   );
-  const isOpportunity = role === "motorista" && f.status === "ABERTO";
-  const chosenDriver = accepted && ownProposal(accepted, name);
-  const canSeeAgreement =
-    (accepted && (role === "cliente" || chosenDriver)) ||
-    (role === "cliente" && !!f.agreement);
+  const [cancelReason, setCancelReason] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (f.status !== "AGENDADO") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [f.id, f.status]);
+  const isOpportunity =
+    role === "motorista" &&
+    f.status === "ABERTO" &&
+    !proposals.some(
+      (proposal) =>
+        ownProposal(proposal, store.profile?.id || "") &&
+        proposal.status === "ENCERRADA",
+    );
+  const chosenDriver =
+    accepted && ownProposal(accepted, store.profile?.id || "");
+  const canSeeAgreement = accepted && (role === "cliente" || chosenDriver);
   const agreement = f.agreement || accepted;
+  const canStart =
+    role === "motorista" &&
+    !!chosenDriver &&
+    f.status === "AGENDADO" &&
+    Number.isFinite(Date.parse(agreement?.availableAt || "")) &&
+    Date.parse(agreement?.availableAt || "") <= now;
+  const canCancel =
+    role === "cliente"
+      ? ["ABERTO", "AGENDADO", "EM_TRANSPORTE"].includes(f.status)
+      : !!chosenDriver && ["AGENDADO", "EM_TRANSPORTE"].includes(f.status);
   const snapshot = store.freightAddresses?.[f.id];
-  const renderProposal = (p: Proposal) => (
-    <article className="proposal" key={p.id}>
-      <div className="section-head">
-        <b>{providerName(p)}</b>
-        <span>
-          <Star size={14} /> {p.rating || "Novo"}
-        </span>
-      </div>
-      {p.providerKind === "empresa" && (
-        <p className="muted">Motorista: {p.driver}</p>
-      )}
-      {onProvider && (
-        <button
-          className="provider-link"
-          onClick={() => onProvider(providerId(p), p.id)}
-        >
-          Ver perfil do prestador
-        </button>
-      )}
-      <small>{p.vehicle}</small>
-      <h2>{money(p.priceCents)}</h2>
-      <p>{dateTime(p.availableAt)}</p>
-      <p>{p.message}</p>
-      <span className="badge">{proposalStatusLabel(p)}</span>
-      <div className="actions">
-        {p.status === "PENDENTE" &&
-          f.status === "ABERTO" &&
-          role === "cliente" && (
-            <button
-              className="primary"
-              onClick={() =>
-                setProposalToAccept({
-                  proposal: p,
-                  offerId: proposalOffers(p).at(-1)!.id,
-                })
-              }
-            >
-              Aceitar proposta
-            </button>
+  const renderProposal = (p: Proposal) => {
+    const latestOffer = proposalOffers(p).at(-1);
+    const canDecide =
+      p.status === "PENDENTE" &&
+      latestOffer?.status === "PENDENTE" &&
+      f.status === "ABERTO" &&
+      role === "cliente";
+    return (
+      <article className="proposal" key={p.id}>
+        <div className="section-head">
+          <b>{providerName(p)}</b>
+          <span>
+            <Star size={14} /> {p.rating || "Novo"}
+          </span>
+        </div>
+        {p.providerKind === "empresa" && (
+          <p className="muted">Motorista: {p.driver}</p>
+        )}
+        {onProvider && (
+          <button
+            className="provider-link"
+            onClick={() => onProvider(providerId(p), p.id)}
+          >
+            Ver perfil do prestador
+          </button>
+        )}
+        <small>{p.vehicle}</small>
+        <h2>{money(p.priceCents)}</h2>
+        <p>{dateTime(p.availableAt)}</p>
+        <p>{p.message}</p>
+        <span className="badge">{proposalStatusLabel(p)}</span>
+        <div className="actions">
+          {canDecide && latestOffer && (
+            <>
+              <button
+                className="primary"
+                onClick={() =>
+                  setProposalToAccept({ proposal: p, offerId: latestOffer.id })
+                }
+              >
+                Aceitar proposta
+              </button>
+              <button
+                className="secondary"
+                onClick={() =>
+                  setProposalToDecline({ proposal: p, offerId: latestOffer.id })
+                }
+              >
+                Recusar proposta
+              </button>
+            </>
           )}
-        <button className="secondary" onClick={() => onChat(p.id)}>
-          Conversar
-        </button>
-      </div>
-    </article>
-  );
+          <button className="secondary" onClick={() => onChat(p.id)}>
+            Conversar
+          </button>
+        </div>
+      </article>
+    );
+  };
   return (
     <>
       <button className="back" onClick={() => setSelected(null)}>
@@ -163,7 +204,6 @@ export function FreightDetailsView({
         </div>
         <StatusBadge status={f.status} />
       </div>
-      {role === "cliente" && <FreightProgress freight={f} />}
       <div
         className={
           isOpportunity ? "detail-grid opportunity-detail" : "detail-grid"
@@ -202,10 +242,7 @@ export function FreightDetailsView({
           {canSeeAgreement && agreement && (
             <section className="agreed-service">
               <h2>
-                <Check size={20} />{" "}
-                {f.status === "CANCELADO"
-                  ? "Acordo anterior · frete cancelado"
-                  : "Seu frete está combinado"}
+                <Check size={20} /> Seu frete está combinado
               </h2>
               {agreement.providerName &&
                 agreement.providerName !== agreement.driver && (
@@ -242,37 +279,17 @@ export function FreightDetailsView({
                   address={snapshot?.delivery}
                 />
               </div>
-              <button
-                className="secondary"
-                onClick={() => {
-                  const id = f.agreement?.proposalId || accepted?.id;
-                  if (id) onChat(id);
-                }}
-              >
+              <button className="secondary" onClick={() => onChat(accepted.id)}>
                 Conversar sobre este frete
               </button>
             </section>
           )}
-          {role === "cliente" && f.status === "ABERTO" && onEdit && (
-            <button className="secondary" onClick={onEdit}>
-              Editar solicitação
-            </button>
-          )}
-          {role === "cliente" && ["ABERTO", "AGENDADO"].includes(f.status) && (
+          {canCancel && (
             <button className="danger" onClick={() => setCancelOpen(true)}>
-              {f.status === "AGENDADO"
-                ? "Cancelar frete contratado"
-                : "Cancelar solicitação"}
+              Cancelar frete
             </button>
           )}
-          {role === "cliente" && f.status === "EM_TRANSPORTE" && (
-            <p className="muted">
-              O transporte já começou. Converse com o motorista para resolver
-              qualquer ocorrência; não é possível cancelar automaticamente nesta
-              etapa.
-            </p>
-          )}
-          {role === "motorista" && chosenDriver && f.status === "AGENDADO" && (
+          {canStart && (
             <button className="primary" onClick={() => setTransition("start")}>
               Iniciar transporte
             </button>
@@ -316,7 +333,6 @@ export function FreightDetailsView({
         <div className="opportunity-action">
           <button
             className="primary"
-            disabled={!subscription && canPropose && !proposals.length}
             onClick={() =>
               proposals.length
                 ? onChat(proposals[0].id)
@@ -332,11 +348,6 @@ export function FreightDetailsView({
                 : "Enviar proposta"}
             <ArrowRight size={18} />
           </button>
-          {!subscription && !proposals.length && (
-            <span className="muted">
-              Ative sua assinatura para enviar novas propostas.
-            </span>
-          )}
         </div>
       )}
       <ConfirmDialog
@@ -361,33 +372,63 @@ export function FreightDetailsView({
           return ok;
         }}
       />
-      {cancelOpen && (
-        <CancelRequestDialog
-          freight={f}
-          onClose={() => setCancelOpen(false)}
-          onConfirm={async (reason, expectedStatus) => {
-            if (role !== "cliente") return false;
-            const next = cancelClientRequest(
+      <ConfirmDialog
+        open={proposalToDecline !== null}
+        onClose={() => setProposalToDecline(null)}
+        title={`Recusar essa proposta de ${proposalToDecline ? providerName(proposalToDecline.proposal) : ""}?`}
+        description="A proposta será recusada e o frete continuará aberto para outras propostas."
+        confirmLabel="Sim, recusar proposta"
+        cancelLabel="Voltar"
+        destructive
+        onConfirm={async () => {
+          if (!proposalToDecline) return false;
+          const ok = await save(
+            declineOffer(
               store,
-              f.id,
-              reason,
-              expectedStatus,
-            );
-            const ok = await save(next);
-            if (ok) {
-              setCancelOpen(false);
-              setCancelled(true);
-            }
-            return ok;
-          }}
-        />
-      )}
-      <SuccessDialog
-        open={cancelled}
-        title="Frete cancelado"
-        description="O motivo foi registrado e as notificações foram geradas na demonstração. O histórico e as conversas foram preservados."
-        onClose={() => setCancelled(false)}
+              proposalToDecline.proposal.id,
+              proposalToDecline.offerId,
+            ),
+          );
+          if (ok) setProposalToDecline(null);
+          return ok;
+        }}
       />
+      <ConfirmDialog
+        open={cancelOpen}
+        onClose={() => {
+          setCancelOpen(false);
+          setCancelReason("");
+        }}
+        title="Cancelar este frete?"
+        description={
+          role === "motorista"
+            ? "O frete ficará disponível novamente para outros motoristas. O cliente receberá seu motivo pelo chat."
+            : "O frete será cancelado e os participantes receberão seu motivo pelo chat."
+        }
+        confirmLabel="Confirmar cancelamento"
+        cancelLabel="Voltar"
+        onConfirm={async () => {
+          const ok = await save(cancelFreight(store, f.id, role, cancelReason));
+          if (ok) {
+            setCancelOpen(false);
+            setCancelReason("");
+          }
+          return ok;
+        }}
+      >
+        <label className="field">
+          Motivo do cancelamento
+          <textarea
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            maxLength={1000}
+            minLength={3}
+            required
+            aria-label="Motivo do cancelamento"
+            placeholder="Explique por que o frete está sendo cancelado"
+          />
+        </label>
+      </ConfirmDialog>
       <ConfirmDialog
         open={transition !== null}
         onClose={() => setTransition(null)}
@@ -407,27 +448,12 @@ export function FreightDetailsView({
         cancelLabel="Voltar"
         destructive={false}
         onConfirm={async () => {
-          if (
-            (transition === "start" &&
-              (!chosenDriver ||
-                role !== "motorista" ||
-                f.status !== "AGENDADO")) ||
-            (transition === "complete" &&
-              (role !== "cliente" || f.status !== "EM_TRANSPORTE"))
-          )
-            return false;
-          const ok = await save({
-            ...store,
-            freights: store.freights.map((x) =>
-              x.id === f.id
-                ? {
-                    ...x,
-                    status:
-                      transition === "start" ? "EM_TRANSPORTE" : "CONCLUIDO",
-                  }
-                : x,
-            ),
-          });
+          if (!transition) return false;
+          const next =
+            transition === "start"
+              ? startFreight(store, f.id, role, now)
+              : completeFreight(store, f.id, role);
+          const ok = await save(next);
           if (ok) setTransition(null);
           return ok;
         }}

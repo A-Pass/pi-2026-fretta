@@ -1,13 +1,11 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "@/server/generated/prisma/client";
 
-function scheduledPickup(userId: string): Prisma.OfertaWhereInput {
+function scheduledAgreement(userId: string): Prisma.AcordoFreteWhereInput {
   return {
-    status: "ACEITA",
-    retiradaEm: { not: null },
-    proposta: {
-      motoristaId: userId,
-      status: "ACEITA",
-      freteQueAceitou: { status: "AGENDADO", avaliacoes: { none: {} } },
+    motoristaId: userId,
+    frete: {
+      status_frete_enum: { in: ["ACEITO", "EM_TRANSPORTE"] },
+      avaliacao: { none: {} },
     },
   };
 }
@@ -16,33 +14,30 @@ export async function listScheduledPickups(
   tx: Prisma.TransactionClient,
   userId: string,
 ) {
-  const offers = await tx.oferta.findMany({
-    where: scheduledPickup(userId),
-    orderBy: [{ retiradaEm: "asc" }, { id: "asc" }],
+  const agreements = await tx.acordoFrete.findMany({
+    where: scheduledAgreement(userId),
+    orderBy: [{ disponivelEm: "asc" }, { freteId: "asc" }],
     take: 20,
     select: {
-      retiradaEm: true,
-      proposta: {
+      disponivelEm: true,
+      frete: {
         select: {
-          frete: {
-            select: { id: true, titulo: true, origemSnapshot: true },
+          id: true,
+          titulo: true,
+          endereco_frete_endereco_origem_idToendereco: {
+            select: { cidade: true },
           },
         },
       },
     },
   });
-  return offers.map(({ retiradaEm, proposta: { frete } }) => {
-    const origin = frete.origemSnapshot as {
-      city?: string;
-      cidade?: string;
-    } | null;
-    return {
-      id: frete.id,
-      title: frete.titulo,
-      city: origin?.city ?? origin?.cidade ?? "",
-      pickupAt: retiradaEm!.toISOString(),
-    };
-  });
+  return agreements.map(({ disponivelEm, frete }) => ({
+    id: frete.id,
+    title: frete.titulo,
+    city:
+      frete.endereco_frete_endereco_origem_idToendereco?.cidade ?? "",
+    pickupAt: disponivelEm.toISOString(),
+  }));
 }
 
 export async function registerDuePickups(
@@ -50,45 +45,28 @@ export async function registerDuePickups(
   userId: string,
   now = new Date(),
 ) {
-  const offers = await tx.oferta.findMany({
-    where: { ...scheduledPickup(userId), retiradaEm: { lte: now } },
+  const agreements = await tx.acordoFrete.findMany({
+    where: { ...scheduledAgreement(userId), disponivelEm: { lte: now } },
     select: {
-      id: true,
+      freteId: true,
       propostaId: true,
-      proposta: {
-        select: {
-          frete: { select: { id: true, titulo: true } },
-          conversa: { select: { id: true } },
-        },
-      },
+      frete: { select: { titulo: true } },
     },
   });
-  if (!offers.length) return;
-  const notificationIds = offers.map((offer) => `pickup-due:${offer.id}`);
-  const existing = new Set(
-    (
-      await tx.notificacao.findMany({
-        where: { id: { in: notificationIds } },
-        select: { id: true },
-      })
-    ).map(({ id }) => id),
-  );
-  const pending = offers.filter(
-    (offer) => !existing.has(`pickup-due:${offer.id}`),
-  );
-  if (!pending.length) return;
+  if (!agreements.length) return;
+
   await tx.notificacao.createMany({
     skipDuplicates: true,
-    data: pending.map(({ id, propostaId, proposta }) => ({
-      id: `pickup-due:${id}`,
-      destinatarioId: userId,
-      papelDestinatario: "motorista",
+    data: agreements.map(({ freteId, propostaId, frete }) => ({
+      id: `pickup-due:${freteId}`,
+      destinatario_id: userId,
+      papel_destinatario: "motorista",
       evento: "HORARIO_RETIRADA",
       titulo: "Já é hora da retirada",
-      corpo: proposta.frete.titulo,
-      freteId: proposta.frete.id,
-      propostaId,
-      conversaId: proposta.conversa?.id,
+      corpo: frete.titulo,
+      frete_id: freteId,
+      proposta_id: propostaId,
+      conversa_id: null,
     })),
   });
 }

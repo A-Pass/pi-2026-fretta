@@ -5,9 +5,9 @@ import { prisma } from "../../../db/prisma";
 import { randomUUID } from "node:crypto";
 
 function verificarBancoDeTeste() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DB_URL;
 
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -44,53 +44,58 @@ test("aprovação de cadastro é persistida no PostgreSQL", async () => {
         emailVerified: false,
         papel: "USUARIO",
         motorista: {
-          create: {},
+          create: { codigo_publico: randomUUID(), atualizado_em: new Date() },
         },
       },
     });
 
     const veiculo = await prisma.veiculo.create({
       data: {
-        motoristaId: usuarioId,
+        id: randomUUID(),
+        motorista_id: usuarioId,
         categoria: "UTILITARIO",
         modelo: "Veículo de Teste",
         placa,
-        capacidadeKg: 1000,
+        capacidade_kg: 1000,
         descricao: "Veículo fictício para teste administrativo",
+        categoria_porte: "PEQUENO",
+        atualizado_em: new Date(),
       },
     });
 
-    const cadastro = await prisma.cadastroMotorista.create({
+    const cadastro = await prisma.cadastro_motorista.create({
       data: {
-        motoristaId: usuarioId,
-        tipoPessoa: "PF",
-        cnhNumero: "DOCUMENTO_FICTICIO",
-        cnhCategoria: "B",
-        cnhValidade: new Date("2030-12-31T12:00:00Z"),
-        fotoPerfilId: "arquivo-ficticio-foto",
-        documentoCnhId: "arquivo-ficticio-cnh",
-        veiculoId: veiculo.id,
+        id: randomUUID(),
+        motorista_id: usuarioId,
+        tipo_pessoa: "PF",
+        cnh_numero: "DOCUMENTO_FICTICIO",
+        cnh_categoria: "B",
+        cnh_validade: new Date("2030-12-31T12:00:00Z"),
+        foto_perfil_id: "arquivo-ficticio-foto",
+        documento_cnh_id: "arquivo-ficticio-cnh",
+        veiculo_id: veiculo.id,
         status: "EM_ANALISE",
+        atualizado_em: new Date(),
       },
     });
 
     assert.equal(cadastro.status, "EM_ANALISE");
 
-    const resultado = await prisma.cadastroMotorista.updateMany({
+    const resultado = await prisma.cadastro_motorista.updateMany({
       where: {
         id: cadastro.id,
         status: "EM_ANALISE",
       },
       data: {
         status: "APROVADO",
-        motivoAjuste: null,
-        analisadoEm: new Date(),
+        motivo_ajuste: null,
+        analisado_em: new Date(),
       },
     });
 
     assert.equal(resultado.count, 1);
 
-    const cadastroAtualizado = await prisma.cadastroMotorista.findUniqueOrThrow(
+    const cadastroAtualizado = await prisma.cadastro_motorista.findUniqueOrThrow(
       {
         where: {
           id: cadastro.id,
@@ -99,7 +104,7 @@ test("aprovação de cadastro é persistida no PostgreSQL", async () => {
     );
 
     assert.equal(cadastroAtualizado.status, "APROVADO");
-    assert.ok(cadastroAtualizado.analisadoEm);
+    assert.ok(cadastroAtualizado.analisado_em);
 
     console.log("Aprovação persistida no PostgreSQL - OK");
   } finally {
@@ -120,8 +125,8 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
   const { PATCH } = await import("../../../../app/api/v1/[...path]/route");
 
   const autenticacaoTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -132,7 +137,7 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
 
   const identificador = randomUUID();
   const administradorEmail = `admin-${identificador}@fretta.invalid`;
-  const motoristaId = `motorista-${identificador}`;
+  const motorista_id = `motorista-${identificador}`;
   const placa = `T${identificador.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
   let administradorId: string | undefined;
@@ -159,52 +164,57 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
 
     await prisma.user.create({
       data: {
-        id: motoristaId,
+        id: motorista_id,
         name: "Motorista de Teste",
-        email: `${motoristaId}@fretta.invalid`,
+        email: `${motorista_id}@fretta.invalid`,
         emailVerified: false,
         motorista: {
-          create: {},
+          create: { codigo_publico: randomUUID(), atualizado_em: new Date() },
         },
       },
     });
 
     const veiculo = await prisma.veiculo.create({
       data: {
-        motoristaId,
+        id: randomUUID(),
+        motorista_id,
         categoria: "UTILITARIO",
         modelo: "Veículo Fictício",
         placa,
-        capacidadeKg: 1000,
+        capacidade_kg: 1000,
         descricao: "Teste de aprovação administrativa",
+        categoria_porte: "PEQUENO",
+        atualizado_em: new Date(),
       },
     });
 
-    await prisma.arquivoPrivado.createMany({
+    await prisma.arquivo_privado.createMany({
       data: [
         { id: identificador + "-foto", tipo: "FOTO_PERFIL" },
         { id: identificador + "-cnh", tipo: "CNH" },
       ].map((doc) => ({
         ...doc,
         tipo: doc.tipo as "FOTO_PERFIL" | "CNH",
-        motoristaId,
-        chaveArmazenamento: doc.id + ".jpg",
-        mimeType: "image/jpeg",
-        tamanhoBytes: 10,
+        motorista_id,
+        chave_armazenamento: doc.id + ".jpg",
+        mime_type: "image/jpeg",
+        tamanho_bytes: 10,
       })),
     });
 
-    await prisma.cadastroMotorista.create({
+    await prisma.cadastro_motorista.create({
       data: {
-        motoristaId,
-        tipoPessoa: "PF",
-        cnhNumero: "DOCUMENTO_FICTICIO",
-        cnhCategoria: "B",
-        cnhValidade: new Date("2030-12-31T12:00:00Z"),
-        fotoPerfilId: identificador + "-foto",
-        documentoCnhId: identificador + "-cnh",
-        veiculoId: veiculo.id,
+        id: randomUUID(),
+        motorista_id,
+        tipo_pessoa: "PF",
+        cnh_numero: "DOCUMENTO_FICTICIO",
+        cnh_categoria: "B",
+        cnh_validade: new Date("2030-12-31T12:00:00Z"),
+        foto_perfil_id: identificador + "-foto",
+        documento_cnh_id: identificador + "-cnh",
+        veiculo_id: veiculo.id,
         status: "EM_ANALISE",
+        atualizado_em: new Date(),
       },
     });
 
@@ -222,7 +232,7 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
           method: "PATCH",
           headers: { cookie: cookies, "content-type": "application/json" },
           body: JSON.stringify({
-            motoristaId,
+            motorista_id,
             status: "APROVADO",
             expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
           }),
@@ -243,7 +253,7 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          motoristaId,
+          motorista_id,
           status: "APROVADO",
         }),
       },
@@ -253,14 +263,14 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
 
     assert.equal(resposta.status, 200);
 
-    const cadastroAtualizado = await prisma.cadastroMotorista.findUniqueOrThrow(
+    const cadastroAtualizado = await prisma.cadastro_motorista.findUniqueOrThrow(
       {
-        where: { motoristaId },
+        where: { motorista_id },
       },
     );
 
     assert.equal(cadastroAtualizado.status, "APROVADO");
-    assert.ok(cadastroAtualizado.analisadoEm);
+    assert.ok(cadastroAtualizado.analisado_em);
 
     console.log("Aprovação administrativa pela rota PATCH - OK");
     const requisicaoAjustes = new NextRequest(
@@ -272,9 +282,9 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          motoristaId,
+          motorista_id,
           status: "AJUSTES_SOLICITADOS",
-          motivoAjuste: "Atualizar o documento da CNH.",
+          motivo_ajuste: "Atualizar o documento da CNH.",
         }),
       },
     );
@@ -283,23 +293,23 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
 
     assert.equal(respostaAjustes.status, 409);
 
-    const cadastroComAjustes = await prisma.cadastroMotorista.findUniqueOrThrow(
+    const cadastroComAjustes = await prisma.cadastro_motorista.findUniqueOrThrow(
       {
-        where: { motoristaId },
+        where: { motorista_id },
       },
     );
 
     assert.equal(cadastroComAjustes.status, "APROVADO");
-    assert.equal(cadastroComAjustes.motivoAjuste, null);
+    assert.equal(cadastroComAjustes.motivo_ajuste, null);
 
     console.log("Transição inválida bloqueada pela rota PATCH - OK");
     // Simula o retorno do cadastro para análise em um novo cenário de teste.
-    await prisma.cadastroMotorista.update({
-      where: { motoristaId },
+    await prisma.cadastro_motorista.update({
+      where: { motorista_id },
       data: {
         status: "EM_ANALISE",
-        motivoAjuste: null,
-        analisadoEm: null,
+        motivo_ajuste: null,
+        analisado_em: null,
       },
     });
 
@@ -312,9 +322,9 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          motoristaId,
+          motorista_id,
           status: "AJUSTES_SOLICITADOS",
-          motivoAjuste: "Atualizar o documento da CNH.",
+          motivo_ajuste: "Atualizar o documento da CNH.",
         }),
       },
     );
@@ -325,20 +335,20 @@ test("administrador aprova cadastro pela rota PATCH", async () => {
 
     assert.equal(respostaSolicitacaoAjustes.status, 200);
 
-    const cadastroAjustes = await prisma.cadastroMotorista.findUniqueOrThrow({
-      where: { motoristaId },
+    const cadastroAjustes = await prisma.cadastro_motorista.findUniqueOrThrow({
+      where: { motorista_id },
     });
 
     assert.equal(cadastroAjustes.status, "AJUSTES_SOLICITADOS");
-    assert.equal(cadastroAjustes.motivoAjuste, "Atualizar o documento da CNH.");
-    assert.ok(cadastroAjustes.analisadoEm);
+    assert.equal(cadastroAjustes.motivo_ajuste, "Atualizar o documento da CNH.");
+    assert.ok(cadastroAjustes.analisado_em);
 
     console.log("Solicitação de ajustes pela rota PATCH - OK");
   } finally {
     await prisma.user.deleteMany({
       where: {
         id: {
-          in: [motoristaId, ...(administradorId ? [administradorId] : [])],
+          in: [motorista_id, ...(administradorId ? [administradorId] : [])],
         },
       },
     });

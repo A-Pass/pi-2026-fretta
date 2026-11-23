@@ -1,13 +1,13 @@
 import { prisma } from "@/server/db/prisma";
 
 export async function verificarVeiculoMotorista(
-  motoristaId: string,
+  motorista_id: string,
   veiculoId: string,
 ): Promise<boolean> {
   const veiculo = await prisma.veiculo.findFirst({
     where: {
       id: veiculoId,
-      motoristaId,
+      motorista_id,
       ativo: true,
     },
     select: {

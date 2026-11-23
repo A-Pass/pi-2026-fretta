@@ -1,48 +1,85 @@
 services:
-  database:
-    image: postgres:17
-    environment:
-      POSTGRES_USER: fretta
-      POSTGRES_DB: fretta
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no .env}
-    volumes:
-      - fretta_prisma_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fretta -d fretta"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-  migrate:
+  app:
     build:
-      context: ./app
-      target: base
+      context: app
+      target: production
+      args:
+        APP_PORT: ${APP_PORT}
+      secrets:
+        - dot_env
+    image: fretta-app:prod
+    container_name: fretta-app
     environment:
-      DATABASE_URL: postgresql://fretta:${DB_PASSWORD}@database:5432/fretta
-    command: ["npm", "run", "db:migrate"]
+      ENV_FILE: /run/secrets/dot_env
+    ports:
+      - "127.0.0.1:${APP_PORT}:${APP_PORT}"
+    secrets:
+      - source: dot_env
+        uid: "65532"
+        gid: "65532"
+        target: /run/secrets/dot_env
+        mode: 0400
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.fretta-app.rule=Host(`${APP_HOST}`)
+      - traefik.http.routers.agendadepae-app.entrypoints=websecure
+      - traefik.http.routers.fretta-app.tls.certresolver=letsencrypt
+      - traefik.http.routers.fretta-app.tls=true
+      - traefik.http.services.fretta-app.loadbalancer.server.port=${APP_PORT}
     depends_on:
       database:
         condition: service_healthy
-  app:
-    build:
-      context: ./app
-      target: production
-      args:
-        NEXT_PUBLIC_API_MODE: ${NEXT_PUBLIC_API_MODE:-demo}
-    ports:
-      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    networks:
+      - fretta_network
+
+  database:
+    container_name: fretta-db
+    image: postgres:17-trixie
     environment:
-      DATABASE_URL: postgresql://fretta:${DB_PASSWORD}@database:5432/fretta
-      BETTER_AUTH_URL: http://localhost:${APP_PORT:-3000}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Defina BETTER_AUTH_SECRET no .env}
-      FRETTA_DEMO_PIX: ${FRETTA_DEMO_PIX:-false}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      FRETTA_REVERSE_GEOCODER_URL: ${FRETTA_REVERSE_GEOCODER_URL:-}
+      POSTGRES_USER_FILE: /run/secrets/db_user
+      POSTGRES_DB_FILE: /run/secrets/db_name
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - source: db_user
+        target: /run/secrets/db_user
+        mode: 0400
+      - source: db_name
+        target: /run/secrets/db_name
+        mode: 0400
+      - source: db_password
+        target: /run/secrets/db_password
+        mode: 0400
     volumes:
-      - fretta_documents:/app/storage
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
+      - fretta_db_data:/var/lib/postgres/data
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          pg_isready
+          -U "$${POSTGRES_USER:-$$(cat "$${POSTGRES_USER_FILE}" 2>/dev/null || echo postgres)}"
+          -d "$${POSTGRES_DB:-$$(cat "$${POSTGRES_DB_FILE}" 2>/dev/null || echo postgres)}"
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fretta_network
+
 volumes:
-  fretta_prisma_data:
-  fretta_documents:
+  fretta_db_data:
+    name: fretta-db-data
+
+networks:
+  fretta_network:
+    name: fretta-network
+    driver: bridge
+
+secrets:
+  dot_env:
+    file: /dev/shm/fretta-app/.env
+  db_user:
+    file: /dev/shm/fretta-app/db_user
+  db_name:
+    file: /dev/shm/fretta-app/db_name
+  db_password:
+    file: /dev/shm/fretta-app/db_password

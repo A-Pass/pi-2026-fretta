@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { prisma } from "@/server/db/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/server/generated/prisma/client";
 import { listScheduledPickups, registerDuePickups } from "./pickups";
 import { freightOperation, FreightError } from "./service";
 import {
@@ -11,7 +11,7 @@ import {
 } from "../chat/services/message-service";
 
 test("frete real separa contas e preserva negociação, aceite e avaliação", async () => {
-  const url = new URL(process.env.DATABASE_URL!);
+  const url = new URL(process.env.DB_URL!);
   assert.equal(url.pathname, "/fretta_test");
   assert.ok(["localhost", "127.0.0.1"].includes(url.hostname));
   const [client, driver, other] = [randomUUID(), randomUUID(), randomUUID()];
@@ -45,36 +45,49 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
         email: `${id}@fretta.invalid`,
       })),
     });
-    await prisma.cliente.create({ data: { userId: client } });
-    await prisma.motorista.create({ data: { userId: driver } });
+    await prisma.cliente.create({ data: { user_id: client } });
+    await prisma.motorista.create({
+      data: {
+        user_id: driver,
+        codigo_publico: randomUUID(),
+        atualizado_em: new Date(),
+      },
+    });
     const vehicle = await prisma.veiculo.create({
       data: {
-        motoristaId: driver,
+        id: randomUUID(),
+        motorista_id: driver,
         categoria: "Utilitário",
         modelo: "Veículo de teste",
         placa: randomUUID(),
+        categoria_porte: "PEQUENO",
+        atualizado_em: new Date(),
       },
     });
     const availableAt = new Date(Date.now() + 86400000).toISOString();
-    await prisma.cadastroMotorista.create({
+    await prisma.cadastro_motorista.create({
       data: {
-        motoristaId: driver,
-        tipoPessoa: "PF",
-        cnhNumero: "teste",
-        cnhCategoria: "B",
-        cnhValidade: new Date("2099-01-01"),
-        fotoPerfilId: randomUUID(),
-        documentoCnhId: randomUUID(),
-        veiculoId: vehicle.id,
+        id: randomUUID(),
+        motorista_id: driver,
+        tipo_pessoa: "PF",
+        cnh_numero: "teste",
+        cnh_categoria: "B",
+        cnh_validade: new Date("2099-01-01"),
+        foto_perfil_id: randomUUID(),
+        documento_cnh_id: randomUUID(),
+        veiculo_id: vehicle.id,
         status: "APROVADO",
+        atualizado_em: new Date(),
       },
     });
-    await prisma.vinculoAssinatura.create({
+    await prisma.vinculo_assinatura.create({
       data: {
-        motoristaId: driver,
+        id: randomUUID(),
+        motorista_id: driver,
         status: "ATIVA",
-        inicioEm: new Date(Date.now() - 1000),
-        fimEm: new Date(availableAt),
+        inicio_em: new Date(Date.now() - 1000),
+        fim_em: new Date(availableAt),
+        atualizado_em: new Date(),
       },
     });
     const address = {
@@ -85,9 +98,9 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       number: "30",
       point: { lat: -16.377, lng: -39.58 },
     };
-    await prisma.cliente.create({ data: { userId: other } });
-    const savedAddress = { ...address, label: "Casa" };
-    await run(client, "POST", ["addresses", "save"], { address: savedAddress });
+    await prisma.cliente.create({ data: { user_id: other } });
+    const endereco_salvos = { ...address, label: "Casa" };
+    await run(client, "POST", ["addresses", "save"], { address: endereco_salvos });
     const saved = await run(client, "GET", ["addresses"]);
     assert.ok(Array.isArray(saved) && saved.length === 1);
     assert.deepEqual(await run(other, "GET", ["addresses"]), []);
@@ -98,13 +111,13 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
     await assert.rejects(
       run(other, "POST", ["addresses", "save"], {
         id: saved[0].id,
-        address: savedAddress,
+        address: endereco_salvos,
       }),
       denied(404),
     );
     await run(client, "POST", ["addresses", "save"], {
       id: saved[0].id,
-      address: { ...savedAddress, label: "Trabalho" },
+      address: { ...endereco_salvos, label: "Trabalho" },
     });
     const updatedAddresses = await run(client, "GET", ["addresses"]);
     assert.ok(Array.isArray(updatedAddresses));
@@ -141,7 +154,7 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
     assert.ok(
       "items" in far && far.items && !far.items.some((item) => item.id === id),
     );
-    await prisma.cliente.create({ data: { userId: driver } });
+    await prisma.cliente.create({ data: { user_id: driver } });
     const own = await run(driver, "POST", [], request);
     assert.ok("id" in own);
     try {
@@ -248,7 +261,7 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       availableAt,
     );
     assert.deepEqual(await listScheduledPickups(prisma, other), []);
-    const reminder = { id: `pickup-due:${offerId}`, destinatarioId: driver };
+    const reminder = { id: `pickup-due:${offerId}`, destinatario_id: driver };
     await registerDuePickups(
       prisma,
       driver,
@@ -286,9 +299,9 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       run(other, "POST", [id, "complete"], { score: 5 }),
       denied(403),
     );
-    await prisma.oferta.update({
+    await prisma.ofertaProposta.update({
       where: { id: offerId },
-      data: { retiradaEm: new Date(Date.now() - 60_000) },
+      data: { disponivelEm: new Date(Date.now() - 60_000) },
     });
     await assert.rejects(run(client, "POST", [id, "complete"]), denied(422));
     const waiting = await run(client, "POST", [id, "complete"], { score: 5 });
@@ -296,14 +309,14 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
     await run(client, "POST", [id, "complete"], { score: 1 });
     const finished = await run(driver, "POST", [id, "complete"], { score: 4 });
     assert.ok("status" in finished && finished.status === "CONCLUIDO");
-    const ratings = await prisma.avaliacao.findMany({ where: { freteId: id } });
+    const ratings = await prisma.avaliacao.findMany({ where: { frete_id: id } });
     assert.equal(ratings.length, 2);
     assert.equal(
-      ratings.find((rating) => rating.avaliadoId === driver)?.nota,
+      ratings.find((rating) => rating.avaliado_id === driver)?.nota,
       5,
     );
     assert.equal(
-      ratings.find((rating) => rating.avaliadoId === client)?.nota,
+      ratings.find((rating) => rating.avaliado_id === client)?.nota,
       4,
     );
     await assert.rejects(
@@ -312,25 +325,25 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
     );
   } finally {
     if (freightId) {
-      const where = { freteId: freightId };
+      const where = { frete_id: freightId };
       await prisma.frete.update({
         where: { id: freightId },
-        data: { propostaAceitaId: null },
+        data: { proposta_aceita_id: null },
       });
       await prisma.avaliacao.deleteMany({ where });
-      await prisma.mensagem.deleteMany({
-        where: { conversa: { proposta: where } },
+      await prisma.mensagem.deleteMany({ where });
+      await prisma.conversa.deleteMany({
+        where: { proposta_id: { in: (await prisma.proposta.findMany({ where, select: { id: true } })).map((row) => row.id) } },
       });
-      await prisma.conversa.deleteMany({ where: { proposta: where } });
-      await prisma.oferta.deleteMany({ where: { proposta: where } });
+      await prisma.ofertaProposta.deleteMany({ where: { proposta: where } });
       await prisma.proposta.deleteMany({ where });
       await prisma.frete.delete({ where: { id: freightId } });
     }
-    await prisma.vinculoAssinatura.deleteMany({
-      where: { motoristaId: driver },
+    await prisma.vinculo_assinatura.deleteMany({
+      where: { motorista_id: driver },
     });
-    await prisma.cadastroMotorista.deleteMany({
-      where: { motoristaId: driver },
+    await prisma.cadastro_motorista.deleteMany({
+      where: { motorista_id: driver },
     });
     await prisma.user.deleteMany({
       where: { id: { in: [client, driver, other] } },

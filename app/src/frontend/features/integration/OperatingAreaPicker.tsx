@@ -14,7 +14,7 @@ export function OperatingAreaPicker({
     <>
       <LocationPicker
         value={area.base}
-        followMap
+        mapCenter={area.base}
         radiusKm={area.radius}
         onChange={(point) => {
           if (point) onChange({ ...area, base: point });

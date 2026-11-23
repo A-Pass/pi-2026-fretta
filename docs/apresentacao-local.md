@@ -4,7 +4,7 @@
 
 1. Copie o modelo de configuração da raiz para `.env`.
 2. Defina `NEXT_PUBLIC_API_MODE=real`, `FRETTA_DEMO_PIX=true`, a senha do banco e um segredo aleatório para a sessão.
-3. No cliente OAuth Web do Google, autorize o redirecionamento `http://localhost:3000/api/auth/callback/google`. Configure `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` no arquivo local. Se o projeto OAuth estiver em teste, use as contas habilitadas nele.
+3. No cliente OAuth Web do Google, autorize o redirecionamento `http://localhost:3000/api/auth/callback/google`. Configure APP_GOOGLE_CLIENT_ID` e APP_GOOGLE_CLIENT_SECRET` no arquivo local. Se o projeto OAuth estiver em teste, use as contas habilitadas nele.
 4. Execute `docker compose up --build` e abra `http://localhost:3000`. A aplicação depende da conclusão das migrações.
 5. Entre com as contas Google da apresentação. Para conceder acesso de administrador a uma conta já autenticada, execute no terminal:
    ```sh
@@ -31,7 +31,7 @@ O modo real inclui o fluxo de autônomos, perfis e endereços salvos. A cobranç
 - Use o mesmo endereço da configuração Google e cadastre o callback da porta escolhida. Para a porta padrão, use `http://localhost:3000/api/auth/callback/google`. Se houver usuários de teste cadastrados no Google, autorize as duas contas antes do ensaio.
 - Rode `docker compose config --quiet` e `docker compose up --build`. Confira que o serviço de migração terminou sem erro. Teste o Google, o mapa e a simulação de Pix em duas sessões distintas.
 - Use documentos ilustrativos e endereços de teste nas telas exibidas à banca. Após o ensaio, rode `docker compose restart app database` e confira os dados e as imagens ao voltar.
-- Para executar sem Docker, use Node 22 ou superior (Node 22.12+ na linha 22), PostgreSQL local e `app/.env` preenchido a partir do modelo. Na pasta `app`, execute `npm ci`, `npm run db:migrate`, `npm run build` e `npm start`. Use a mesma porta em `BETTER_AUTH_URL` e no callback do Google.
+- Para executar sem Docker, use Node 22 ou superior (Node 22.12+ na linha 22), PostgreSQL local e `app/.env` preenchido a partir do modelo. Na pasta `app`, execute `npm ci`, `npm run db:migrate`, `npm run build` e `npm start`. Use a mesma porta em `APP_URL` e no callback do Google.
 
 ## Backup e restauração
 

@@ -7,50 +7,96 @@ import {
   Navigation,
   Check,
 } from "lucide-react";
-import type { Freight, Store, OperatingArea, MapPoint } from "@/contracts";
+import type { Store, OperatingArea, MapPoint } from "@/contracts";
 import { LocationPicker } from "../../components/LocationPicker";
 import { EmptyState } from "../../components/EmptyState";
-import { defaultArea, opportunities } from "./rules";
+import { createBackendClient, type FreightFeedItem } from "../../api/backend";
 type Props = {
   store: Store;
   name: string;
-  subscription: boolean;
   save: (s: Store) => Promise<boolean>;
-  onSelect: (id: string) => void;
-  onProfile: () => void;
-  schedule: (f: Freight) => string | undefined;
+  schedule: (f: FreightFeedItem) => string | undefined;
+  onSelect: (freight: FreightFeedItem) => void;
 };
 export function DriverHomeView({
   store,
   name,
-  subscription,
   save,
-  onSelect,
-  onProfile,
   schedule,
+  onSelect,
 }: Props) {
-  const area = store.operatingArea || defaultArea;
+  const area = store.operatingArea;
+  const radiusKm = area?.radiusKm ?? 20;
   const [editing, setEditing] = useState(false),
-    [point, setPoint] = useState<MapPoint | null>(area.center),
-    [radius, setRadius] = useState(area.radiusKm),
-    [label, setLabel] = useState(area.label),
+    [point, setPoint] = useState<MapPoint | null>(area?.center || null),
+    [radius, setRadius] = useState(radiusKm),
+    [label, setLabel] = useState(area?.label || ""),
     [query, setQuery] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [visible, setVisible] = useState(12);
+  const [matches, setMatches] = useState<
+    { freight: FreightFeedItem; distance: number }[]
+  >([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
   useEffect(
     () => setVisible(12),
-    [query, area.center.lat, area.center.lng, area.radiusKm],
+    [query, area?.center.lat, area?.center.lng, radiusKm],
   );
-  const matches = opportunities(store, area).filter(({ freight: f }) =>
-    `${f.title} ${f.origin} ${f.destination}`
-      .toLocaleLowerCase()
-      .includes(query.toLocaleLowerCase()),
-  );
+  useEffect(() => {
+    if (!area) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setSearching(true);
+      setSearchError("");
+      createBackendClient()
+        .freights(undefined, controller.signal, {
+          q: query.trim() || undefined,
+          lat: area.center.lat,
+          lng: area.center.lng,
+          radiusKm: area.radiusKm,
+          limit: 100,
+        })
+        .then(({ items }) => {
+          setMatches(
+            items
+              .filter((freight) => freight.pickupDistanceKm != null)
+              .map((freight) => ({
+                freight,
+                distance: freight.pickupDistanceKm as number,
+              }))
+              .sort((a, b) => a.distance - b.distance),
+          );
+        })
+        .catch((failure) => {
+          if (!controller.signal.aborted) {
+            setSearchError(
+              failure instanceof Error
+                ? failure.message
+                : "Não foi possível buscar os fretes.",
+            );
+            setMatches([]);
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    query,
+    area?.center.lat,
+    area?.center.lng,
+    radiusKm,
+  ]);
   function edit() {
-    setPoint({ ...area.center });
-    setRadius(area.radiusKm);
-    setLabel(area.label);
+    setPoint(area ? { ...area.center } : null);
+    setRadius(radiusKm);
+    setLabel(area?.label || "");
     setError("");
     setEditing(true);
   }
@@ -70,22 +116,25 @@ export function DriverHomeView({
             </span>
             <h2>Área de operação</h2>
             <p className="muted">
-              {area.label} · retiradas em até{" "}
-              <strong>{area.radiusKm} km</strong>
+              {area
+                ? `${area.label} · retiradas em até ${area.radiusKm} km`
+                : "Nenhuma área de operação definida"}
             </p>
           </div>
           {!editing && (
             <button className="primary" onClick={edit}>
-              Alterar área de operação
+              {area ? "Alterar área de operação" : "Definir área de operação"}
             </button>
           )}
         </div>
         {!editing ? (
-          <p className="operating-tip">
-            <MapPin size={18} /> Chegou a outra cidade? Mude sua base para
-            encontrar uma carga de retorno. O destino da entrega pode ficar fora
-            do raio.
-          </p>
+          area && (
+            <p className="operating-tip">
+              <MapPin size={18} /> Chegou a outra cidade? Mude sua base para
+              encontrar uma carga de retorno. O destino da entrega pode ficar
+              fora do raio.
+            </p>
+          )
         ) : (
           <form
             onSubmit={async (e) => {
@@ -197,15 +246,15 @@ export function DriverHomeView({
         <div>
           <h2>Solicitações na sua área</h2>
           <p className="muted">
-            Retiradas dentro do raio de {area.radiusKm} km aplicado acima.
+            {area
+              ? `Retiradas dentro do raio de ${area.radiusKm} km aplicado acima.`
+              : "Defina sua área de operação para encontrar solicitações próximas."}
           </p>
         </div>
-        {subscription && (
-          <span className="badge">
-            {matches.length}{" "}
-            {matches.length === 1 ? "oportunidade" : "oportunidades"}
-          </span>
-        )}
+        <span className="badge">
+          {matches.length}{" "}
+          {matches.length === 1 ? "oportunidade" : "oportunidades"}
+        </span>
       </div>
       <label className="search driver-search">
         <Search size={18} />
@@ -216,83 +265,61 @@ export function DriverHomeView({
           placeholder="Busque por título, região ou destino"
         />
       </label>
-      {!subscription ? (
-        <section className="panel empty">
-          <h2>Assinatura vencida na demonstração</h2>
-          <p>Ative a simulação no perfil para consultar novas oportunidades.</p>
-          <button className="primary" onClick={onProfile}>
-            Ver assinatura
-          </button>
-        </section>
-      ) : (
-        <div className="cards">
-          {matches.slice(0, visible).map(({ freight: f, distance }) => (
-            <article className="freight-card" key={f.id}>
-              <div className="section-head">
-                <span className="type-icon">
-                  <Package />
+      <div className="cards">
+        {searching && (
+          <p className="muted" role="status">
+            Buscando fretes disponíveis…
+          </p>
+        )}
+        {searchError && (
+          <p className="alert" role="alert">
+            {searchError}
+          </p>
+        )}
+        {matches.slice(0, visible).map(({ freight: f, distance }) => (
+          <article className="freight-card" key={f.id}>
+            <div className="section-head">
+              <span className="type-icon">
+                <Package />
+              </span>
+              <span className="badge">
+                Retirada a aproximadamente {Math.round(distance)} km
+              </span>
+            </div>
+            <h3>{f.title}</h3>
+            <p className="description">{f.description}</p>
+            <div className="route">
+              <p>
+                <MapPin size={16} />
+                <span>
+                  <small>RETIRADA</small>
+                  {f.origin}
                 </span>
-                <span className="badge">
-                  Retirada a aproximadamente {Math.round(distance)} km
+              </p>
+              <p>
+                <MapPin size={16} />
+                <span>
+                  <small>ENTREGA</small>
+                  {f.destination}
                 </span>
-              </div>
-              <h3>{f.title}</h3>
-              <p className="description">{f.description}</p>
-              <div className="route">
-                <p>
-                  <MapPin size={16} />
-                  <span>
-                    <small>RETIRADA</small>
-                    {f.origin}
-                  </span>
-                </p>
-                <p>
-                  <MapPin size={16} />
-                  <span>
-                    <small>ENTREGA</small>
-                    {f.destination}
-                  </span>
-                </p>
-              </div>
-              <div className="facts">
-                <span>🚚 {f.vehicle}</span>
-                <span>◷ {schedule(f)}</span>
-              </div>
-              <button className="card-link" onClick={() => onSelect(f.id)}>
-                Ver oportunidade <ArrowRight size={18} />
-              </button>
-            </article>
-          ))}
-          {!matches.length && (
-            <EmptyState title="Nenhuma retirada nesta área por enquanto">
-              Aumente o raio ou altere sua base para buscar oportunidades em
-              outra região.
-              {!query && (
-                <>
-                  <br />
-                  <button
-                    className="secondary"
-                    disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      await save({
-                        ...store,
-                        operatingArea: {
-                          ...defaultArea,
-                          center: { ...defaultArea.center },
-                        },
-                      });
-                      setBusy(false);
-                    }}
-                  >
-                    Ver exemplos em Eunápolis
-                  </button>
-                </>
-              )}
-            </EmptyState>
-          )}
-        </div>
-      )}
+              </p>
+            </div>
+            <div className="facts">
+              <span>🚚 {f.vehicle}</span>
+              <span>◷ {schedule(f)}</span>
+            </div>
+            <button className="card-link" onClick={() => onSelect(f)}>
+              Ver oportunidade <ArrowRight size={18} />
+            </button>
+          </article>
+        ))}
+        {!matches.length && (
+          <EmptyState title="Nenhuma retirada nesta área por enquanto">
+            Aumente o raio ou altere sua base para buscar oportunidades em
+            outra região.
+          </EmptyState>
+        )}
+      </div>
       {visible < matches.length && (
         <div className="load-more">
           <button

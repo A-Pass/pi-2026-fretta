@@ -36,8 +36,8 @@ test("bloqueia cadastro de motorista sem autenticação", async () => {
 });
 
 test("bloqueia cadastro sem perfil de motorista", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -54,8 +54,8 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
   assert.equal(banco[0]?.banco, "fretta_test");
 
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -108,7 +108,9 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
     // Ativar o perfil de motorista para testar a validação dos dados.
     await prisma.motorista.create({
       data: {
-        userId: usuarioId!,
+        user_id: usuarioId!,
+        codigo_publico: randomUUID(),
+        atualizado_em: new Date(),
       },
     });
 
@@ -142,11 +144,11 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
         },
         body: JSON.stringify({
           tipoPessoa: "PF",
-          nomeCompleto: "Motorista de Teste",
+          nome_completo: "Motorista de Teste",
           cpf: "11111111111",
-          cnhNumero: "12345678901",
-          cnhCategoria: "B",
-          cnhValidade: "2099-12-31",
+          cnh_numero: "12345678901",
+          cnh_categoria: "B",
+          cnh_validade: "2099-12-31",
           veiculoId: "veiculo-ficticio",
         }),
       },
@@ -171,11 +173,11 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
         },
         body: JSON.stringify({
           tipoPessoa: "PF",
-          nomeCompleto: "Motorista de Teste",
+          nome_completo: "Motorista de Teste",
           cpf: "529.982.247-25",
-          cnhNumero: "12345678901",
-          cnhCategoria: "B",
-          cnhValidade: "2020-01-01",
+          cnh_numero: "12345678901",
+          cnh_categoria: "B",
+          cnh_validade: "2020-01-01",
           veiculoId: "veiculo-ficticio",
         }),
       },
@@ -201,7 +203,10 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
           email: `${outroMotoristaId}@fretta.invalid`,
           emailVerified: false,
           motorista: {
-            create: {},
+            create: {
+              codigo_publico: randomUUID(),
+              atualizado_em: new Date(),
+            },
           },
         },
       });
@@ -209,12 +214,15 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       // O veículo pertence ao outro motorista.
       const veiculoDeOutroMotorista = await prisma.veiculo.create({
         data: {
-          motoristaId: outroMotoristaId,
+          id: randomUUID(),
+          motorista_id: outroMotoristaId,
           categoria: "UTILITARIO",
           modelo: "Veículo Fictício",
           placa: `T${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`,
-          capacidadeKg: 1000,
+          capacidade_kg: 1000,
           descricao: "Teste de propriedade do veículo",
+          categoria_porte: "PEQUENO",
+          atualizado_em: new Date(),
         },
       });
 
@@ -229,11 +237,11 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
           },
           body: JSON.stringify({
             tipoPessoa: "PF",
-            nomeCompleto: "Motorista de Teste",
+            nome_completo: "Motorista de Teste",
             cpf: "529.982.247-25",
-            cnhNumero: "12345678901",
-            cnhCategoria: "B",
-            cnhValidade: "2099-12-31",
+            cnh_numero: "12345678901",
+            cnh_categoria: "B",
+            cnh_validade: "2099-12-31",
             veiculoId: veiculoDeOutroMotorista.id,
           }),
         },
@@ -256,12 +264,15 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
 
     const veiculoProprio = await prisma.veiculo.create({
       data: {
-        motoristaId: usuarioId!,
+        id: randomUUID(),
+        motorista_id: usuarioId!,
         categoria: "UTILITARIO",
         modelo: "Veículo Próprio de Teste",
         placa: `T${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`,
-        capacidadeKg: 1000,
+        capacidade_kg: 1000,
         descricao: "Teste de cadastro com veículo próprio",
+        categoria_porte: "PEQUENO",
+        atualizado_em: new Date(),
       },
     });
 
@@ -275,11 +286,11 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
         },
         body: JSON.stringify({
           tipoPessoa: "PF",
-          nomeCompleto: "Motorista de Teste",
+          nome_completo: "Motorista de Teste",
           cpf: "529.982.247-25",
-          cnhNumero: "12345678901",
-          cnhCategoria: "B",
-          cnhValidade: "2099-12-31",
+          cnh_numero: "12345678901",
+          cnh_categoria: "B",
+          cnh_validade: "2099-12-31",
           veiculoId: veiculoProprio.id,
         }),
       },
@@ -309,7 +320,7 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
     try {
       // Criar foto de perfil vinculada ao motorista.
       const foto = await salvarDocumentoMotorista({
-        motoristaId: usuarioId!,
+        motorista_id: usuarioId!,
         tipo: "FOTO_PERFIL",
         bytes: imagemTeste,
       });
@@ -318,7 +329,7 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
 
       // Criar documento da CNH.
       const cnh = await salvarDocumentoMotorista({
-        motoristaId: usuarioId!,
+        motorista_id: usuarioId!,
         tipo: "CNH",
         bytes: imagemTeste,
       });
@@ -336,11 +347,11 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
           },
           body: JSON.stringify({
             tipoPessoa: "PF",
-            nomeCompleto: "Motorista de Teste",
+            nome_completo: "Motorista de Teste",
             cpf: "529.982.247-25",
-            cnhNumero: "12345678901",
-            cnhCategoria: "B",
-            cnhValidade: "2099-12-31",
+            cnh_numero: "12345678901",
+            cnh_categoria: "B",
+            cnh_validade: "2099-12-31",
             veiculoId: veiculoProprio.id,
             fotoPerfilId: foto.id,
             documentoCnhId: cnh.id,
@@ -360,21 +371,21 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       assert.equal(dadosCompletos.status, "EM_ANALISE");
 
       // Confirmar persistência do cadastro.
-      const cadastroSalvo = await prisma.cadastroMotorista.findUniqueOrThrow({
-        where: { motoristaId: usuarioId! },
+      const cadastroSalvo = await prisma.cadastro_motorista.findUniqueOrThrow({
+        where: { motorista_id: usuarioId! },
       });
 
       assert.equal(cadastroSalvo.status, "EM_ANALISE");
-      assert.equal(cadastroSalvo.fotoPerfilId, foto.id);
-      assert.equal(cadastroSalvo.documentoCnhId, cnh.id);
-      assert.equal(cadastroSalvo.veiculoId, veiculoProprio.id);
+      assert.equal(cadastroSalvo.foto_perfil_id, foto.id);
+      assert.equal(cadastroSalvo.documento_cnh_id, cnh.id);
+      assert.equal(cadastroSalvo.veiculo_id, veiculoProprio.id);
 
       // Confirmar persistência dos dados pessoais.
       const pessoaSalva = await prisma.pessoa.findUniqueOrThrow({
-        where: { userId: usuarioId! },
+        where: { user_id: usuarioId! },
       });
 
-      assert.equal(pessoaSalva.nomeCompleto, "Motorista de Teste");
+      assert.equal(pessoaSalva.nome_completo, "Motorista de Teste");
       assert.equal(pessoaSalva.cpf, "52998224725");
 
       console.log("Cadastro completo persistido no PostgreSQL - OK");
@@ -400,7 +411,7 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
 
       // A consulta não deve expor documentos ou dados sensíveis.
       assert.equal(dadosConsulta.cpf, undefined);
-      assert.equal(dadosConsulta.cnhNumero, undefined);
+      assert.equal(dadosConsulta.cnh_numero, undefined);
       assert.equal(dadosConsulta.fotoPerfilId, undefined);
       assert.equal(dadosConsulta.documentoCnhId, undefined);
 
@@ -416,11 +427,11 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
           },
           body: JSON.stringify({
             tipoPessoa: "PF",
-            nomeCompleto: "Motorista de Teste",
+            nome_completo: "Motorista de Teste",
             cpf: "529.982.247-25",
-            cnhNumero: "12345678901",
-            cnhCategoria: "B",
-            cnhValidade: "2099-12-31",
+            cnh_numero: "12345678901",
+            cnh_categoria: "B",
+            cnh_validade: "2099-12-31",
             veiculoId: veiculoProprio.id,
             fotoPerfilId: foto.id,
             documentoCnhId: cnh.id,
@@ -433,8 +444,8 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       assert.equal(respostaReenvio.status, 409);
       assert.equal(dadosReenvio.code, "REGISTRATION_NOT_EDITABLE");
 
-      const quantidadeCadastros = await prisma.cadastroMotorista.count({
-        where: { motoristaId: usuarioId! },
+      const quantidadeCadastros = await prisma.cadastro_motorista.count({
+        where: { motorista_id: usuarioId! },
       });
 
       assert.equal(quantidadeCadastros, 1);
@@ -442,13 +453,13 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       console.log("Reenvio de cadastro em análise bloqueado - OK");
 
       // Simular uma solicitação de ajustes pelo administrador.
-      await prisma.cadastroMotorista.update({
-        where: { motoristaId: usuarioId! },
+      await prisma.cadastro_motorista.update({
+        where: { motorista_id: usuarioId! },
         data: {
           status: "AJUSTES_SOLICITADOS",
-          motivoAjuste: "Enviar uma foto mais nítida.",
-          itensAjuste: ["foto"],
-          analisadoEm: new Date(),
+          motivo_ajuste: "Enviar uma foto mais nítida.",
+          itens_ajuste: ["foto"],
+          analisado_em: new Date(),
         },
       });
 
@@ -467,7 +478,7 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       assert.equal(respostaConsultaAjustes.status, 200);
       assert.equal(dadosConsultaAjustes.status, "AJUSTES_SOLICITADOS");
       assert.equal(
-        dadosConsultaAjustes.motivoAjuste,
+        dadosConsultaAjustes.motivo_ajuste,
         "Enviar uma foto mais nítida.",
       );
       assert.ok(dadosConsultaAjustes.analisadoEm);
@@ -475,14 +486,15 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
 
       console.log("Consulta dos ajustes solicitados - OK");
 
-      assert.deepEqual(dadosConsultaAjustes.itensAjuste, ["foto"]);
-      const novaFoto = await prisma.arquivoPrivado.create({
+      assert.deepEqual(dadosConsultaAjustes.itens_ajuste, ["foto"]);
+      const novaFoto = await prisma.arquivo_privado.create({
         data: {
-          motoristaId: usuarioId!,
+          id: randomUUID(),
+          motorista_id: usuarioId!,
           tipo: "FOTO_PERFIL",
-          chaveArmazenamento: `${randomUUID()}.jpg`,
-          mimeType: "image/jpeg",
-          tamanhoBytes: 32,
+          chave_armazenamento: `${randomUUID()}.jpg`,
+          mime_type: "image/jpeg",
+          tamanho_bytes: 32,
         },
       });
       const reenviarFoto = (body: Record<string, unknown>) =>
@@ -494,7 +506,7 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
           }),
         );
       const update = {
-        expectedUpdatedAt: dadosConsultaAjustes.atualizadoEm,
+        expectedUpdatedAt: dadosConsultaAjustes.atualizado_em,
         fotoPerfilId: novaFoto.id,
       };
       assert.equal(
@@ -515,25 +527,25 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       assert.equal(respostaAjustes.status, 201, JSON.stringify(dadosAjustes));
       assert.equal(dadosAjustes.status, "EM_ANALISE");
       const cadastroReenviado =
-        await prisma.cadastroMotorista.findUniqueOrThrow({
-          where: { motoristaId: usuarioId! },
+        await prisma.cadastro_motorista.findUniqueOrThrow({
+          where: { motorista_id: usuarioId! },
         });
-      assert.equal(cadastroReenviado.fotoPerfilId, novaFoto.id);
-      assert.equal(cadastroReenviado.documentoCnhId, cnh.id);
-      assert.equal(cadastroReenviado.veiculoId, veiculoProprio.id);
-      assert.deepEqual(cadastroReenviado.itensAjuste, []);
-      assert.deepEqual(cadastroReenviado.itensConferidos, ["dados", "cnh", "veiculo"]);
+      assert.equal(cadastroReenviado.foto_perfil_id, novaFoto.id);
+      assert.equal(cadastroReenviado.documento_cnh_id, cnh.id);
+      assert.equal(cadastroReenviado.veiculo_id, veiculoProprio.id);
+      assert.deepEqual(cadastroReenviado.itens_ajuste, []);
+      assert.deepEqual(cadastroReenviado.itens_conferidos, ["dados", "cnh", "veiculo"]);
       const pessoa = await prisma.pessoa.findUniqueOrThrow({
-        where: { userId: usuarioId! },
+        where: { user_id: usuarioId! },
       });
       assert.equal(pessoa.cpf, "52998224725");
 
       // Simular a aprovação administrativa.
-      await prisma.cadastroMotorista.update({
-        where: { motoristaId: usuarioId! },
+      await prisma.cadastro_motorista.update({
+        where: { motorista_id: usuarioId! },
         data: {
           status: "APROVADO",
-          analisadoEm: new Date(),
+          analisado_em: new Date(),
         },
       });
 
@@ -547,11 +559,11 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
           },
           body: JSON.stringify({
             tipoPessoa: "PF",
-            nomeCompleto: "Alteração Não Autorizada",
+            nome_completo: "Alteração Não Autorizada",
             cpf: "529.982.247-25",
-            cnhNumero: "12345678901",
-            cnhCategoria: "B",
-            cnhValidade: "2099-12-31",
+            cnh_numero: "12345678901",
+            cnh_categoria: "B",
+            cnh_validade: "2099-12-31",
             veiculoId: veiculoProprio.id,
             fotoPerfilId: foto.id,
             documentoCnhId: cnh.id,
@@ -564,20 +576,20 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
       assert.equal(respostaAprovado.status, 409);
       assert.equal(dadosAprovado.code, "REGISTRATION_ALREADY_APPROVED");
 
-      const cadastroAprovado = await prisma.cadastroMotorista.findUniqueOrThrow(
+      const cadastroAprovado = await prisma.cadastro_motorista.findUniqueOrThrow(
         {
-          where: { motoristaId: usuarioId! },
+          where: { motorista_id: usuarioId! },
         },
       );
 
       assert.equal(cadastroAprovado.status, "APROVADO");
 
       const pessoaAprovada = await prisma.pessoa.findUniqueOrThrow({
-        where: { userId: usuarioId! },
+        where: { user_id: usuarioId! },
       });
 
       assert.equal(
-        pessoaAprovada.nomeCompleto,
+        pessoaAprovada.nome_completo,
         "Motorista de Teste",
       );
 
@@ -603,7 +615,7 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
 
       // Não expor dados pessoais ou documentos na resposta.
       assert.equal(dadosConsultaAprovado.cpf, undefined);
-      assert.equal(dadosConsultaAprovado.cnhNumero, undefined);
+      assert.equal(dadosConsultaAprovado.cnh_numero, undefined);
       assert.equal(dadosConsultaAprovado.fotoPerfilId, undefined);
       assert.equal(dadosConsultaAprovado.documentoCnhId, undefined);
 
@@ -611,12 +623,12 @@ test("bloqueia cadastro sem perfil de motorista", async () => {
     } finally {
       // Remover somente arquivos criados por este teste.
       for (const id of documentosCriados) {
-        const registro = await prisma.arquivoPrivado.findUnique({
+        const registro = await prisma.arquivo_privado.findUnique({
           where: { id },
         });
 
         if (registro) {
-          await removerArquivoPrivado(registro.chaveArmazenamento);
+          await removerArquivoPrivado(registro.chave_armazenamento);
         }
       }
 

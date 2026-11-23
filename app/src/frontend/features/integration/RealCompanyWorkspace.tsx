@@ -404,11 +404,8 @@ export function RealCompanyWorkspace({
     return (
       <LoginView
         role="empresa"
-        real
-        busy={busy}
-        error={error}
         onBack={() => location.assign("/")}
-        onContinue={async () => {
+        onGoogleSignIn={async () => {
           setBusy(true);
           setError("");
           try {
@@ -429,6 +426,8 @@ export function RealCompanyWorkspace({
             setBusy(false);
           }
         }}
+        googleSignInPending={busy}
+        googleSignInError={error}
       />
     );
   const seats = Number(seatInput);

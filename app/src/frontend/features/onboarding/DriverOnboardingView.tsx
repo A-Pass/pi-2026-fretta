@@ -1,4 +1,3 @@
-import { formatCpf } from "./rules";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
@@ -19,7 +18,6 @@ import { vehicleCategories, vehicleLabel } from "../vehicles/rules";
 import { todayLocal } from "../addresses/rules";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { OnboardingPhotoField } from "./OnboardingPhotoField";
-import { demoPhoto } from "./images";
 import {
   licenseCategories,
   maskDocument,
@@ -28,7 +26,6 @@ import {
 } from "./rules";
 const steps = ["Identificação", "Sua foto", "CNH", "Veículo", "Revisão"];
 type Props = {
-  mode?: "demo" | "real";
   store: Store;
   onSubmit: (draft: DriverOnboardingDraft) => Promise<boolean>;
   onClient: () => void;
@@ -41,7 +38,6 @@ export function DriverOnboardingView({
   onClient,
   onLogout,
   onServices,
-  mode = "demo",
 }: Props) {
   const [step, setStep] = useState(0),
     [busy, setBusy] = useState(false),
@@ -78,32 +74,6 @@ export function DriverOnboardingView({
   function update(patch: Partial<DriverOnboardingDraft>) {
     setDraft((d) => ({ ...d, ...patch, confirmed: false }));
     setError("");
-  }
-  function sample() {
-    const date = new Date(`${todayLocal()}T12:00:00Z`);
-    date.setUTCFullYear(date.getUTCFullYear() + 5);
-    update({
-      fullName: "Motorista Demonstração",
-      personType: "pf",
-      cpf: "12345678909",
-      cnpj: "12ABC34501DE35",
-      companyName: "Empresa de Exemplo",
-      profilePhoto: demoPhoto("profile"),
-      licenseNumber: "12345678901",
-      licenseCategory: "B",
-      licenseExpiresOn: date.toISOString().slice(0, 10),
-      licensePhoto: demoPhoto("license"),
-      vehicleId: store.vehicles?.[0]?.id || "",
-      vehicle: {
-        id: crypto.randomUUID(),
-        category: "Utilitário",
-        model: "Fiorino de demonstração",
-        plate: "TST1A23",
-        capacityKg: 600,
-        description: "Veículo fictício para apresentação do projeto.",
-      },
-    });
-    setStep(1);
   }
   async function advance(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -161,22 +131,10 @@ export function DriverOnboardingView({
         </button>
       </header>
       <main className="onboarding-main">
-        <div className="onboarding-demo-note">
+        <div className="onboarding-note">
           <ShieldCheck size={20} />
           <span>
-            {mode === "real" ? (
-              <>
-                Cadastro conectado ao servidor · Os dados e documentos serão
-                enviados ao armazenamento privado para análise. Confira sua
-                conta antes de enviar.
-              </>
-            ) : (
-              <>
-                <b>Cadastro de demonstração</b> · Use dados fictícios. Não envie
-                documentos reais. As imagens da CNH e os números completos ficam
-                apenas nesta tela e não são guardados ao finalizar ou sair.
-              </>
-            )}
+            <b>Cadastro do motorista</b> · Informe dados reais somente em um ambiente seguro. Os documentos serão analisados por uma operação autorizada.
           </span>
         </div>
         {step === 0 ? (
@@ -237,17 +195,12 @@ export function DriverOnboardingView({
               <button className="primary" onClick={() => setStep(1)}>
                 Começar cadastro <ArrowRight size={18} />
               </button>
-              {mode === "demo" && (
-                <button className="secondary" onClick={sample}>
-                  <Sparkles size={17} /> Preencher exemplo fictício
-                </button>
-              )}
             </div>
             <button className="back" onClick={onClient}>
               Continuar como cliente
             </button>
             {store.proposals.some((p) =>
-              ownProposal(p, store.profile?.name || "Cleiton"),
+              ownProposal(p, store.profile?.id || ""),
             ) && (
               <button className="back" onClick={onServices}>
                 Acessar meus serviços existentes
@@ -337,9 +290,10 @@ export function DriverOnboardingView({
                         inputMode="numeric"
                         autoComplete="off"
                         value={draft.cpf}
+                        maxLength={14}
                         onChange={(e) =>
                           update({
-                            cpf: formatCpf(e.target.value),
+                            cpf: e.target.value.replace(/[^\d.\-]/g, ""),
                           })
                         }
                         required
@@ -501,25 +455,24 @@ export function DriverOnboardingView({
                       </div>
                     ) : (
                       <>
-                        <fieldset className="plain-fieldset vehicle-category-options">
-                          <legend>Tipo de veículo</legend>
-                          {vehicleCategories.map((category) => (
-                            <label key={category}>
-                              <input
-                                type="radio"
-                                name="vehicle-category"
-                                value={category}
-                                checked={draft.vehicle.category === category}
-                                onChange={() =>
-                                  update({
-                                    vehicle: { ...draft.vehicle, category },
-                                  })
-                                }
-                              />
-                              <span>{category}</span>
-                            </label>
-                          ))}
-                        </fieldset>
+                        <label>
+                          Tipo de veículo
+                          <select
+                            value={draft.vehicle.category}
+                            onChange={(e) =>
+                              update({
+                                vehicle: {
+                                  ...draft.vehicle,
+                                  category: e.target.value,
+                                },
+                              })
+                            }
+                          >
+                            {vehicleCategories.map((v) => (
+                              <option key={v}>{v}</option>
+                            ))}
+                          </select>
+                        </label>
                         <div className="form-grid">
                           <label>
                             Marca e modelo
@@ -686,9 +639,7 @@ export function DriverOnboardingView({
                       Conferi os dados e as imagens deste cadastro.
                     </label>
                     <p className="muted">
-                      {mode === "real"
-                        ? "As imagens serão enviadas ao armazenamento privado para análise do cadastro."
-                        : "Nesta demonstração, apenas a foto de perfil e o resumo com números ocultos ficam salvos no navegador. Ao retomar um envio incompleto, os documentos precisarão ser selecionados novamente."}
+                      Apenas os dados autorizados pelo fluxo de cadastro são persistidos. Ao retomar um envio incompleto, os documentos precisarão ser enviados novamente.
                     </p>
                   </>
                 )}

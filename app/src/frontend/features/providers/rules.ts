@@ -6,11 +6,8 @@ import type {
 } from "@/contracts";
 import { ownProposal } from "../driver/rules";
 export function providerId(p: Proposal) {
-  return (
-    p.companyId ||
-    p.driverId ||
-    (ownProposal(p, "Cleiton") ? "demo-driver" : `legacy:${p.driver}`)
-  );
+  if (p.providerKind === "empresa" && p.companyId) return p.companyId;
+  return p.driverId || `provider:${p.driver}`;
 }
 export function providerName(p: Proposal) {
   return p.providerName || p.driver;
@@ -26,25 +23,20 @@ export function companyError(company: CompanyProfile) {
 export function publicProvider(
   store: Store,
   id: string,
-  proposalId?: string,
 ): PublicProviderProfile | null {
   const matches = store.proposals.filter((p) => providerId(p) === id);
-  const self = id === "demo-driver";
+  const self = id === store.profile?.id;
   if (!self && !matches.length) return null;
-  const proposal = matches.find((p) => p.id === proposalId) || matches.at(-1);
+  const proposal = matches.at(-1);
   const company = self && store.driverRegistration?.personType === "pj";
-  const organization = id === store.fleet?.company.id ? store.fleet : undefined;
   const kind = self
     ? company
       ? "empresa"
       : "autonomo"
     : proposal?.providerKind || "autonomo";
   const driver = {
-    name: self ? store.profile?.name || "Cleiton" : proposal!.driver,
-    photo: self
-      ? store.profile?.photo || ""
-      : organization?.people.find((p) => p.id === proposal?.driverId)?.photo ||
-        "",
+    name: self ? store.profile?.name || "" : proposal!.driver,
+    photo: self ? store.profile?.photo || "" : "",
   };
   const completed = store.freights.filter(
     (f) =>
@@ -57,28 +49,20 @@ export function publicProvider(
       f.reviews.cliente! >= 1 &&
       f.reviews.cliente! <= 5,
   );
-  const vehicles = organization
-    ? organization.vehicles.map((v) => ({
+  const vehicles = self
+    ? (store.vehicles || []).map((v) => ({
         category: v.category,
         model: v.model,
         description: v.description,
         capacityKg: v.capacityKg,
       }))
-    : self
-      ? (store.vehicles || []).map((v) => ({
-          category: v.category,
-          model: v.model,
-          description: v.description,
-          capacityKg: v.capacityKg,
-        }))
-      : [...new Set(matches.map((p) => p.vehicle))].map((label) => ({
-          category: label,
-          model: "",
-          description: "",
-        }));
+    : [...new Set(matches.map((p) => p.vehicle))].map((label) => ({
+        category: label,
+        model: "",
+        description: "",
+      }));
   return {
     id,
-    teamManaged: !!organization,
     kind,
     name:
       kind === "empresa"
@@ -87,21 +71,17 @@ export function publicProvider(
             store.driverRegistration?.companyName ||
             proposal?.providerName ||
             driver.name
-          : organization?.company.name || proposal?.providerName || driver.name
+          : proposal?.providerName || driver.name
         : driver.name,
     photo:
       kind === "empresa"
         ? self
           ? store.companyProfile?.logo || ""
-          : organization?.company.logo || proposal?.providerLogo || ""
+          : proposal?.providerLogo || ""
         : driver.photo,
     driver,
-    about:
-      organization || (self && company)
-        ? store.companyProfile?.about || ""
-        : "",
-    city:
-      organization || (self && company) ? store.companyProfile?.city || "" : "",
+    about: self && company ? store.companyProfile?.about || "" : "",
+    city: self && company ? store.companyProfile?.city || "" : "",
     completedCount: completed.length,
     rating: rated.length
       ? rated.reduce((sum, f) => sum + f.reviews.cliente!, 0) / rated.length

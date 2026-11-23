@@ -1,32 +1,32 @@
 
 -- CreateTable
-CREATE TABLE "Notificacao" (
+CREATE TABLE "notificacao" (
     "id" TEXT NOT NULL,
-    "destinatarioId" TEXT NOT NULL,
+    "destinatario_id" TEXT NOT NULL,
     "evento" TEXT NOT NULL,
     "titulo" TEXT NOT NULL,
     "corpo" TEXT NOT NULL,
-    "freteId" TEXT,
-    "propostaId" TEXT,
-    "conversaId" TEXT,
+    "frete_id" TEXT,
+    "proposta_id" TEXT,
+    "conversa_id" TEXT,
     "lida" BOOLEAN NOT NULL DEFAULT false,
-    "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "criado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "Notificacao_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "notificacao_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE INDEX "Notificacao_destinatarioId_criadoEm_id_idx"
-ON "Notificacao"("destinatarioId", "criadoEm", "id");
+CREATE INDEX "notificacao_destinatario_id_criado_em_id_idx"
+ON "notificacao"("destinatario_id", "criado_em", "id");
 
 -- CreateIndex
-CREATE INDEX "Notificacao_destinatarioId_lida_idx"
-ON "Notificacao"("destinatarioId", "lida");
+CREATE INDEX "notificacao_destinatario_id_lida_idx"
+ON "notificacao"("destinatario_id", "lida");
 
 -- AddForeignKey
-ALTER TABLE "Notificacao"
-ADD CONSTRAINT "Notificacao_destinatarioId_fkey"
-FOREIGN KEY ("destinatarioId")
+ALTER TABLE "notificacao"
+ADD CONSTRAINT "notificacao_destinatario_id_fkey"
+FOREIGN KEY ("destinatario_id")
 REFERENCES "user"("id")
 ON DELETE CASCADE
 ON UPDATE CASCADE;

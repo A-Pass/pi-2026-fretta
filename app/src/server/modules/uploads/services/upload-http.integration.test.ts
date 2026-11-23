@@ -19,8 +19,8 @@ import {
 
 test("protege e integra o upload geral de imagens", async () => {
   // Impedir execução em um banco diferente do fretta_test.
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -37,8 +37,8 @@ test("protege e integra o upload geral de imagens", async () => {
   assert.equal(banco[0]?.banco, "fretta_test");
 
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -136,13 +136,13 @@ test("protege e integra o upload geral de imagens", async () => {
     assert.ok(resultado.size > 0);
 
     // 3. Confirmar registro e proprietário no banco.
-    const registro = await prisma.arquivoUpload.findUnique({
+    const registro = await prisma.arquivo_upload.findUnique({
       where: { id: arquivoId },
     });
 
     assert.ok(registro);
-    assert.equal(registro.usuarioId, usuarioId);
-    assert.equal(registro.mimeType, "image/jpeg");
+    assert.equal(registro.usuario_id, usuarioId);
+    assert.equal(registro.mime_type, "image/jpeg");
     assert.equal(registro.finalidade, "freight");
 
     // 4. Confirmar arquivo físico.
@@ -150,7 +150,7 @@ test("protege e integra o upload geral de imagens", async () => {
       process.cwd(),
       "storage",
       "uploads",
-      registro.chaveArmazenamento,
+      registro.chave_armazenamento,
     );
 
     const arquivoSalvo = await readFile(caminhoArquivo);
@@ -357,12 +357,12 @@ test("protege e integra o upload geral de imagens", async () => {
   } finally {
     // Limpar somente o arquivo e usuário deste teste.
     if (arquivoId) {
-      const registro = await prisma.arquivoUpload.findUnique({
+      const registro = await prisma.arquivo_upload.findUnique({
         where: { id: arquivoId },
       });
 
       if (registro) {
-        await prisma.arquivoUpload.delete({
+        await prisma.arquivo_upload.delete({
           where: { id: arquivoId },
         });
 
@@ -370,7 +370,7 @@ test("protege e integra o upload geral de imagens", async () => {
           process.cwd(),
           "storage",
           "uploads",
-          registro.chaveArmazenamento,
+          registro.chave_armazenamento,
         );
 
         await unlink(caminho).catch((error: unknown) => {

@@ -7,13 +7,13 @@ import {
 type TipoArquivo = "FOTO_PERFIL" | "CNH";
 
 type SalvarDocumentoInput = {
-  motoristaId: string;
+  motorista_id: string;
   tipo: TipoArquivo;
   bytes: Buffer;
 };
 
 export async function salvarDocumentoMotorista({
-  motoristaId,
+  motorista_id,
   tipo,
   bytes,
 }: SalvarDocumentoInput) {
@@ -23,21 +23,21 @@ export async function salvarDocumentoMotorista({
   });
 
   try {
-    const registro = await prisma.arquivoPrivado.create({
+    const registro = await prisma.arquivo_privado.create({
       data: {
         id: arquivo.id,
-        motoristaId,
+        motorista_id,
         tipo,
-        chaveArmazenamento: arquivo.chaveArmazenamento,
-        mimeType: arquivo.mimeType,
-        tamanhoBytes: arquivo.tamanhoBytes,
+        chave_armazenamento: arquivo.chaveArmazenamento,
+        mime_type: arquivo.mimeType,
+        tamanho_bytes: arquivo.tamanhoBytes,
       },
     });
 
     return {
       id: registro.id,
       tipo: registro.tipo,
-      criadoEm: registro.criadoEm,
+      criado_em: registro.criado_em,
     };
   } catch (error) {
     try {
@@ -53,7 +53,7 @@ export async function salvarDocumentoMotorista({
   }
 }
 export async function verificarDocumentosMotorista(
-  motoristaId: string,
+  motorista_id: string,
   fotoPerfilId: string,
   documentoCnhId: string,
 ): Promise<boolean> {
@@ -65,9 +65,9 @@ export async function verificarDocumentosMotorista(
     return false;
   }
 
-  const documentos = await prisma.arquivoPrivado.findMany({
+  const documentos = await prisma.arquivo_privado.findMany({
     where: {
-      motoristaId,
+      motorista_id,
       id: {
         in: [fotoPerfilId, documentoCnhId],
       },

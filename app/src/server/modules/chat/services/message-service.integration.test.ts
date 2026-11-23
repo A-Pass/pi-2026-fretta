@@ -12,8 +12,8 @@ import {
 } from "./message-service";
 
 test("integra mensagens com autorização e paginação", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -30,20 +30,20 @@ test("integra mensagens com autorização e paginação", async () => {
   assert.equal(banco[0]?.banco, "fretta_test");
 
   const sufixo = randomUUID();
-  const clienteId = `chat-cliente-${sufixo}`;
-  const motoristaId = `chat-motorista-${sufixo}`;
+  const cliente_id = `chat-cliente-${sufixo}`;
+  const motorista_id = `chat-motorista-${sufixo}`;
   const terceiroId = `chat-terceiro-${sufixo}`;
 
-  let freteId: string | undefined;
-  let propostaId: string | undefined;
+  let frete_id: string | undefined;
+  let proposta_id: string | undefined;
   let conversaId: string | undefined;
 
   try {
     await prisma.user.create({
       data: {
-        id: clienteId,
+        id: cliente_id,
         name: "Cliente Teste",
-        email: `${clienteId}@fretta.invalid`,
+        email: `${cliente_id}@fretta.invalid`,
         emailVerified: false,
         cliente: {
           create: {},
@@ -53,12 +53,12 @@ test("integra mensagens com autorização e paginação", async () => {
 
     await prisma.user.create({
       data: {
-        id: motoristaId,
+        id: motorista_id,
         name: "Motorista Teste",
-        email: `${motoristaId}@fretta.invalid`,
+        email: `${motorista_id}@fretta.invalid`,
         emailVerified: false,
         motorista: {
-          create: {},
+          create: { codigo_publico: randomUUID(), atualizado_em: new Date() },
         },
       },
     });
@@ -74,43 +74,61 @@ test("integra mensagens com autorização e paginação", async () => {
 
     const frete = await prisma.frete.create({
       data: {
-        clienteId,
+        id: randomUUID(),
+        cliente: { connect: { user_id: cliente_id } },
         titulo: "Frete de teste do chat",
         descricao: "Carga fictícia",
-        categoriaVeiculo: "UTILITARIO",
-        origemSnapshot: {
-          cidade: "Eunápolis",
-          uf: "BA",
+        categoria_porte: "PEQUENO",
+        tipo_agendamento_enum: "COMBINAR",
+        atualizado_em: new Date(),
+        endereco_frete_endereco_origem_idToendereco: {
+          create: {
+            id: randomUUID(),
+            logradouro: "Rua Fictícia",
+            cidade: "Eunápolis",
+            estado: "BA",
+            cep: "45880000",
+          },
         },
-        destinoSnapshot: {
-          cidade: "Porto Seguro",
-          uf: "BA",
+        endereco_frete_endereco_destino_idToendereco: {
+          create: {
+            id: randomUUID(),
+            logradouro: "Avenida Fictícia",
+            cidade: "Porto Seguro",
+            estado: "BA",
+            cep: "45810000",
+          },
         },
       },
     });
 
-    freteId = frete.id;
+    frete_id = frete.id;
 
     const proposta = await prisma.proposta.create({
       data: {
-        freteId: frete.id,
-        motoristaId,
+        id: randomUUID(),
+        frete_id: frete.id,
+        motorista_id,
+        valor_proposto: 100,
+        atualizado_em: new Date(),
       },
     });
 
-    propostaId = proposta.id;
+    proposta_id = proposta.id;
 
     const conversa = await prisma.conversa.create({
       data: {
-        propostaId: proposta.id,
+        id: randomUUID(),
+        proposta_id: proposta.id,
+        atualizado_em: new Date(),
       },
     });
 
     conversaId = conversa.id;
 
     // Cliente e motorista têm acesso.
-    await verificarAcessoConversa(conversaId, clienteId);
-    await verificarAcessoConversa(conversaId, motoristaId);
+    await verificarAcessoConversa(conversaId, cliente_id);
+    await verificarAcessoConversa(conversaId, motorista_id);
 
     // Terceiro não pode acessar.
     await assert.rejects(
@@ -119,17 +137,17 @@ test("integra mensagens com autorização e paginação", async () => {
     );
 
     // Motorista envia uma mensagem.
-    const primeira = await enviarMensagem(conversaId, motoristaId, {
+    const primeira = await enviarMensagem(conversaId, motorista_id, {
       text: "Posso realizar o transporte.",
       clientMessageId: `msg-${randomUUID()}`,
     });
 
     assert.equal(primeira.role, "motorista");
-    assert.equal(primeira.proposalId, propostaId);
-    assert.equal(primeira.freightId, freteId);
+    assert.equal(primeira.proposalId, proposta_id);
+    assert.equal(primeira.freightId, frete_id);
 
     // Cliente responde.
-    const segunda = await enviarMensagem(conversaId, clienteId, {
+    const segunda = await enviarMensagem(conversaId, cliente_id, {
       text: "Qual é o horário disponível?",
       clientMessageId: `msg-${randomUUID()}`,
     });
@@ -139,7 +157,7 @@ test("integra mensagens com autorização e paginação", async () => {
     // Texto vazio é rejeitado.
     await assert.rejects(
       () =>
-        enviarMensagem(conversaId!, clienteId, {
+        enviarMensagem(conversaId!, cliente_id, {
           text: "   ",
         }),
       (error: unknown) => error instanceof ChatError && error.status === 422,
@@ -148,7 +166,7 @@ test("integra mensagens com autorização e paginação", async () => {
     // Texto acima de 2000 caracteres é rejeitado.
     await assert.rejects(
       () =>
-        enviarMensagem(conversaId!, clienteId, {
+        enviarMensagem(conversaId!, cliente_id, {
           text: "A".repeat(2001),
         }),
       (error: unknown) => error instanceof ChatError && error.status === 422,
@@ -166,12 +184,12 @@ test("integra mensagens com autorização e paginação", async () => {
     // Reenvio com o mesmo identificador não duplica.
     const clientMessageId = `duplicada-${randomUUID()}`;
 
-    const envioOriginal = await enviarMensagem(conversaId, motoristaId, {
+    const envioOriginal = await enviarMensagem(conversaId, motorista_id, {
       text: "Mensagem única",
       clientMessageId,
     });
 
-    const reenvio = await enviarMensagem(conversaId, motoristaId, {
+    const reenvio = await enviarMensagem(conversaId, motorista_id, {
       text: "Mensagem única",
       clientMessageId,
     });
@@ -181,7 +199,7 @@ test("integra mensagens com autorização e paginação", async () => {
     // Mesmo identificador com texto diferente gera conflito.
     await assert.rejects(
       () =>
-        enviarMensagem(conversaId!, motoristaId, {
+        enviarMensagem(conversaId!, motorista_id, {
           text: "Texto diferente",
           clientMessageId,
         }),
@@ -189,7 +207,7 @@ test("integra mensagens com autorização e paginação", async () => {
     );
 
     // Consulta das mensagens.
-    const resultado = await listarMensagens(conversaId, clienteId);
+    const resultado = await listarMensagens(conversaId, cliente_id);
 
     assert.equal(resultado.items.length, 3);
     assert.equal(resultado.nextCursor, null);
@@ -197,7 +215,7 @@ test("integra mensagens com autorização e paginação", async () => {
     // Confirma que as mensagens foram persistidas.
     const total = await prisma.mensagem.count({
       where: {
-        conversaId,
+        proposta_id,
       },
     });
 
@@ -205,20 +223,20 @@ test("integra mensagens com autorização e paginação", async () => {
 
     // Cria mensagens adicionais para testar a paginação.
     for (let i = 0; i < 23; i++) {
-      await enviarMensagem(conversaId, motoristaId, {
+      await enviarMensagem(conversaId, motorista_id, {
         text: `Mensagem de paginação ${i + 1}`,
         clientMessageId: `paginacao-${randomUUID()}`,
       });
     }
 
-    const primeiraPagina = await listarMensagens(conversaId, clienteId);
+    const primeiraPagina = await listarMensagens(conversaId, cliente_id);
 
     assert.equal(primeiraPagina.items.length, 20);
     assert.ok(primeiraPagina.nextCursor);
 
     const segundaPagina = await listarMensagens(
       conversaId,
-      clienteId,
+      cliente_id,
       primeiraPagina.nextCursor,
     );
 
@@ -235,7 +253,7 @@ test("integra mensagens com autorização e paginação", async () => {
 
     // Um cursor de outra conversa ou inexistente é inválido.
     await assert.rejects(
-      () => listarMensagens(conversaId!, clienteId, randomUUID()),
+      () => listarMensagens(conversaId!, cliente_id, randomUUID()),
       (error: unknown) => error instanceof ChatError && error.status === 422,
     );
 
@@ -244,7 +262,7 @@ test("integra mensagens com autorização e paginação", async () => {
     // Limpeza na ordem dos relacionamentos.
     if (conversaId) {
       await prisma.mensagem.deleteMany({
-        where: { conversaId },
+        where: { proposta_id },
       });
 
       await prisma.conversa.deleteMany({
@@ -252,22 +270,22 @@ test("integra mensagens com autorização e paginação", async () => {
       });
     }
 
-    if (propostaId) {
+    if (proposta_id) {
       await prisma.proposta.deleteMany({
-        where: { id: propostaId },
+        where: { id: proposta_id },
       });
     }
 
-    if (freteId) {
+    if (frete_id) {
       await prisma.frete.deleteMany({
-        where: { id: freteId },
+        where: { id: frete_id },
       });
     }
 
     await prisma.user.deleteMany({
       where: {
         id: {
-          in: [clienteId, motoristaId, terceiroId],
+          in: [cliente_id, motorista_id, terceiroId],
         },
       },
     });

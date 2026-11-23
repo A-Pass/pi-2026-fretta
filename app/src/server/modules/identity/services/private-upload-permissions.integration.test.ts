@@ -15,8 +15,8 @@ import sharp from "sharp";
 import { removerArquivoPrivado } from "../storage/private-file-storage";
 
 test("controla o acesso ao upload privado de documentos", async () => {
-  const databaseUrl = process.env.DATABASE_URL;
-  assert.ok(databaseUrl, "DATABASE_URL não configurada.");
+  const databaseUrl = process.env.DB_URL;
+  assert.ok(databaseUrl, "DB_URL não configurada.");
 
   const url = new URL(databaseUrl);
 
@@ -33,8 +33,8 @@ test("controla o acesso ao upload privado de documentos", async () => {
   assert.equal(banco[0]?.banco, "fretta_test");
 
   const authTeste = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.APP_URL,
+    secret: process.env.APP_BETTER_AUTH_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
@@ -115,7 +115,9 @@ test("controla o acesso ao upload privado de documentos", async () => {
     // Ativar perfil de motorista
     await prisma.motorista.create({
       data: {
-        userId: usuarioId!,
+        user_id: usuarioId!,
+        codigo_publico: randomUUID(),
+        atualizado_em: new Date(),
       },
     });
 
@@ -124,7 +126,7 @@ test("controla o acesso ao upload privado de documentos", async () => {
     assert.equal(motoristaAutorizado.autorizado, true);
 
     if (motoristaAutorizado.autorizado) {
-      assert.equal(motoristaAutorizado.motoristaId, usuarioId);
+      assert.equal(motoristaAutorizado.motorista_id, usuarioId);
     }
     // Criar uma imagem válida para o teste.
     const imagem = await sharp({
@@ -167,16 +169,16 @@ test("controla o acesso ao upload privado de documentos", async () => {
     assert.equal(dadosUpload.tipo, "CNH");
     assert.ok(dadosUpload.id);
 
-    const registro = await prisma.arquivoPrivado.findUniqueOrThrow({
+    const registro = await prisma.arquivo_privado.findUniqueOrThrow({
       where: { id: dadosUpload.id },
     });
 
-    assert.equal(registro.motoristaId, usuarioId);
+    assert.equal(registro.motorista_id, usuarioId);
     assert.equal(registro.tipo, "CNH");
 
     // Limpeza do arquivo físico e do registro de teste.
-    await removerArquivoPrivado(registro.chaveArmazenamento);
-    await prisma.arquivoPrivado.delete({
+    await removerArquivoPrivado(registro.chave_armazenamento);
+    await prisma.arquivo_privado.delete({
       where: { id: registro.id },
     });
 
@@ -286,7 +288,9 @@ test("controla o acesso ao upload privado de documentos", async () => {
     try {
       await prisma.motorista.create({
         data: {
-          userId: outroUsuarioId,
+          user_id: outroUsuarioId,
+          codigo_publico: randomUUID(),
+          atualizado_em: new Date(),
         },
       });
 
@@ -296,8 +300,8 @@ test("controla o acesso ao upload privado de documentos", async () => {
       assert.equal(permissaoOriginal.autorizado, true);
 
       if (permissaoOriginal.autorizado) {
-        assert.equal(permissaoOriginal.motoristaId, usuarioId);
-        assert.notEqual(permissaoOriginal.motoristaId, outroUsuarioId);
+        assert.equal(permissaoOriginal.motorista_id, usuarioId);
+        assert.notEqual(permissaoOriginal.motorista_id, outroUsuarioId);
       }
 
       console.log("Isolamento entre motoristas - OK");

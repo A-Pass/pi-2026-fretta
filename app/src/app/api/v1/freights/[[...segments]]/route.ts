@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { auth } from "@/server/auth/auth";
 import { prisma } from "@/server/db/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/server/generated/prisma/client";
 import {
   freightOperation,
   FreightError,
@@ -23,7 +23,7 @@ async function handle(request: NextRequest, context: Context) {
       if (
         request.headers.get("origin") &&
         request.headers.get("origin") !==
-          new URL(process.env.BETTER_AUTH_URL || request.url).origin
+          new URL(process.env.APP_URL || request.url).origin
       )
         throw new FreightError(403, "Origem inválida.");
       const input = await request.json().catch(() => null);

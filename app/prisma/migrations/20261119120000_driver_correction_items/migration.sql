@@ -1,1 +1,1 @@
-ALTER TABLE "CadastroMotorista" ADD COLUMN "itensAjuste" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "cadastro_motorista" ADD COLUMN "itens_ajuste" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

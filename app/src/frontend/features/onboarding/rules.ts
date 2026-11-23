@@ -149,7 +149,6 @@ export function submitDriverRegistration(
     if (error) throw new Error(error);
   }
   const registration: DriverRegistration = {
-    mode: "demo",
     status: "EM_ANALISE",
     submissionCount: store.driverRegistration
       ? (store.driverRegistration.submissionCount || 1) + 1
@@ -168,14 +167,16 @@ export function submitDriverRegistration(
       category: draft.licenseCategory,
       expiresOn: draft.licenseExpiresOn,
     },
+    licensePhotoDataUrl: draft.licensePhoto!.dataUrl,
     documentsSubmitted: true,
     submittedAt: new Date().toISOString(),
   };
-  // Deliberately never persist raw tax IDs, CNH number or the CNH image in the demo store.
+  // Raw tax IDs and the CNH number are never stored in the account state.
   return {
     ...store,
     driverRegistration: registration,
     profile: {
+      id: store.profile?.id || "",
       name: draft.fullName.trim(),
       photo: draft.profilePhoto!.dataUrl,
     },
@@ -195,42 +196,10 @@ export function driverCanPropose(store: Store, today = todayLocal()) {
   const registration = store.driverRegistration;
   return (
     !!registration &&
-    registration.mode === "demo" &&
     registration.status === "APROVADO" &&
     registration.documentsSubmitted &&
     licenseDateValid(registration.license.expiresOn, today) &&
     !!store.profile?.photo &&
     !!store.vehicles?.length
   );
-}
-export function simulateReview(
-  store: Store,
-  status: "APROVADO" | "AJUSTES_SOLICITADOS",
-): Store {
-  if (
-    !store.driverRegistration ||
-    store.driverRegistration.status !== "EM_ANALISE"
-  )
-    throw new Error("Não há um cadastro aguardando análise.");
-  if (
-    status === "APROVADO" &&
-    (!licenseDateValid(store.driverRegistration.license.expiresOn) ||
-      !store.profile?.photo ||
-      !store.vehicles?.length)
-  )
-    throw new Error(
-      "Complete a foto, o veículo e uma CNH não vencida antes de simular a aprovação.",
-    );
-  return {
-    ...store,
-    driverRegistration: {
-      ...store.driverRegistration,
-      status,
-      reviewedAt: new Date().toISOString(),
-      feedback:
-        status === "AJUSTES_SOLICITADOS"
-          ? "Exemplo de solicitação de ajustes: reenvie uma imagem mais legível da CNH e confira os dados informados."
-          : undefined,
-    },
-  };
 }

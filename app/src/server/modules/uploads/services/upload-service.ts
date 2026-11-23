@@ -76,22 +76,22 @@ export async function salvarUpload(
   }
 
   try {
-    const registro = await prisma.arquivoUpload.create({
+    const registro = await prisma.arquivo_upload.create({
       data: {
         id: arquivoId,
-        usuarioId,
+        usuario_id: usuarioId,
         finalidade,
-        chaveArmazenamento,
-        mimeType,
-        tamanhoBytes: conteudo.length,
+        chave_armazenamento: chaveArmazenamento,
+        mime_type: mimeType,
+        tamanho_bytes: conteudo.length,
       },
     });
 
     return {
       id: registro.id,
-      mimeType: registro.mimeType,
-      size: registro.tamanhoBytes,
-      createdAt: registro.criadoEm.toISOString(),
+      mimeType: registro.mime_type,
+      size: registro.tamanho_bytes,
+      createdAt: registro.criado_em.toISOString(),
     };
   } catch (error) {
     // Se o banco falhar, remover o arquivo salvo.
@@ -158,10 +158,10 @@ export async function verificarPropriedadeUpload(
     return false;
   }
 
-  const arquivo = await prisma.arquivoUpload.findFirst({
+  const arquivo = await prisma.arquivo_upload.findFirst({
     where: {
       id: arquivoId,
-      usuarioId,
+      usuario_id: usuarioId,
       finalidade,
     },
     select: {
@@ -192,10 +192,10 @@ export async function verificarPropriedadeUploads(
     return false;
   }
 
-  const quantidade = await prisma.arquivoUpload.count({
+  const quantidade = await prisma.arquivo_upload.count({
     where: {
       id: { in: idsUnicos },
-      usuarioId,
+      usuario_id: usuarioId,
       finalidade,
     },
   });
@@ -208,14 +208,14 @@ export async function obterUpload(arquivoId: string, usuarioId: string) {
     throw new UploadError("FILE_NOT_FOUND", "Arquivo não encontrado.", 404);
   }
 
-  const registro = await prisma.arquivoUpload.findFirst({
+  const registro = await prisma.arquivo_upload.findFirst({
     where: {
       id: arquivoId,
-      usuarioId,
+      usuario_id: usuarioId,
     },
     select: {
-      chaveArmazenamento: true,
-      mimeType: true,
+      chave_armazenamento: true,
+      mime_type: true,
     },
   });
 
@@ -227,11 +227,11 @@ export async function obterUpload(arquivoId: string, usuarioId: string) {
   const chaveValida =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|pdf)$/i;
 
-  if (!chaveValida.test(registro.chaveArmazenamento)) {
+  if (!chaveValida.test(registro.chave_armazenamento)) {
     throw new UploadError("INVALID_STORAGE_KEY", "Arquivo inválido.", 500);
   }
 
-  const caminho = path.join(DIRETORIO_UPLOADS, registro.chaveArmazenamento);
+  const caminho = path.join(DIRETORIO_UPLOADS, registro.chave_armazenamento);
 
   let bytes: Buffer;
 
@@ -249,6 +249,6 @@ export async function obterUpload(arquivoId: string, usuarioId: string) {
 
   return {
     bytes,
-    mimeType: registro.mimeType,
+    mimeType: registro.mime_type,
   };
 }

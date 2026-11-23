@@ -1,10 +1,31 @@
 services:
   app:
     build:
-      target: ${APP_NODE_ENV}
+      target: ${NODE_ENV}
     image: app-fretta:dev
     ports:
       - "9229:9229"
+      - "127.0.0.1:${APP_EXTERNAL_PORT}:${APP_PORT}"
     environment:
-      NODE_ENV: development
+      NODE_ENV: ${NODE_ENV}
       NODE_OPTIONS: "--inspect=0.0.0.0:9229"
+
+  database:
+    ports:
+      - "127.0.0.1:5432:${DB_PORT}"
+    environment:
+      # Sobrescreve o POSTGRES_PASSWORD_FILE da produção para usar a variável do .env local
+      POSTGRES_PASSWORD_FILE: ""
+      POSTGRES_USER_FILE: ""
+      POSTGRES_DB_FILE: ""
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    secrets: !reset null
+
+secrets:
+  dot_env:
+    file: ./.env
+  db_user: !reset null
+  db_name: !reset null
+  db_password: !reset null

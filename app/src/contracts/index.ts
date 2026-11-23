@@ -1,4 +1,4 @@
-export type Role = "cliente" | "motorista";
+export type Role = "cliente" | "motorista" | "empresa";
 export type FreightStatus =
   "ABERTO" | "AGENDADO" | "EM_TRANSPORTE" | "CONCLUIDO" | "CANCELADO";
 export type Schedule = {
@@ -107,7 +107,7 @@ export interface AppNotification {
   conversationId?: string | null;
 }
 export interface DriverRegistration {
-  mode: "demo";
+  mode?: "demo";
   status: "EM_ANALISE" | "AJUSTES_SOLICITADOS" | "APROVADO";
   fullName: string;
   personType: "pf" | "pj";
@@ -115,6 +115,7 @@ export interface DriverRegistration {
   cnpjMasked?: string;
   companyName?: string;
   license: { numberMasked: string; category: string; expiresOn: string };
+  licensePhotoDataUrl?: string;
   documentsSubmitted: boolean;
   submittedAt: string;
   reviewedAt?: string;
@@ -151,13 +152,14 @@ export interface PublicProviderProfile {
 export interface Store {
   fleet?: FleetState;
   adminDemoCases?: AdminCase[];
+  accountSetupComplete?: boolean;
   adminReviews?: AdminReview[];
   companyProfile?: CompanyProfile;
   driverRegistration?: DriverRegistration;
   vehicles?: Vehicle[];
-  profile?: { name: string; photo: string };
-  subscriptionActive?: boolean;
+  profile?: { id: string; name: string; photo: string };
   notifications?: AppNotification[];
+  subscriptionActive?: boolean;
   operatingArea?: OperatingArea;
   addresses?: SavedAddress[];
   freightAddresses?: Record<string, { pickup: Address; delivery: Address }>;
@@ -185,6 +187,7 @@ export interface Address {
   neighborhood: string;
   street: string;
   number: string;
+  postalCode?: string;
   complement: string;
   point: MapPoint | null;
 }
@@ -213,7 +216,7 @@ export type AdminCase = {
   fleetCompanyId?: string;
   id: string;
   registration: DriverRegistration;
-  photo: string;
+  photo?: string;
   vehicles: Vehicle[];
 };
 export type CorrectionItem = "dados" | "foto" | "cnh" | "veiculo";

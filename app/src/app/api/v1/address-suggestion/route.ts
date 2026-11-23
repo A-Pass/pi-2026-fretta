@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       { message: "Consulta de endereço indisponível." },
       { status: 503 },
     );
-  const origin = new URL(process.env.BETTER_AUTH_URL || request.url).origin;
+  const origin = new URL(process.env.APP_URL || request.url).origin;
   if (request.headers.get("origin") !== origin)
     return new Response(null, { status: 403 });
   if (!(await auth.api.getSession({ headers: request.headers })))

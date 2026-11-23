@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import { seed } from "../src/frontend/mocks/seed";
+import { seed } from "./fixtures/seed";
 import {
   requestDraft,
   editRequest,

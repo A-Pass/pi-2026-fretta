@@ -1,28 +1,28 @@
 
 -- CreateTable
-CREATE TABLE "ArquivoUpload" (
+CREATE TABLE "arquivo_upload" (
     "id" TEXT NOT NULL,
-    "usuarioId" TEXT NOT NULL,
-    "chaveArmazenamento" TEXT NOT NULL,
-    "mimeType" TEXT NOT NULL,
-    "tamanhoBytes" INTEGER NOT NULL,
-    "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "usuario_id" TEXT NOT NULL,
+    "chave_armazenamento" TEXT NOT NULL,
+    "mime_type" TEXT NOT NULL,
+    "tamanho_bytes" INTEGER NOT NULL,
+    "criado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "ArquivoUpload_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "arquivo_upload_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ArquivoUpload_chaveArmazenamento_key"
-ON "ArquivoUpload"("chaveArmazenamento");
+CREATE UNIQUE INDEX "arquivo_upload_chave_armazenamento_key"
+ON "arquivo_upload"("chave_armazenamento");
 
 -- CreateIndex
-CREATE INDEX "ArquivoUpload_usuarioId_criadoEm_idx"
-ON "ArquivoUpload"("usuarioId", "criadoEm");
+CREATE INDEX "arquivo_upload_usuario_id_criado_em_idx"
+ON "arquivo_upload"("usuario_id", "criado_em");
 
 -- AddForeignKey
-ALTER TABLE "ArquivoUpload"
-ADD CONSTRAINT "ArquivoUpload_usuarioId_fkey"
-FOREIGN KEY ("usuarioId")
+ALTER TABLE "arquivo_upload"
+ADD CONSTRAINT "arquivo_upload_usuario_id_fkey"
+FOREIGN KEY ("usuario_id")
 REFERENCES "user"("id")
 ON DELETE CASCADE
 ON UPDATE CASCADE;

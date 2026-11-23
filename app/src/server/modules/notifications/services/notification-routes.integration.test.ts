@@ -17,7 +17,7 @@ import {
 
 test("Notificações: autenticação, paginação e privacidade", async () => {
   // Segurança: nunca executar este teste no banco compartilhado.
-  const databaseUrl = process.env.DATABASE_URL ?? "";
+  const databaseUrl = process.env.DB_URL ?? "";
 
   if (!databaseUrl.includes("/fretta_test")) {
     throw new Error(
@@ -77,26 +77,27 @@ test("Notificações: autenticação, paginação e privacidade", async () => {
     await prisma.notificacao.createMany({
       data: Array.from({ length: 22 }, (_, indice) => ({
         id: randomUUID(),
-        destinatarioId: usuarioId,
-        papelDestinatario: "cliente",
+        destinatario_id: usuarioId,
+        papel_destinatario: "cliente",
         evento: "NOVA_MENSAGEM",
         titulo: `Notificacao ${indice + 1}`,
         corpo: "Mensagem de teste.",
-        freteId: randomUUID(),
+        frete_id: randomUUID(),
         lida: false,
-        criadoEm: new Date(Date.now() - indice * 60_000),
+        criado_em: new Date(Date.now() - indice * 60_000),
       })),
     });
 
     // 4. Criar uma notificação de outro usuário.
     const notificacaoPrivada = await prisma.notificacao.create({
       data: {
-        destinatarioId: outroUsuarioId,
-        papelDestinatario: "motorista",
+        id: randomUUID(),
+        destinatario_id: outroUsuarioId,
+        papel_destinatario: "motorista",
         evento: "NOVA_PROPOSTA",
         titulo: "Notificacao privada",
         corpo: "Somente o destinatario pode acessar.",
-        freteId: randomUUID(),
+        frete_id: randomUUID(),
       },
     });
 
@@ -162,7 +163,7 @@ test("Notificações: autenticação, paginação e privacidade", async () => {
     // 11. Confirmar persistência no banco.
     const quantidadeNaoLidas = await prisma.notificacao.count({
       where: {
-        destinatarioId: usuarioId,
+        destinatario_id: usuarioId,
         lida: false,
       },
     });
@@ -179,7 +180,7 @@ test("Notificações: autenticação, paginação e privacidade", async () => {
     // Limpar somente os dados criados por este teste.
     await prisma.notificacao.deleteMany({
       where: {
-        destinatarioId: { in: usuarioIds },
+        destinatario_id: { in: usuarioIds },
       },
     });
 

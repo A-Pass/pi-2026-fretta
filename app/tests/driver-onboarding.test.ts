@@ -1,13 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prepareOnboardingPhoto } from "../src/frontend/features/onboarding/images";
-import { seed } from "../src/frontend/mocks/seed";
+import { seed } from "./fixtures/seed";
 import {
   driverCanPropose,
   licenseDateValid,
   maskDocument,
   onboardingError,
-  simulateReview,
   submitDriverRegistration,
   validCnpj,
   validCpf,
@@ -86,19 +85,22 @@ test("fotos, CPF, CNH não vencida e veículo são obrigatórios antes de enviar
     submitDriverRegistration(store, { ...d, licensePhoto: null }),
   );
 });
-test("resumo persiste sem CPF/CNPJ/CNH completos, imagem de CNH ou envio automático aprovado", () => {
+test("resumo persiste imagem privada e documentos mascarados sem aprovar automaticamente", () => {
   const d = { ...draft(), personType: "pj" as const },
     original = structuredClone(seed);
   const next = submitDriverRegistration(original, d);
   assert.equal(next.driverRegistration?.status, "EM_ANALISE");
   assert.equal(next.profile?.photo, d.profilePhoto!.dataUrl);
+  assert.equal(
+    next.driverRegistration?.licensePhotoDataUrl,
+    d.licensePhoto!.dataUrl,
+  );
   assert.equal(next.vehicles?.length, 1);
   const persisted = JSON.stringify(next);
   for (const raw of [
     d.cpf,
     d.cnpj,
     d.licenseNumber,
-    d.licensePhoto!.dataUrl,
     d.licensePhoto!.name,
   ])
     assert.equal(persisted.includes(raw), false);
@@ -106,21 +108,27 @@ test("resumo persiste sem CPF/CNPJ/CNH completos, imagem de CNH ou envio automá
   assert.equal(original.driverRegistration, undefined);
   assert.equal(maskDocument(d.cpf, "cpf"), "***.***.***-09");
 });
-test("aprovação simulada é explícita; pendência, validade ou falta de foto/veículo impedem novas propostas", () => {
+test("cadastro pendente, validade ou falta de foto/veículo impedem novas propostas", () => {
   const submitted = submitDriverRegistration(structuredClone(seed), draft());
   assert.equal(driverCanPropose(seed), false);
-  const approved = simulateReview(submitted, "APROVADO");
+  assert.equal(driverCanPropose(submitted), false);
+  const approved = {
+    ...submitted,
+    driverRegistration: {
+      ...submitted.driverRegistration!,
+      status: "APROVADO" as const,
+    },
+  };
   assert.equal(driverCanPropose(approved), true);
   assert.equal(driverCanPropose(approved, "2100-01-01"), false);
   assert.equal(
-    driverCanPropose({ ...approved, profile: { name: "Teste", photo: "" } }),
+    driverCanPropose({
+      ...approved,
+      profile: { id: "user-1", name: "Teste", photo: "" },
+    }),
     false,
   );
   assert.equal(driverCanPropose({ ...approved, vehicles: [] }), false);
-  const revision = simulateReview(submitted, "AJUSTES_SOLICITADOS");
-  assert.equal(driverCanPropose(revision), false);
-  assert.ok(revision.driverRegistration?.feedback);
-  assert.throws(() => simulateReview(approved, "APROVADO"));
   assert.equal(licenseDateValid("2026-02-30", "2026-01-01"), false);
   assert.equal(licenseDateValid("2026-11-05", "2026-11-05"), true);
 });
@@ -129,7 +137,13 @@ test("reutilizar veículo não duplica cadastro e reenvio volta para análise", 
   const d = { ...draft(), vehicleId: store.vehicles[0].id };
   const next = submitDriverRegistration(store, d);
   assert.equal(next.vehicles?.length, 1);
-  const approved = simulateReview(next, "APROVADO");
+  const approved = {
+    ...next,
+    driverRegistration: {
+      ...next.driverRegistration!,
+      status: "APROVADO" as const,
+    },
+  };
   assert.equal(
     submitDriverRegistration(approved, d).driverRegistration?.status,
     "EM_ANALISE",

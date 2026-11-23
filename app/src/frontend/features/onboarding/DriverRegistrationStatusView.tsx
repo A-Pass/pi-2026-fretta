@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import {
   ArrowRight,
   BadgeCheck,
@@ -11,7 +12,6 @@ import {
 } from "lucide-react";
 import type { Store } from "@/contracts";
 import { driverCanPropose, licenseDateValid } from "./rules";
-import { correctionLabels } from "../admin/rules";
 import { dateTime } from "../../lib/dates";
 type Props = {
   store: Store;
@@ -47,7 +47,7 @@ export function DriverRegistrationStatusView({
   const rejected = registration.status === "AJUSTES_SOLICITADOS";
   const needsUpdate = registration.status === "APROVADO" && !approved;
   const title = approved
-    ? "Seu cadastro está aprovado na demonstração"
+    ? "Seu cadastro está aprovado"
     : pending
       ? "Cadastro recebido. Agora vem a análise."
       : rejected
@@ -82,23 +82,13 @@ export function DriverRegistrationStatusView({
           </h1>
           <p>
             {approved
-              ? "Você já pode configurar sua área de operação e buscar o próximo frete. Novas propostas também dependem de uma assinatura ativa."
+              ? "Você já pode configurar sua área de operação, buscar oportunidades e enviar propostas sem precisar de assinatura."
               : pending
                 ? "A documentação foi selecionada e os dados foram conferidos no formulário. O envio ainda não significa que sua identidade ou habilitação foram verificadas."
                 : rejected
                   ? registration.feedback
                   : "Mantenha sua foto, a habilitação e pelo menos um veículo atualizados para enviar propostas."}
           </p>
-          {!!registration.correctionItems?.length && (
-            <div className="alert">
-              <b>Itens para corrigir</b>
-              <ul>
-                {registration.correctionItems.map((item) => (
-                  <li key={item}>{correctionLabels[item]}</li>
-                ))}
-              </ul>
-            </div>
-          )}
           <div className="registration-summary">
             <div className="registration-profile">
               {store.profile?.photo && (
@@ -145,11 +135,11 @@ export function DriverRegistrationStatusView({
                 <dt>Situação</dt>
                 <dd>
                   {pending
-                    ? "Em análise simulada"
+                    ? "Em análise"
                     : rejected
-                      ? "Ajustes solicitados na demonstração"
+                      ? "Ajustes solicitados"
                       : approved
-                        ? "Aprovado na demonstração"
+                        ? "Aprovado"
                         : "Atualização necessária"}
                 </dd>
               </div>
@@ -212,16 +202,22 @@ export function DriverRegistrationStatusView({
               Continuar como cliente
             </button>
           </div>
-          <div className="onboarding-demo-note">
+          <div className="onboarding-note">
             <ShieldCheck size={20} />
             <span>
-              <b>Análise de demonstração</b> · Não houve consulta a órgãos
-              oficiais nem conferência real dos documentos. A CNH e os números
-              completos não foram guardados. A foto de perfil e este resumo
-              ficam salvos neste navegador.
+              <b>Análise do cadastro</b> · Os documentos são tratados por um fluxo privado e só podem ser revisados por pessoas autorizadas.
             </span>
           </div>
-
+          {pending && (
+            <div className="onboarding-admin-link">
+              <p>
+                O resultado da análise será disponibilizado pelo painel administrativo autorizado.
+              </p>
+              <Link className="secondary" href="/admin">
+                Consultar painel administrativo
+              </Link>
+            </div>
+          )}
         </section>
       </main>
     </div>

@@ -1,1 +1,1 @@
-ALTER TABLE "Empresa" ADD COLUMN "documentoCnpjId" TEXT;
+ALTER TABLE "empresa" ADD COLUMN "documento_cnpj_id" TEXT;

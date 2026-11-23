@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/server/db/prisma";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "@/server/generated/prisma/client";
 
 const LIMITE_NOTIFICACOES = 20;
 
@@ -19,7 +20,7 @@ export async function listarNotificacoes(usuarioId: string, cursor?: string) {
     const referencia = await prisma.notificacao.findFirst({
       where: {
         id: cursor,
-        destinatarioId: usuarioId,
+        destinatario_id: usuarioId,
       },
       select: {
         id: true,
@@ -37,9 +38,9 @@ export async function listarNotificacoes(usuarioId: string, cursor?: string) {
 
   const notificacoes = await prisma.notificacao.findMany({
     where: {
-      destinatarioId: usuarioId,
+      destinatario_id: usuarioId,
     },
-    orderBy: [{ criadoEm: "desc" }, { id: "desc" }],
+    orderBy: [{ criado_em: "desc" }, { id: "desc" }],
     take: LIMITE_NOTIFICACOES + 1,
     ...(cursor
       ? {
@@ -56,15 +57,15 @@ export async function listarNotificacoes(usuarioId: string, cursor?: string) {
   return {
     items: pagina.map((notificacao) => ({
       id: notificacao.id,
-      role: notificacao.papelDestinatario,
+      role: notificacao.papel_destinatario,
       event: notificacao.evento,
       title: notificacao.titulo,
       body: notificacao.corpo,
-      createdAt: notificacao.criadoEm.toISOString(),
+      createdAt: notificacao.criado_em.toISOString(),
       read: notificacao.lida,
-      freightId: notificacao.freteId,
-      proposalId: notificacao.propostaId,
-      conversationId: notificacao.conversaId,
+      freightId: notificacao.frete_id,
+      proposalId: notificacao.proposta_id,
+      conversationId: notificacao.conversa_id,
     })),
     nextCursor: temProximaPagina ? pagina[pagina.length - 1].id : null,
   };
@@ -77,7 +78,7 @@ export async function marcarNotificacaoLida(
   const resultado = await prisma.notificacao.updateMany({
     where: {
       id: notificacaoId,
-      destinatarioId: usuarioId,
+      destinatario_id: usuarioId,
     },
     data: {
       lida: true,
@@ -95,7 +96,7 @@ export async function marcarNotificacaoLida(
   const notificacao = await prisma.notificacao.findFirst({
     where: {
       id: notificacaoId,
-      destinatarioId: usuarioId,
+      destinatario_id: usuarioId,
     },
   });
 
@@ -109,22 +110,22 @@ export async function marcarNotificacaoLida(
 
   return {
     id: notificacao.id,
-    role: notificacao.papelDestinatario,
+    role: notificacao.papel_destinatario,
     event: notificacao.evento,
     title: notificacao.titulo,
     body: notificacao.corpo,
-    createdAt: notificacao.criadoEm.toISOString(),
+    createdAt: notificacao.criado_em.toISOString(),
     read: notificacao.lida,
-    freightId: notificacao.freteId,
-    proposalId: notificacao.propostaId,
-    conversationId: notificacao.conversaId,
+    freightId: notificacao.frete_id,
+    proposalId: notificacao.proposta_id,
+    conversationId: notificacao.conversa_id,
   };
 }
 
 export async function marcarTodasNotificacoesLidas(usuarioId: string) {
   const resultado = await prisma.notificacao.updateMany({
     where: {
-      destinatarioId: usuarioId,
+      destinatario_id: usuarioId,
       lida: false,
     },
     data: {
@@ -138,13 +139,13 @@ export async function marcarTodasNotificacoesLidas(usuarioId: string) {
 }
 
 type DadosNovaNotificacao = {
-  destinatarioId: string;
-  papelDestinatario: "cliente" | "motorista";
+  destinatario_id: string;
+  papel_destinatario: "cliente" | "motorista";
   evento: string;
   titulo: string;
   corpo: string;
-  freteId?: string;
-  propostaId?: string;
+  frete_id?: string;
+  proposta_id?: string;
   conversaId?: string;
   autorId?: string;
 };
@@ -158,12 +159,12 @@ export async function criarNotificacao(
   dados: DadosNovaNotificacao,
 ) {
   // Não notificar o próprio autor da operação.
-  if (dados.autorId && dados.autorId === dados.destinatarioId) {
+  if (dados.autorId && dados.autorId === dados.destinatario_id) {
     return null;
   }
 
   if (
-    !dados.destinatarioId.trim() ||
+    !dados.destinatario_id.trim() ||
     !dados.evento.trim() ||
     !dados.titulo.trim() ||
     !dados.corpo.trim()
@@ -177,14 +178,15 @@ export async function criarNotificacao(
 
   return tx.notificacao.create({
     data: {
-      destinatarioId: dados.destinatarioId,
-      papelDestinatario: dados.papelDestinatario,
+      id: randomUUID(),
+      destinatario_id: dados.destinatario_id,
+      papel_destinatario: dados.papel_destinatario,
       evento: dados.evento.trim(),
       titulo: dados.titulo.trim(),
       corpo: dados.corpo.trim(),
-      freteId: dados.freteId ?? null,
-      propostaId: dados.propostaId ?? null,
-      conversaId: dados.conversaId ?? null,
+      frete_id: dados.frete_id ?? null,
+      proposta_id: dados.proposta_id ?? null,
+      conversa_id: dados.conversaId ?? null,
     },
   });
 }

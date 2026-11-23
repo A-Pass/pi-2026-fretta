@@ -8,13 +8,13 @@ import {
 
 export interface CadastroMotoristaInput {
   tipoPessoa: "PF" | "PJ";
-  nomeCompleto: string;
+  nome_completo: string;
   cpf: string;
   cnpj?: string;
-  razaoSocial?: string;
-  cnhNumero: string;
-  cnhCategoria: string;
-  cnhValidade: string;
+  razao_social?: string;
+  cnh_numero: string;
+  cnh_categoria: string;
+  cnh_validade: string;
   veiculoId: string;
   fotoPerfilId?: string;
   documentoCnhId?: string;
@@ -29,7 +29,7 @@ export function validarCadastroMotorista(
     erros.push("Tipo de pessoa inválido.");
   }
 
-  if (typeof dados.nomeCompleto !== "string" || !dados.nomeCompleto.trim()) {
+  if (typeof dados.nome_completo !== "string" || !dados.nome_completo.trim()) {
     erros.push("Nome completo é obrigatório.");
   }
 
@@ -42,28 +42,28 @@ export function validarCadastroMotorista(
       erros.push("CNPJ inválido.");
     }
 
-    if (typeof dados.razaoSocial !== "string" || !dados.razaoSocial.trim()) {
+    if (typeof dados.razao_social !== "string" || !dados.razao_social.trim()) {
       erros.push("Razão social é obrigatória.");
     }
   }
 
   if (
-    typeof dados.cnhNumero !== "string" ||
-    !validarNumeroCNH(dados.cnhNumero)
+    typeof dados.cnh_numero !== "string" ||
+    !validarNumeroCNH(dados.cnh_numero)
   ) {
     erros.push("Número da CNH inválido.");
   }
 
   if (
-    typeof dados.cnhCategoria !== "string" ||
-    !validarCategoriaCNH(dados.cnhCategoria)
+    typeof dados.cnh_categoria !== "string" ||
+    !validarCategoriaCNH(dados.cnh_categoria)
   ) {
     erros.push("Categoria da CNH inválida.");
   }
 
   if (
-    typeof dados.cnhValidade !== "string" ||
-    !validarValidadeCNH(dados.cnhValidade)
+    typeof dados.cnh_validade !== "string" ||
+    !validarValidadeCNH(dados.cnh_validade)
   ) {
     erros.push("CNH vencida ou data inválida.");
   }

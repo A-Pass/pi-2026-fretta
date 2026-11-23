@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 import { auth } from "@/server/auth/auth";
 import { prisma } from "@/server/db/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/server/generated/prisma/client";
 import {
   CompanyError,
   companyOperation,
@@ -16,7 +16,7 @@ async function handle(request: Request, context: Context) {
       throw new CompanyError(401, "Entre com uma conta Google verificada.");
     let body = {};
     if (request.method === "POST") {
-      const origin = new URL(process.env.BETTER_AUTH_URL || request.url).origin;
+      const origin = new URL(process.env.APP_URL || request.url).origin;
       if (request.headers.get("origin") !== origin)
         throw new CompanyError(403, "Origem inválida.");
       body = await request.json().catch(() => null);

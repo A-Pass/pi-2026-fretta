@@ -12,9 +12,9 @@ O acesso administrativo depende de User.papel=ADMIN no banco; conhecer a URL nã
 
 ## Como executar
 
-Na pasta app: npm ci; copie .env.example para .env.local, preencha os valores locais e execute npm run generate e npm run dev. Para os comandos Prisma, exporte DATABASE_URL no terminal ou use um arquivo app/.env, carregado pelo Prisma; o Next também carrega .env.local. npm run build gera o cliente Prisma antes de compilar. Não versionar .env, fotos ou segredos.
+Na pasta app: npm ci; copie .env.example para .env.local, preencha os valores locais e execute npm run generate e npm run dev. Para os comandos Prisma, exporte DB_URL no terminal ou use um arquivo app/.env, carregado pelo Prisma; o Next também carrega .env.local. npm run build gera o cliente Prisma antes de compilar. Não versionar .env, fotos ou segredos.
 
-No modo real, usar BETTER_AUTH_URL=http://localhost:3000 e a credencial Google configurada para http://localhost:3000/api/auth/callback/google. Anderson deve confirmar os valores no ambiente dele. Não é necessário copiar a configuração Google antiga do Cleiton.
+No modo real, usar APP_URL=http://localhost:3000 e a credencial Google configurada para http://localhost:3000/api/auth/callback/google. Anderson deve confirmar os valores no ambiente dele. Não é necessário copiar a configuração Google antiga do Cleiton.
 
 Para Docker: copie .env.example da raiz para .env, defina os segredos e execute docker compose up --build. O banco novo usa um volume nomeado separado e recebe as migrações Prisma. Os scripts SQL antigos não são aplicados nesse banco. O compose anterior está preservado em docker-compose.legacy.yml apenas como referência histórica; não executar junto com o novo. Os dados de _storage_ não foram migrados nem apagados. O diretório storage tem volume próprio para persistir documentos. Alterar NEXT_PUBLIC_API_MODE exige recompilar o front.
 

@@ -5,32 +5,32 @@ import { googleConfigurationIssue } from "../src/server/auth/google-configuratio
 import { POST } from "../src/app/api/auth/[...all]/route";
 
 const configuration = {
-  DATABASE_URL: "postgresql://localhost/test",
-  BETTER_AUTH_URL: "http://localhost:3002",
-  BETTER_AUTH_SECRET: "x".repeat(32),
-  GOOGLE_CLIENT_ID: "example-client",
-  GOOGLE_CLIENT_SECRET: "example-secret",
+  DB_URL: "postgresql://localhost/test",
+  APP_URL: "http://localhost:3002",
+ APP_BETTER_AUTH_SECRET: "x".repeat(32),
+ APP_GOOGLE_CLIENT_ID: "example-client",
+ APP_GOOGLE_CLIENT_SECRET: "example-secret",
 };
 
 test("valida o endereço e o segredo do Google sem expor credenciais", () => {
   assert.equal(googleConfigurationIssue(configuration), null);
   assert.match(
-    googleConfigurationIssue({ ...configuration, BETTER_AUTH_URL: "abc" }) ??
+    googleConfigurationIssue({ ...configuration, APP_URL: "abc" }) ??
       "",
-    /BETTER_AUTH_URL/,
+    /APP_URL/,
   );
   assert.match(
     googleConfigurationIssue({
       ...configuration,
-      BETTER_AUTH_SECRET: "segredo-curto",
+     APP_BETTER_AUTH_SECRET: "segredo-curto",
     }) ?? "",
     /32 caracteres/,
   );
 });
 
 test("login social sem credenciais devolve 503 com diagnóstico", async () => {
-  const previous = process.env.GOOGLE_CLIENT_ID;
-  delete process.env.GOOGLE_CLIENT_ID;
+  const previous = process.env.APP_GOOGLE_CLIENT_ID;
+  delete process.env.APP_GOOGLE_CLIENT_ID;
   try {
     const response = await POST(
       new NextRequest("http://localhost:3002/api/auth/sign-in/social", {
@@ -40,9 +40,9 @@ test("login social sem credenciais devolve 503 com diagnóstico", async () => {
     assert.equal(response.status, 503);
     const body = await response.json();
     assert.equal(body.code, "AUTH_NOT_CONFIGURED");
-    assert.match(body.message, /GOOGLE_CLIENT_ID/);
+    assert.match(body.message, /Google authentication is not configured/);
   } finally {
-    if (previous === undefined) delete process.env.GOOGLE_CLIENT_ID;
-    else process.env.GOOGLE_CLIENT_ID = previous;
+    if (previous === undefined) delete process.env.APP_GOOGLE_CLIENT_ID;
+    else process.env.APP_GOOGLE_CLIENT_ID = previous;
   }
 });
