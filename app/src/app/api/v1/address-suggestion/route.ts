@@ -1,4 +1,4 @@
-import { auth } from "@/server/auth/auth";
+import { auth } from "@/server/auth";
 import type { AddressSuggestion } from "@/contracts/address-suggestion";
 
 function provider() {

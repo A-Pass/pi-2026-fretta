@@ -173,7 +173,10 @@ export interface ApiError {
 }
 export interface FrettaApi {
   load(): Promise<Store>;
-  save(store: Store): Promise<void>;
+  save(
+    store: Store,
+    accountSetupRole?: "cliente" | "motorista",
+  ): Promise<void>;
 }
 
 export interface MapPoint {

@@ -17,6 +17,12 @@ import {
   verifyAdminCredentials,
   verifyAdminToken,
 } from "@/server/admin-auth";
+import {
+  obterUpload,
+  salvarUpload,
+  UploadError,
+  type FinalidadeUpload,
+} from "@/server/modules/uploads/services/upload-service";
 
 type FreightFeedItem = {
   id: string;
@@ -32,6 +38,17 @@ type FreightFeedItem = {
 
 function error(code: string, message: string, status: number) {
   return Response.json({ code, message }, { status });
+}
+
+function uploadPurpose(
+  value: FormDataEntryValue | null,
+): value is FinalidadeUpload {
+  return (
+    value === "freight" ||
+    value === "profile" ||
+    value === "company" ||
+    value === "company-proof"
+  );
 }
 
 async function getSession(request: NextRequest) {
@@ -52,6 +69,54 @@ async function getSession(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) throw new Response(null, { status: 401 });
   return session;
+}
+
+async function createUpload(request: NextRequest) {
+  const session = await getSession(request);
+  const origin = request.headers.get("origin");
+  if (
+    origin &&
+    origin !== new URL(process.env.APP_URL || request.url).origin
+  )
+    return error("INVALID_ORIGIN", "Origem inválida.", 403);
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return error("INVALID_BODY", "Informe um arquivo para enviar.", 422);
+  }
+  const file = form.get("file");
+  const purpose = form.get("purpose");
+  if (!(file instanceof File))
+    return error("INVALID_FILE", "Informe um arquivo para enviar.", 422);
+  if (!uploadPurpose(purpose))
+    return error(
+      "INVALID_UPLOAD_PURPOSE",
+      "Finalidade de upload inválida.",
+      422,
+    );
+
+  const upload = await salvarUpload(
+    session.user.id,
+    Buffer.from(await file.arrayBuffer()),
+    purpose,
+  );
+  return Response.json(upload, {
+    status: 201,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
+async function readUpload(request: NextRequest, uploadId: string) {
+  const session = await getSession(request);
+  const image = await obterUpload(uploadId, session.user.id);
+  return new Response(new Uint8Array(image.bytes), {
+    headers: {
+      "Content-Type": image.mimeType,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }
 
 async function stateStore(request: NextRequest, method: "GET" | "PUT") {
@@ -699,6 +764,8 @@ export async function GET(
 ) {
   try {
     const { path } = await context.params;
+    const uploadPath = /^uploads\/([^/]+)$/.exec(path.join("/"));
+    if (uploadPath) return await readUpload(request, uploadPath[1]);
     if (path.join("/") === "admin/me") {
       const authenticated = verifyAdminToken(
         readAdminCookie(request.headers.get("cookie")),
@@ -722,6 +789,8 @@ export async function GET(
     return error("NOT_IMPLEMENTED", "Esta operação ainda não está disponível.", 501);
   } catch (failure) {
     if (failure instanceof Response) return failure;
+    if (failure instanceof UploadError)
+      return error(failure.code, failure.message, failure.status);
     console.error("API request failed", failure);
     return error("SERVER_ERROR", "Não foi possível concluir a operação.", 500);
   }
@@ -748,6 +817,7 @@ export async function POST(
 ) {
   try {
     const { path } = await context.params;
+    if (path.join("/") === "uploads") return await createUpload(request);
     const reviewPath = /^admin\/registrations\/([^/]+)\/review$/.exec(
       path.join("/"),
     );
@@ -812,6 +882,8 @@ export async function POST(
     return GET(request, context);
   } catch (failure) {
     if (failure instanceof Response) return failure;
+    if (failure instanceof UploadError)
+      return error(failure.code, failure.message, failure.status);
     console.error("POST request failed", failure);
     return error("SERVER_ERROR", "Não foi possível concluir o login.", 500);
   }

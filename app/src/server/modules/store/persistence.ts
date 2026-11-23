@@ -1488,6 +1488,15 @@ export async function saveAccountStore(
               : {}),
           },
         });
+        if (
+          input.accountSetupComplete === true &&
+          input.accountSetupRole === "cliente"
+        )
+          await tx.cliente.upsert({
+              where: { user_id: userId },
+              create: { user_id: userId },
+              update: {},
+          });
         await saveDriverRegistration(tx, userId, input.driverRegistration);
 
         const driverExists = await tx.motorista.findUnique({

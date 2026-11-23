@@ -146,19 +146,21 @@ export function RequestWizard({
     setError("");
     try {
       const submitted = await onSubmit(draft);
-      if (!submitted)
-        setError(
-          "Não foi possível salvar a solicitação. Confira o espaço disponível no navegador e tente novamente.",
-        );
-      else {
+      if (!submitted) {
+        setError("Não foi possível publicar. Tente novamente.");
+      } else {
         try {
           sessionStorage.removeItem(storageKey);
         } catch {
           setError("A solicitação foi salva, mas o rascunho não foi removido.");
         }
       }
-    } catch {
-      setError("Não foi possível publicar. Tente novamente.");
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Não foi possível publicar. Tente novamente.",
+      );
     } finally {
       setBusy(false);
     }

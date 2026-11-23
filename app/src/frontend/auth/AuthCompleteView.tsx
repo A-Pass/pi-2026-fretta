@@ -2,7 +2,6 @@
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Camera, Package, Truck } from "lucide-react";
-import type { Role } from "@/contracts";
 import { api } from "../api/client";
 import { prepareOnboardingPhoto } from "../features/onboarding/images";
 import { authClient } from "./client";
@@ -12,7 +11,7 @@ type Props = {
   name: string;
   email: string;
   image: string | null;
-  role: Role;
+  role: "cliente" | "motorista";
 };
 
 export function AuthCompleteView({ name, email, image, role }: Props) {
@@ -69,15 +68,18 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
     setSaving(true);
     try {
       const store = await api.load();
-      await api.save({
-        ...store,
-        accountSetupComplete: true,
-        profile: {
-          id: store.profile?.id || "",
-          name: normalizedName,
-          photo: profilePhoto,
+      await api.save(
+        {
+          ...store,
+          accountSetupComplete: true,
+          profile: {
+            id: store.profile?.id || "",
+            name: normalizedName,
+            photo: profilePhoto,
+          },
         },
-      });
+        role,
+      );
       setDocumentValue("");
       window.location.assign(`/${role}/inicio`);
     } catch (failure) {

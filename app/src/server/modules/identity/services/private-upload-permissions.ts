@@ -1,4 +1,4 @@
-import { auth } from "../../../auth/auth";
+import { auth } from "../../../auth";
 import { prisma } from "../../../db/prisma";
 
 export async function verificarPermissaoUpload(headers: Headers) {

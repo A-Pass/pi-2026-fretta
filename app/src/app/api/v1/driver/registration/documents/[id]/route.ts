@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { open, constants } from "node:fs/promises";
 import path from "node:path";
-import { auth } from "@/server/auth/auth";
+import { auth } from "@/server/auth";
 import { prisma } from "@/server/db/prisma";
 import { verificarAdministrador } from "@/server/auth/permissions";
 export async function GET(

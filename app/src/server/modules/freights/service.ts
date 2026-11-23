@@ -394,11 +394,12 @@ export async function freightOperation(
         409,
       );
     }
-    requireValue(
-      await tx.cliente.findUnique({ where: { user_id: userId } }),
-      "Ative o perfil de cliente.",
-      403,
-    );
+    if (!id)
+      await tx.cliente.upsert({
+        where: { user_id: userId },
+        create: { user_id: userId },
+        update: {},
+      });
     const pickup = address(body.pickup),
       delivery = address(body.delivery);
     const schedule = body.schedule as {

@@ -53,6 +53,52 @@ test("busca de fretes envia texto, área e raio ao feed", async () => {
   assert.equal(url.searchParams.get("radiusKm"), "20");
   assert.equal(url.searchParams.get("limit"), "100");
 });
+test("criação de frete consome o detalhe retornado diretamente pela rota", async () => {
+  const expected = {
+    id: "freight-1",
+    title: "Mudança",
+    description: "Caixas e móveis",
+    origin: "Centro, Eunápolis, BA",
+    destination: "Centro, Porto Seguro, BA",
+    vehicle: "GRANDE",
+    schedule: { kind: "combinar" },
+    status: "ABERTO",
+    photos: [],
+    updatedAt: "2026-02-01T10:00:00.000Z",
+  };
+  const api = createBackendClient({
+    fetcher: async () => json(expected),
+  });
+  const result = await api.createFreight({
+    title: "Mudança",
+    description: "Caixas e móveis",
+    vehicle: "Caminhão grande",
+    schedule: { kind: "combinar" },
+    pickup: {
+      label: "",
+      street: "Rua A",
+      number: "1",
+      complement: "",
+      neighborhood: "Centro",
+      city: "Eunápolis",
+      state: "BA",
+      point: { lat: -16.37, lng: -39.58 },
+    },
+    delivery: {
+      label: "",
+      street: "Rua B",
+      number: "2",
+      complement: "",
+      neighborhood: "Centro",
+      city: "Porto Seguro",
+      state: "BA",
+      point: { lat: -16.44, lng: -39.06 },
+    },
+    photoIds: [],
+  });
+  assert.equal(result.id, expected.id);
+  assert.equal(result.status, "ABERTO");
+});
 test("aceite envia apenas oferta esperada, IDs escapados e nenhum valor informado pelo cliente", async () => {
   let payload: unknown;
   let requestUrl = "";

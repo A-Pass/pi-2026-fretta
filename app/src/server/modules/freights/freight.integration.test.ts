@@ -45,7 +45,6 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
         email: `${id}@fretta.invalid`,
       })),
     });
-    await prisma.cliente.create({ data: { user_id: client } });
     await prisma.motorista.create({
       data: {
         user_id: driver,
@@ -99,6 +98,23 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       point: { lat: -16.377, lng: -39.58 },
     };
     await prisma.cliente.create({ data: { user_id: other } });
+    const request = {
+      title: "Frete de teste",
+      description: "Caixas",
+      vehicle: "Utilitário",
+      pickup: address,
+      delivery: address,
+      schedule: { kind: "combinar" },
+    };
+    assert.equal(
+      await prisma.cliente.findUnique({ where: { user_id: client } }),
+      null,
+    );
+    const created = await run(client, "POST", [], request);
+    assert.ok("id" in created);
+    assert.ok(await prisma.cliente.findUnique({ where: { user_id: client } }));
+    const id = (freightId = created.id);
+    await assert.rejects(run(other, "GET", [id]), denied(404));
     const endereco_salvos = { ...address, label: "Casa" };
     await run(client, "POST", ["addresses", "save"], { address: endereco_salvos });
     const saved = await run(client, "GET", ["addresses"]);
@@ -124,18 +140,6 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
     assert.equal(updatedAddresses[0].label, "Trabalho");
     await run(client, "POST", ["addresses", "remove"], { id: saved[0].id });
     assert.deepEqual(await run(client, "GET", ["addresses"]), []);
-    const request = {
-      title: "Frete de teste",
-      description: "Caixas",
-      vehicle: "Utilitário",
-      pickup: address,
-      delivery: address,
-      schedule: { kind: "combinar" },
-    };
-    const created = await run(client, "POST", [], request);
-    assert.ok("id" in created);
-    const id = (freightId = created.id);
-    await assert.rejects(run(other, "GET", [id]), denied(404));
     const feed = await run(
       driver,
       "GET",

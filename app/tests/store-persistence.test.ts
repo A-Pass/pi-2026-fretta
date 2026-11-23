@@ -55,6 +55,44 @@ test("salvar o estado do cliente preserva mensagens recebidas existentes", async
   assert.equal(result, null);
 });
 
+test("concluir cadastro de cliente cria seu perfil, mas cadastro de motorista não", async () => {
+  const activated: string[] = [];
+  const transaction = {
+    user: {
+      findUnique: async () => ({ id: "client" }),
+      update: async () => undefined,
+    },
+    cliente: {
+      upsert: async ({ where }: { where: { user_id: string } }) => {
+        activated.push(where.user_id);
+      },
+    },
+    motorista: { findUnique: async () => null },
+  };
+  const database = {
+    $transaction: async (
+      callback: (tx: typeof transaction) => Promise<void>,
+    ) => callback(transaction),
+  } as unknown as Parameters<typeof saveAccountStore>[0];
+
+  for (const [userId, accountSetupRole] of [
+    ["client", "cliente"],
+    ["driver", "motorista"],
+  ] as const) {
+    const result = await saveAccountStore(database, userId, {
+      ...payload,
+      accountSetupComplete: true,
+      accountSetupRole,
+      freights: [],
+      proposals: [],
+      messages: [],
+    });
+    assert.equal(result, null);
+  }
+
+  assert.deepEqual(activated, ["client"]);
+});
+
 test("aceitar uma proposta não falha por mensagens recebidas na conversa", async () => {
   const updates: string[] = [];
   const offer = {

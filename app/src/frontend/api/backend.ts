@@ -30,6 +30,18 @@ export type FreightFeedItem = Pick<
   | "schedule"
   | "status"
 > & { pickupDistanceKm?: number };
+export type FreightCreateResult = Pick<
+  Freight,
+  | "id"
+  | "title"
+  | "description"
+  | "origin"
+  | "destination"
+  | "vehicle"
+  | "schedule"
+  | "status"
+  | "photos"
+> & { updatedAt: string };
 export type PrivateFreightDetail = {
   freight: Freight;
   addresses?: { pickup: Address; delivery: Address };
@@ -82,10 +94,7 @@ export function createBackendClient(
     freight: (value: string, signal?: AbortSignal) =>
       http.request<PrivateFreightDetail>(`/freights/${id(value)}`, { signal }),
     createFreight: (payload: NewFreight) =>
-        post<PrivateFreightDetail & { savedAddresses: SavedAddress[] }>(
-          "/freights",
-          payload,
-        ),
+      post<FreightCreateResult>("/freights", payload),
     cancelFreight: (value: string) =>
       post<PrivateFreightDetail>(`/freights/${id(value)}/cancel`),
     startFreight: (value: string) =>

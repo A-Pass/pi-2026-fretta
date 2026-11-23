@@ -11,6 +11,8 @@ services:
     container_name: fretta-app
     environment:
       ENV_FILE: /run/secrets/dot_env
+    volumes:
+      - ./_storage_/files:/app/storage/uploads
     ports:
       - "127.0.0.1:${APP_PORT}:${APP_PORT}"
     secrets:

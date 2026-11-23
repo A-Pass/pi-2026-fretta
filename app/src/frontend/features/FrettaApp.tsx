@@ -262,20 +262,34 @@ export function FrettaApp() {
   async function createRequest(draft: FreightRequestDraft) {
     if (!store) return false;
     try {
-      const { freight, savedAddresses = [] } = await createBackendClient().createFreight({
+      const backend = createBackendClient();
+      const uploads = await Promise.all(
+        draft.photos.map(async (image, index) => {
+          const blob = await (await fetch(image)).blob();
+          return backend.upload(
+            new File([blob], `foto-${index}`, { type: blob.type }),
+            "freight",
+          );
+        }),
+      );
+      const created = await backend.createFreight({
         title: draft.title,
         description: draft.description,
         vehicle: draft.vehicle,
         schedule: draft.schedule,
         pickup: draft.pickup,
         delivery: draft.delivery,
-        photoIds: draft.photos,
+        photoIds: uploads.map((upload) => upload.id),
         savePickup: draft.savePickup,
         saveDelivery: draft.saveDelivery,
       });
+      const freight: Freight = {
+        ...created,
+        vehicle: draft.vehicle,
+        reviews: {},
+      };
       const next: Store = {
         ...store,
-        addresses: [...(store.addresses || []), ...savedAddresses],
         freights: [freight, ...store.freights.filter((item) => item.id !== freight.id)],
         freightAddresses: {
           ...store.freightAddresses,
@@ -297,7 +311,9 @@ export function FrettaApp() {
           ? error.message
           : "Não foi possível publicar a solicitação.",
       );
-      return false;
+      throw error instanceof Error
+        ? error
+        : new Error("Não foi possível publicar a solicitação.");
     }
   }
   async function propose(offer: ProposalOffer) {

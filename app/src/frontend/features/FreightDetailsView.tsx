@@ -212,7 +212,13 @@ export function FreightDetailsView({
         <section className="panel">
           <h2>O que vamos transportar?</h2>
           <p>{f.description}</p>
-          <PhotoGallery photos={f.photos} />
+          <PhotoGallery
+            photos={f.photos.map((photo) =>
+              photo.startsWith("data:image/")
+                ? photo
+                : `/api/v1/freights/${encodeURIComponent(f.id)}/photo/${encodeURIComponent(photo)}`,
+            )}
+          />
           <div className="route">
             <p>
               <MapPin />
