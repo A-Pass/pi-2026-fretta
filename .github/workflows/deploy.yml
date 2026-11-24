@@ -50,6 +50,9 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          FRETTA_ADMIN_PASSWORD: ${{ secrets.FRETTA_ADMIN_PASSWORD }}
+          FRETTA_ADMIN_SECRET: ${{ secrets.FRETTA_ADMIN_SECRET }}
+          FRETTA_ADMIN_USERNAME: ${{ secrets.FRETTA_ADMIN_USERNAME }}
         run: |
           {
             printf 'NODE_ENV="production"\n'
