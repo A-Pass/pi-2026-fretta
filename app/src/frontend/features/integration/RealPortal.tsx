@@ -22,7 +22,7 @@ import {
   type IdentityViewer,
   type RegistrationSummary,
 } from "../../api/identity";
-import { ApiRequestError, createHttpTransport } from "../../api/http";
+import { createHttpTransport } from "../../api/http";
 import { WelcomeView } from "../WelcomeView";
 import { SuccessDialog } from "../../components/SuccessDialog";
 import { AddressBookView } from "../addresses/AddressBookView";
@@ -57,7 +57,6 @@ export function RealPortal() {
   const [viewer, setViewer] = useState<IdentityViewer | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [admin, setAdmin] = useState(false),
     [vehicles, setVehicles] = useState<Vehicle[]>([]),
     [registration, setRegistration] = useState<RegistrationSummary | null>(
       null,
@@ -209,10 +208,6 @@ export function RealPortal() {
     setError("");
     try {
       const me = await client.me();
-      if (role === "cliente" && !me.roles.cliente) {
-        await client.activate("cliente");
-        me.roles.cliente = true;
-      }
       setViewer(me);
       setName(me.name);
       if (me.roles.motorista) {
@@ -223,13 +218,6 @@ export function RealPortal() {
         setVehicles(list);
         setRegistrationOwner(me.id);
         setRegistration(status);
-      }
-      try {
-        await createHttpTransport().request("/admin/me");
-        setAdmin(true);
-      } catch (e) {
-        if (!(e instanceof ApiRequestError) || e.status !== 403) throw e;
-        setAdmin(false);
       }
     } catch (e) {
       setError(
@@ -246,7 +234,6 @@ export function RealPortal() {
       setRegistrationOwner(null);
       setRegistration(null);
       setViewer(null);
-      setAdmin(false);
     }
   }, [session?.user.id, role]);
   useEffect(() => setEditingRegistration(false), [pathname]);
@@ -501,15 +488,17 @@ export function RealPortal() {
           <small>
             {role === "cliente" ? "Perfil de cliente" : "Perfil de motorista"}
           </small>
-          <button
-            onClick={() =>
-              router.push(
-                role === "cliente" ? "/motorista/inicio" : "/cliente/inicio",
-              )
-            }
-          >
-            Alternar perfil
-          </button>
+          {viewer?.roles.cliente && viewer.roles.motorista && (
+            <button
+              onClick={() =>
+                router.push(
+                  role === "cliente" ? "/motorista/inicio" : "/cliente/inicio",
+                )
+              }
+            >
+              Alternar perfil
+            </button>
+          )}
         </div>
       </aside>
       <div className="content">
@@ -1012,11 +1001,6 @@ export function RealPortal() {
                 >
                   Empresas e equipe
                 </Link>
-                {admin && (
-                  <a className="secondary" href="/admin">
-                    Painel administrativo
-                  </a>
-                )}
                 <button
                   className="secondary"
                   onClick={() =>

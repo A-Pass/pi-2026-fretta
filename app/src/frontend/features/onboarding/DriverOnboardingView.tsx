@@ -28,7 +28,7 @@ const steps = ["Identificação", "Sua foto", "CNH", "Veículo", "Revisão"];
 type Props = {
   store: Store;
   onSubmit: (draft: DriverOnboardingDraft) => Promise<boolean>;
-  onClient: () => void;
+  onClient?: () => void;
   onLogout: () => void;
   onServices: () => void;
 };
@@ -196,9 +196,11 @@ export function DriverOnboardingView({
                 Começar cadastro <ArrowRight size={18} />
               </button>
             </div>
-            <button className="back" onClick={onClient}>
-              Continuar como cliente
-            </button>
+            {onClient && (
+              <button className="back" onClick={onClient}>
+                Continuar como cliente
+              </button>
+            )}
             {store.proposals.some((p) =>
               ownProposal(p, store.profile?.id || ""),
             ) && (
@@ -671,13 +673,15 @@ export function DriverOnboardingView({
                 </button>
               </div>
             </form>
-            <button
-              className="back"
-              disabled={busy || reading}
-              onClick={() => setLeave("client")}
-            >
-              Continuar como cliente
-            </button>
+            {onClient && (
+              <button
+                className="back"
+                disabled={busy || reading}
+                onClick={() => setLeave("client")}
+              >
+                Continuar como cliente
+              </button>
+            )}
           </>
         )}
       </main>
@@ -692,7 +696,7 @@ export function DriverOnboardingView({
         cancelLabel="Continuar cadastro"
         onConfirm={async () => {
           if (leave === "logout") onLogout();
-          else onClient();
+          else onClient?.();
           return true;
         }}
       />

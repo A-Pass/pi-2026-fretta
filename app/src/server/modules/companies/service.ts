@@ -32,13 +32,23 @@ export function approvedDriver() {
   });
   return {
     disponivel: true,
-    cadastro_motorista: {
-      is: {
-        status: "APROVADO" as const,
+    OR: [
+      {
+        cadastro_motorista: { is: null },
+        cadastro_status: "APROVADO",
         cnh_validade: { gte: new Date(today) },
-        veiculo: { is: { ativo: true } },
+        veiculo: { some: { ativo: true } },
       },
-    },
+      {
+        cadastro_motorista: {
+          is: {
+            status: "APROVADO" as const,
+            cnh_validade: { gte: new Date(today) },
+            veiculo: { is: { ativo: true } },
+          },
+        },
+      },
+    ],
   };
 }
 function minimumLicenseDate() {

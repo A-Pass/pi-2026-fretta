@@ -3,6 +3,7 @@ import type {
   DriverRegistration,
   Freight,
   Message,
+  OperatingArea,
   Proposal,
   ProposalOffer,
   PublicProviderProfile,
@@ -29,7 +30,7 @@ export type FreightFeedItem = Pick<
   | "vehicle"
   | "schedule"
   | "status"
-> & { pickupDistanceKm?: number };
+> & { updatedAt?: string; pickupDistanceKm?: number };
 export type FreightCreateResult = Pick<
   Freight,
   | "id"
@@ -74,10 +75,17 @@ export function createBackendClient(
     me: (signal?: AbortSignal) => http.request<Viewer>("/me", { signal }),
     updateProfile: (profile: { name: string; photoId?: string }) =>
       http.request<Viewer>("/me", { method: "PATCH", body: profile }),
+    saveOperatingArea: (area: OperatingArea) =>
+      http.request<OperatingArea>("/driver/operating-area", {
+        method: "PUT",
+        body: area,
+      }),
     freights: (
       cursor?: string,
       signal?: AbortSignal,
       filters?: {
+        role?: "motorista";
+        scope?: "all" | "area";
         q?: string;
         lat?: number;
         lng?: number;
@@ -103,7 +111,10 @@ export function createBackendClient(
       post<PrivateFreightDetail>(`/freights/${id(value)}/complete`),
     proposals: (value: string, cursor?: string) =>
       http.page<Proposal>(`/freights/${id(value)}/proposals`, cursor),
-    propose: (value: string, payload: NewOffer) =>
+    propose: (
+      value: string,
+      payload: NewOffer & { expectedUpdatedAt: string },
+    ) =>
       post<Proposal>(`/freights/${id(value)}/proposals`, payload),
     revise: (value: string, payload: NewOffer) =>
       post<ProposalOffer>(`/proposals/${id(value)}/offers`, payload),

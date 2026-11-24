@@ -58,4 +58,17 @@ test("admin registration records and reviews require the authenticated admin coo
     },
   );
   assert.equal(postResponse.status, 401);
+
+  const subscriptionResponse = await POST(
+    new NextRequest(
+      "http://localhost/api/v1/admin/registrations/user-1/subscription",
+      { method: "POST" },
+    ),
+    {
+      params: Promise.resolve({
+        path: ["admin", "registrations", "user-1", "subscription"],
+      }),
+    },
+  );
+  assert.equal(subscriptionResponse.status, 401);
 });

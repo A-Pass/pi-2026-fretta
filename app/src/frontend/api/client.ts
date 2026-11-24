@@ -6,7 +6,7 @@ export const api: FrettaApi = {
     return createHttpTransport().request<Store>("/state");
   },
   async save(store, accountSetupRole) {
-    await createHttpTransport().request<Store>("/state", {
+    return createHttpTransport().request<Store>("/state", {
       method: "PUT",
       body: {
         ...store,

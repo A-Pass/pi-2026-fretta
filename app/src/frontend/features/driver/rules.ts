@@ -25,6 +25,18 @@ export function opportunities(store: Store, area: OperatingArea) {
     })
     .sort((a, b) => a.distance - b.distance);
 }
+export function sortFeedItemsByPickupDistance(items: FreightFeedItem[]) {
+  return items
+    .map((freight) => ({
+      freight,
+      distance: freight.pickupDistanceKm ?? null,
+    }))
+    .sort(
+      (a, b) =>
+        (a.distance ?? Number.POSITIVE_INFINITY) -
+        (b.distance ?? Number.POSITIVE_INFINITY),
+    );
+}
 export function isFreightFeedItem(value: unknown): value is FreightFeedItem {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;

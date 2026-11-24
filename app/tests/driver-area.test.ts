@@ -6,6 +6,7 @@ import {
   isFreightFeedItem,
   opportunities,
   ownProposal,
+  sortFeedItemsByPickupDistance,
 } from "../src/frontend/features/driver/rules";
 import { seed } from "./fixtures/seed";
 import { emptyAddress } from "../src/frontend/features/addresses/rules";
@@ -77,4 +78,23 @@ test("solicitação do feed pode ser aberta em detalhes sem endereço privado", 
   assert.equal("addresses" in freight, false);
   assert.equal(isFreightFeedItem({ ...freight, photos: undefined }), true);
   assert.equal(isFreightFeedItem({ ...freight, schedule: null }), false);
+});
+test("feed ordena fretes pela distância da retirada e deixa distância ausente por último", () => {
+  const item = {
+    title: "Frete",
+    description: "Caixas",
+    origin: "Centro, Eunápolis",
+    destination: "Centro, Porto Seguro",
+    vehicle: "Caminhão pequeno",
+    schedule: { kind: "combinar" as const },
+    status: "ABERTO" as const,
+  };
+  assert.deepEqual(
+    sortFeedItemsByPickupDistance([
+      { ...item, id: "far", pickupDistanceKm: 30 },
+      { ...item, id: "unknown" },
+      { ...item, id: "near", pickupDistanceKm: 4 },
+    ]).map(({ freight }) => freight.id),
+    ["near", "far", "unknown"],
+  );
 });

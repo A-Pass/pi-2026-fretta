@@ -153,6 +153,7 @@ export interface Store {
   fleet?: FleetState;
   adminDemoCases?: AdminCase[];
   accountSetupComplete?: boolean;
+  roles?: { cliente: boolean; motorista: boolean };
   adminReviews?: AdminReview[];
   companyProfile?: CompanyProfile;
   driverRegistration?: DriverRegistration;
@@ -176,7 +177,7 @@ export interface FrettaApi {
   save(
     store: Store,
     accountSetupRole?: "cliente" | "motorista",
-  ): Promise<void>;
+  ): Promise<Store>;
 }
 
 export interface MapPoint {
@@ -221,6 +222,10 @@ export type AdminCase = {
   registration: DriverRegistration;
   photo?: string;
   vehicles: Vehicle[];
+  subscription?: {
+    active: true;
+    expiresAt: string;
+  };
 };
 export type CorrectionItem = "dados" | "foto" | "cnh" | "veiculo";
 export type AdminReview = {

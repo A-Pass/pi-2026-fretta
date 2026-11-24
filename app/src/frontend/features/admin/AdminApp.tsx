@@ -40,6 +40,8 @@ export function AdminApp() {
   const [reason, setReason] = useState(""),
     [checks, setChecks] = useState<string[]>([]),
     [decision, setDecision] = useState<AdminReview["decision"] | null>(null),
+    [activateOnApproval, setActivateOnApproval] = useState(false),
+    [subscriptionLoading, setSubscriptionLoading] = useState(false),
     [success, setSuccess] = useState("");
   async function load(): Promise<boolean> {
     setLoading(true);
@@ -128,6 +130,7 @@ export function AdminApp() {
     setSelected(c.id);
     setReason("");
     setChecks([]);
+    setActivateOnApproval(false);
     setSuccess("");
     setError("");
   }
@@ -169,6 +172,39 @@ export function AdminApp() {
           ? failure.message
           : "Não foi possível encerrar a sessão administrativa.",
       );
+    }
+  }
+  async function activateSubscription() {
+    if (!current) return;
+    setSubscriptionLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await createHttpTransport().request<{
+        subscription: { active: true; expiresAt: string };
+      }>(
+        `/admin/registrations/${encodeURIComponent(current.id)}/subscription`,
+        { method: "POST" },
+      );
+      setCases((previous) =>
+        previous.map((item) =>
+          item.id === current.id
+            ? { ...item, subscription: result.subscription }
+            : item,
+        ),
+      );
+      await load();
+      setSuccess(
+        `Assinatura ativada por 30 dias, até ${dateTime(result.subscription.expiresAt)}.`,
+      );
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Não foi possível ativar a assinatura.",
+      );
+    } finally {
+      setSubscriptionLoading(false);
     }
   }
   return (
@@ -454,6 +490,29 @@ export function AdminApp() {
                       Correções solicitadas: {current.registration.feedback}
                     </p>
                   )}
+                  {current.registration.status === "APROVADO" && (
+                    <div className="admin-subscription">
+                      <h3>Assinatura</h3>
+                      {current.subscription?.active ? (
+                        <p>
+                          Ativa até {dateTime(current.subscription.expiresAt)}.
+                        </p>
+                      ) : (
+                        <>
+                          <p>Não há uma assinatura ativa para este motorista.</p>
+                          <button
+                            className="secondary"
+                            disabled={subscriptionLoading}
+                            onClick={() => void activateSubscription()}
+                          >
+                            {subscriptionLoading
+                              ? "Ativando…"
+                              : "Ativar por 30 dias"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </section>
                 {current.registration.status === "EM_ANALISE" && (
                   <section className="panel">
@@ -485,6 +544,25 @@ export function AdminApp() {
                         </label>
                       ))}
                     </div>
+                    {current.subscription?.active ? (
+                      <p>
+                        Assinatura ativa até{" "}
+                        {dateTime(current.subscription.expiresAt)}; a aprovação
+                        não altera o prazo vigente.
+                      </p>
+                    ) : (
+                      <label className="admin-subscription-option">
+                        <input
+                          type="checkbox"
+                          checked={activateOnApproval}
+                          onChange={(event) =>
+                            setActivateOnApproval(event.target.checked)
+                          }
+                        />
+                        Ativar assinatura por 30 dias após a aprovação (concessão
+                        administrativa, sem cobrança).
+                      </label>
+                    )}
                     <label className="admin-reason">
                       Observações / correções a solicitar
                       <textarea
@@ -564,12 +642,16 @@ export function AdminApp() {
         }
         description={
           decision === "APROVADO"
-            ? "A decisão será registrada apenas após autorização no servidor."
+            ? activateOnApproval
+              ? "O cadastro será aprovado e uma assinatura administrativa de 30 dias será ativada, sem cobrança."
+              : "A decisão será registrada apenas após autorização no servidor."
             : `O prestador verá este motivo ao consultar o cadastro: ${reason.trim()}`
         }
         confirmLabel={
           decision === "APROVADO"
-            ? "Confirmar aprovação"
+            ? activateOnApproval
+              ? "Aprovar e ativar assinatura"
+              : "Confirmar aprovação"
             : "Enviar solicitação de correções"
         }
         cancelLabel="Voltar à análise"
@@ -584,6 +666,8 @@ export function AdminApp() {
                 body: {
                   expectedVersion: reviewVersion(current),
                   decision,
+                  activateSubscription:
+                    decision === "APROVADO" && activateOnApproval,
                   reason,
                   checks,
                 },
@@ -593,10 +677,13 @@ export function AdminApp() {
             setSuccess(
               refreshed
                 ? decision === "APROVADO"
-                  ? "Cadastro aprovado."
+                  ? activateOnApproval
+                    ? "Cadastro aprovado e assinatura ativada por 30 dias."
+                    : "Cadastro aprovado."
                   : "Correções solicitadas. O motivo está disponível no cadastro do prestador."
                 : "Decisão registrada no banco de dados. Atualize o painel para carregar os dados mais recentes.",
             );
+            setActivateOnApproval(false);
             setDecision(null);
             return true;
           } catch (failure) {

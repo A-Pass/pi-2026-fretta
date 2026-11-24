@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { correctionItems } from "@/contracts/driver-corrections";
 import type {
   Address,
   AdminCase,
   AdminReview,
   DriverRegistration,
   Freight,
+  OperatingArea,
   Proposal,
   ProposalOffer,
   Role,
@@ -36,6 +38,38 @@ function record(value: unknown): RecordValue | null {
 
 function string(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function parseOperatingArea(value: unknown): OperatingArea {
+  const area = record(value);
+  const center = record(area?.center);
+  const lat = center?.lat;
+  const lng = center?.lng;
+  const radiusKm = area?.radiusKm;
+  if (
+    typeof lat !== "number" ||
+    !Number.isFinite(lat) ||
+    lat < -90 ||
+    lat > 90 ||
+    typeof lng !== "number" ||
+    !Number.isFinite(lng) ||
+    lng < -180 ||
+    lng > 180 ||
+    typeof radiusKm !== "number" ||
+    !Number.isFinite(radiusKm) ||
+    radiusKm <= 0 ||
+    radiusKm > 1000
+  )
+    throw new StorePersistenceError(
+      "INVALID_AREA",
+      "A região de atendimento informada é inválida.",
+      422,
+    );
+  return {
+    center: { lat, lng },
+    radiusKm,
+    label: string(area?.label, 160),
+  };
 }
 
 function categoryFromPorte(value: string) {
@@ -307,6 +341,7 @@ export async function loadAccountStore(
     database.user.findUnique({
       where: { id: userId },
       include: {
+        cliente: true,
         motorista: { include: { veiculo: { where: { ativo: true } } } },
         perfis_empresa: true,
         areas_atuacao: true,
@@ -451,6 +486,10 @@ export async function loadAccountStore(
     : undefined;
   return {
     accountSetupComplete: user.accountSetupComplete,
+    roles: {
+      cliente: Boolean(user.cliente),
+      motorista: Boolean(user.motorista),
+    },
     profile: { id: user.id, name: user.name, photo: user.image ?? "" },
     ...(registration ? { driverRegistration: registration } : {}),
     vehicles: user.motorista?.veiculo.map(vehicleFromRow) ?? [],
@@ -466,7 +505,7 @@ export async function loadAccountStore(
       : {}),
     ...(user.areas_atuacao
       ? {
-          areas_atuacao: {
+          operatingArea: {
             center: {
               lat: Number(user.areas_atuacao.latitude),
               lng: Number(user.areas_atuacao.longitude),
@@ -1426,6 +1465,32 @@ async function saveNotifications(
   }
 }
 
+export async function saveDriverOperatingArea(
+  database: PrismaClient,
+  userId: string,
+  value: unknown,
+): Promise<OperatingArea> {
+  const area = parseOperatingArea(value);
+  await database.operatingArea.upsert({
+    where: { user_id: userId },
+    create: {
+      user_id: userId,
+      latitude: area.center.lat,
+      longitude: area.center.lng,
+      radiusKm: area.radiusKm,
+      label: area.label,
+      updatedAt: new Date(),
+    },
+    update: {
+      latitude: area.center.lat,
+      longitude: area.center.lng,
+      radiusKm: area.radiusKm,
+      label: area.label,
+    },
+  });
+  return area;
+}
+
 export async function saveAccountStore(
   database: PrismaClient,
   userId: string,
@@ -1548,46 +1613,24 @@ export async function saveAccountStore(
           });
         }
 
-        const area = record(input.areas_atuacao);
-        if (area) {
-          const center = record(area.center);
-          const lat = center?.lat;
-          const lng = center?.lng;
-          const radiusKm = area.radiusKm;
-          if (
-            typeof lat !== "number" ||
-            !Number.isFinite(lat) ||
-            lat < -90 ||
-            lat > 90 ||
-            typeof lng !== "number" ||
-            !Number.isFinite(lng) ||
-            lng < -180 ||
-            lng > 180 ||
-            typeof radiusKm !== "number" ||
-            !Number.isFinite(radiusKm) ||
-            radiusKm <= 0 ||
-            radiusKm > 1000
-          )
-            throw new StorePersistenceError(
-              "INVALID_AREA",
-              "A região de atendimento informada é inválida.",
-              422,
-            );
+        const areaInput = input.operatingArea ?? input.areas_atuacao;
+        if (areaInput !== undefined && areaInput !== null) {
+          const area = parseOperatingArea(areaInput);
           await tx.operatingArea.upsert({
             where: { user_id: userId },
             create: {
               user_id: userId,
-              latitude: lat,
-              longitude: lng,
-              radiusKm,
-              label: string(area.label, 160),
+              latitude: area.center.lat,
+              longitude: area.center.lng,
+              radiusKm: area.radiusKm,
+              label: area.label,
               updatedAt: new Date(),
             },
             update: {
-              latitude: lat,
-              longitude: lng,
-              radiusKm,
-              label: string(area.label, 160),
+              latitude: area.center.lat,
+              longitude: area.center.lng,
+              radiusKm: area.radiusKm,
+              label: area.label,
             },
           });
         }
@@ -1649,6 +1692,7 @@ function registrationVersion(registration: DriverRegistration) {
     registration.submittedAt,
     registration.reviewedAt || "",
     registration.status,
+    String(registration.submissionCount || 1),
   ].join("|");
 }
 
@@ -1658,10 +1702,29 @@ export async function loadAdminRegistrations(database: PrismaClient) {
     include: {
       user: true,
       veiculo: { where: { ativo: true } },
+      cadastro_motorista: true,
     },
   });
+  const now = new Date();
+  const activeSubscriptions = drivers.length
+    ? await database.vinculo_assinatura.findMany({
+        where: {
+          motorista_id: { in: drivers.map((driver) => driver.user_id) },
+          status: "ATIVA",
+          inicio_em: { lte: now },
+          fim_em: { gt: now },
+        },
+        orderBy: [{ fim_em: "desc" }, { criado_em: "desc" }],
+        select: { motorista_id: true, fim_em: true },
+      })
+    : [];
+  const subscriptionByDriver = new Map<string, string>();
+  for (const subscription of activeSubscriptions)
+    if (subscription.fim_em && !subscriptionByDriver.has(subscription.motorista_id))
+      subscriptionByDriver.set(subscription.motorista_id, subscription.fim_em.toISOString());
   const cases: AdminCase[] = drivers.flatMap((driver) => {
     const registration = registrationFromDriver(driver);
+    const subscriptionExpiresAt = subscriptionByDriver.get(driver.user_id);
     return registration
       ? [
           {
@@ -1671,6 +1734,14 @@ export async function loadAdminRegistrations(database: PrismaClient) {
               licensePhotoDataUrl: undefined,
             },
             vehicles: driver.veiculo.map(vehicleFromRow),
+            ...(subscriptionExpiresAt
+              ? {
+                  subscription: {
+                    active: true as const,
+                    expiresAt: subscriptionExpiresAt,
+                  },
+                }
+              : {}),
           },
         ]
       : [];
@@ -1713,6 +1784,100 @@ export async function loadAdminDocuments(
   };
 }
 
+async function driverRegistrationApproved(
+  tx: Transaction,
+  userId: string,
+): Promise<boolean> {
+  const driver = await tx.motorista.findUnique({
+    where: { user_id: userId },
+    select: {
+      cadastro_status: true,
+      cadastro_motorista: { select: { status: true } },
+    },
+  });
+  const registrationStatus = driver?.cadastro_motorista
+    ? driver.cadastro_motorista.status
+    : driver?.cadastro_status;
+  return registrationStatus === "APROVADO";
+}
+
+async function grantDriverSubscription(
+  tx: Transaction,
+  userId: string,
+): Promise<Date> {
+  const now = new Date();
+  const active = await tx.vinculo_assinatura.findFirst({
+    where: {
+      motorista_id: userId,
+      status: "ATIVA",
+      inicio_em: { lte: now },
+      fim_em: { gt: now },
+    },
+    orderBy: [{ fim_em: "desc" }, { criado_em: "desc" }],
+    select: { id: true, fim_em: true },
+  });
+  if (active?.fim_em) return active.fim_em;
+
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const latest = await tx.vinculo_assinatura.findFirst({
+    where: { motorista_id: userId },
+    orderBy: [{ criado_em: "desc" }, { id: "desc" }],
+    select: { id: true },
+  });
+  if (latest) {
+    await tx.vinculo_assinatura.update({
+      where: { id: latest.id },
+      data: {
+        status: "ATIVA",
+        inicio_em: now,
+        fim_em: expiresAt,
+        atualizado_em: now,
+      },
+    });
+  } else {
+    await tx.vinculo_assinatura.create({
+      data: {
+        id: randomUUID(),
+        motorista_id: userId,
+        status: "ATIVA",
+        inicio_em: now,
+        fim_em: expiresAt,
+        atualizado_em: now,
+      },
+    });
+  }
+  return expiresAt;
+}
+
+export async function activateAdminDriverSubscription(
+  database: PrismaClient,
+  userId: string,
+): Promise<
+  | { subscription: { active: true; expiresAt: string } }
+  | { error: Response }
+> {
+  const expiresAt = await database.$transaction(
+    async (tx) =>
+      (await driverRegistrationApproved(tx, userId))
+        ? grantDriverSubscription(tx, userId)
+        : null,
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+  if (!expiresAt)
+    return {
+      error: Response.json(
+        {
+          code: "DRIVER_NOT_APPROVED",
+          message: "A assinatura só pode ser ativada após a aprovação do cadastro.",
+        },
+        { status: 409 },
+      ),
+    };
+  return {
+    subscription: { active: true, expiresAt: expiresAt.toISOString() },
+  };
+}
+
 export async function reviewDriverRegistration(
   database: PrismaClient,
   userId: string,
@@ -1723,6 +1888,7 @@ export async function reviewDriverRegistration(
   | { error: Response }
 > {
   const decision = input.decision;
+  const activateSubscription = input.activateSubscription === true;
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
   const checks = input.checks;
   const requiredChecks = [
@@ -1737,6 +1903,9 @@ export async function reviewDriverRegistration(
     requiredChecks.every((check) => checks.includes(check));
   if (
     (decision !== "APROVADO" && decision !== "AJUSTES_SOLICITADOS") ||
+    (input.activateSubscription !== undefined &&
+      typeof input.activateSubscription !== "boolean") ||
+    (activateSubscription && decision !== "APROVADO") ||
     typeof input.expectedVersion !== "string" ||
     reason.length > 1000 ||
     (decision === "AJUSTES_SOLICITADOS" && reason.length < 10) ||
@@ -1756,6 +1925,7 @@ export async function reviewDriverRegistration(
         include: {
           user: true,
           veiculo: { where: { ativo: true } },
+          cadastro_motorista: true,
         },
       });
       const registration = driver && registrationFromDriver(driver);
@@ -1795,8 +1965,24 @@ export async function reviewDriverRegistration(
         include: {
           user: true,
           veiculo: { where: { ativo: true } },
+          cadastro_motorista: true,
         },
       });
+      if (decision === "APROVADO" && driver.cadastro_motorista)
+        await tx.cadastro_motorista.update({
+          where: { motorista_id: userId },
+          data: {
+            status: "APROVADO",
+            motivo_ajuste: null,
+            itens_ajuste: [],
+            itens_conferidos: correctionItems.map((item) => item.id),
+            analisado_em: at,
+            atualizado_em: at,
+          },
+        });
+      const subscriptionExpiresAt = activateSubscription
+        ? await grantDriverSubscription(tx, userId)
+        : null;
       const review = await tx.adminReview.create({
         data: {
           id: randomUUID(),
@@ -1814,6 +2000,7 @@ export async function reviewDriverRegistration(
         registration: updatedRegistration,
         vehicles: updatedDriver.veiculo.map(vehicleFromRow),
         review,
+        subscriptionExpiresAt,
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -1856,6 +2043,14 @@ export async function reviewDriverRegistration(
       id: userId,
       registration: safeRegistration,
       vehicles: outcome.vehicles,
+      ...(outcome.subscriptionExpiresAt
+        ? {
+            subscription: {
+              active: true as const,
+              expiresAt: outcome.subscriptionExpiresAt.toISOString(),
+            },
+          }
+        : {}),
     },
     review,
   };

@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getAuthConfigurationError } from "@/server/auth/env";
 import {
+  activateAdminDriverSubscription,
   loadAccountStore,
   loadAdminDocuments,
   loadAdminRegistrations,
   reviewDriverRegistration,
   saveAccountStore,
+  saveDriverOperatingArea,
+  StorePersistenceError,
 } from "@/server/modules/store/persistence";
 import {
   ADMIN_COOKIE,
@@ -132,6 +135,28 @@ async function stateStore(request: NextRequest, method: "GET" | "PUT") {
   return Response.json(await loadAccountStore(prisma, userId));
 }
 
+async function driverOperatingAreaStore(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  if (
+    origin &&
+    origin !== new URL(process.env.APP_URL || request.url).origin
+  )
+    return error("INVALID_ORIGIN", "Origem inválida.", 403);
+  const session = await getSession(request);
+  const value = await request.json().catch(() => null);
+  const { prisma } = await import("@/server/db");
+  try {
+    const area = await saveDriverOperatingArea(prisma, session.user.id, value);
+    return Response.json(area, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (failure) {
+    if (failure instanceof StorePersistenceError)
+      return error(failure.code, failure.message, failure.status);
+    throw failure;
+  }
+}
+
 function approximateRegion(address: {
   bairro: string | null;
   cidade: string;
@@ -190,6 +215,18 @@ async function reviewAdminRegistration(
   return Response.json({ reviewedCase: result.case, review: result.review });
 }
 
+async function activateAdminRegistrationSubscription(
+  request: NextRequest,
+  userId: string,
+) {
+  if (!adminTokenUsername(readAdminCookie(request.headers.get("cookie"))))
+    return error("UNAUTHORIZED", "Faça login como administrador.", 401);
+  const { prisma } = await import("@/server/db");
+  const result = await activateAdminDriverSubscription(prisma, userId);
+  if ("error" in result) return result.error;
+  return Response.json({ subscription: result.subscription });
+}
+
 function distanceKm(
   latA: number,
   lngA: number,
@@ -208,7 +245,7 @@ function distanceKm(
 }
 
 async function freightFeed(request: NextRequest) {
-  await getSession(request);
+  const session = await getSession(request);
   const { prisma } = await import("@/server/db");
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor")?.trim() || undefined;
@@ -237,7 +274,10 @@ async function freightFeed(request: NextRequest) {
 
   while (items.length < limit && !reachedEnd) {
     const freights = await prisma.frete.findMany({
-      where: { status_frete_enum: "ABERTO" },
+      where: {
+        status_frete_enum: "ABERTO",
+        cliente_id: { not: session.user.id },
+      },
       include: {
         endereco_frete_endereco_origem_idToendereco: true,
         endereco_frete_endereco_destino_idToendereco: true,
@@ -803,6 +843,8 @@ export async function PUT(
   try {
     const { path } = await context.params;
     if (path.join("/") === "state") return await stateStore(request, "PUT");
+    if (path.join("/") === "driver/operating-area")
+      return await driverOperatingAreaStore(request);
     return error("NOT_IMPLEMENTED", "Esta operação ainda não está disponível.", 501);
   } catch (failure) {
     if (failure instanceof Response) return failure;
@@ -818,6 +860,10 @@ export async function POST(
   try {
     const { path } = await context.params;
     if (path.join("/") === "uploads") return await createUpload(request);
+    const subscriptionPath =
+      /^admin\/registrations\/([^/]+)\/subscription$/.exec(path.join("/"));
+    if (subscriptionPath)
+      return await activateAdminRegistrationSubscription(request, path[2]);
     const reviewPath = /^admin\/registrations\/([^/]+)\/review$/.exec(
       path.join("/"),
     );

@@ -94,7 +94,7 @@ export function useNavigation() {
         selected: null,
         chatId: "",
       }),
-    setRole: (role: Role) =>
+    setRole: (role: Role, replace = false) =>
       navigate({
         role,
         tab: "inicio",
@@ -102,7 +102,7 @@ export function useNavigation() {
         chatId: "",
         providerId: null,
         providerConversationId: null,
-      }),
+      }, replace),
     setSelected: (selected: string | null) =>
       navigate({
         selected,

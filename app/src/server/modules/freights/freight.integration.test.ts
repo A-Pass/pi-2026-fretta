@@ -145,15 +145,32 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       "GET",
       [],
       {},
-      "role=motorista&lat=-16.377&lng=-39.58&radius=30",
+      "role=motorista&lat=-16.377&lng=-39.58&radiusKm=30&limit=100",
     );
-    assert.ok("items" in feed && feed.items?.some((item) => item.id === id));
+    assert.ok("items" in feed);
+    const feedItem = feed.items?.find((item) => item.id === id);
+    assert.ok(feedItem);
+    assert.equal(feedItem.pickupDistanceKm, 0);
+    assert.deepEqual(feedItem.schedule, { kind: "combinar" });
+    const allFreights = await run(
+      driver,
+      "GET",
+      [],
+      {},
+      "role=motorista&scope=all&lat=0&lng=0&limit=100",
+    );
+    assert.ok(
+      "items" in allFreights &&
+        allFreights.items?.some(
+          (item) => item.id === id && (item.pickupDistanceKm ?? 0) > 30,
+        ),
+    );
     const far = await run(
       driver,
       "GET",
       [],
       {},
-      "role=motorista&lat=0&lng=0&radius=30",
+      "role=motorista&lat=0&lng=0&radiusKm=30",
     );
     assert.ok(
       "items" in far && far.items && !far.items.some((item) => item.id === id),
@@ -167,18 +184,18 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
         "GET",
         [],
         {},
-        "role=motorista&lat=-16.377&lng=-39.58&radius=30",
+        "role=motorista&lat=-16.377&lng=-39.58&radiusKm=30",
       );
       assert.ok(
         "items" in ownFeed &&
-          ownFeed.items?.some((item) => item.id === own.id && item.ownRequest),
+          !ownFeed.items?.some((item) => item.id === own.id),
       );
       const outside = await run(
         driver,
         "GET",
         [],
         {},
-        "role=motorista&lat=0&lng=0&radius=30",
+        "role=motorista&lat=0&lng=0&radiusKm=30",
       );
       assert.ok(
         "items" in outside &&
@@ -203,7 +220,7 @@ test("frete real separa contas e preserva negociação, aceite e avaliação", a
       availableAt,
       message: "",
     };
-    const first = await run(driver, "POST", [id, "propose"], quote);
+    const first = await run(driver, "POST", [id, "proposals"], quote);
     assert.ok("proposals" in first);
     const proposal = first.proposals[0];
     const firstOffer = proposal.offers[0];

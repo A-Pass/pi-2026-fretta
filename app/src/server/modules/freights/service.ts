@@ -116,13 +116,21 @@ type Row = Prisma.freteGetPayload<{ include: typeof include }>;
 type FreightAddress = Row["endereco_frete_endereco_origem_idToendereco"];
 
 function listing(f: Row) {
+  const start = f.data_coleta_prevista?.toISOString().slice(0, 10);
+  const end = f.data_entrega_prevista?.toISOString().slice(0, 10);
   return {
     id: f.id,
+    updatedAt: f.atualizado_em.toISOString(),
     title: f.titulo,
     description: f.descricao,
     origin: `${f.endereco_frete_endereco_origem_idToendereco.bairro ?? ""}, ${f.endereco_frete_endereco_origem_idToendereco.cidade}, ${f.endereco_frete_endereco_origem_idToendereco.estado}`.replace(/^, /, ""),
     destination: `${f.endereco_frete_endereco_destino_idToendereco.bairro ?? ""}, ${f.endereco_frete_endereco_destino_idToendereco.cidade}, ${f.endereco_frete_endereco_destino_idToendereco.estado}`.replace(/^, /, ""),
     vehicle: f.categoria_porte,
+    schedule: f.tipo_agendamento_enum === "FIXA"
+      ? { kind: "fixa", start }
+      : f.tipo_agendamento_enum === "INTERVALO"
+        ? { kind: "intervalo", start, end }
+        : { kind: "combinar" },
     status: f.status_frete_enum === "ACEITO" ? "AGENDADO" : f.status_frete_enum,
   };
 }
@@ -304,38 +312,97 @@ export async function freightOperation(
     const center = feed
       ? point(Number(query.get("lat") ?? NaN), Number(query.get("lng") ?? NaN))
       : null;
-    const radius = Number(query.get("radius"));
+    const withinRadius = query.get("scope") !== "all";
+    const radius = Number(query.get("radiusKm") ?? query.get("radius"));
     requireValue(
-      !feed || (radius >= 1 && radius <= 1000),
+      !feed || !withinRadius || (radius >= 1 && radius <= 1000),
       "Informe um raio de 1 a 1000 km.",
     );
     const cursor = query.get("cursor");
+    const q = query.get("q")?.trim().toLocaleLowerCase("pt-BR") ?? "";
+    const requestedLimit = Number(query.get("limit") ?? 50);
+    requireValue(
+      !feed ||
+        (Number.isInteger(requestedLimit) &&
+          requestedLimit >= 1 &&
+          requestedLimit <= 100),
+      "Informe um limite de 1 a 100 fretes.",
+    );
     const where: Prisma.freteWhereInput = feed
-      ? { status_frete_enum: "ABERTO" }
+      ? { status_frete_enum: "ABERTO", cliente_id: { not: userId } }
       : driver
         ? { proposta: { some: { motorista_id: userId } } }
         : { cliente_id: userId };
-    const rows = await tx.frete.findMany({
-      where: { ...where, ...(cursor ? { id: { gt: cursor } } : {}) },
-      orderBy: { id: "asc" },
-      take: 51,
-      include,
-    });
-    const items = rows.slice(0, 50).filter((f) => {
-      if (!center) return true;
-      const pickup = f.endereco_frete_endereco_origem_idToendereco.latitude &&
-        f.endereco_frete_endereco_origem_idToendereco.longitude
-        ? {
-            lat: Number(f.endereco_frete_endereco_origem_idToendereco.latitude),
-            lng: Number(f.endereco_frete_endereco_origem_idToendereco.longitude),
+    let rows: Row[];
+    let pickupDistances = new Map<string, number>();
+    let nextCursor: string | null;
+    if (feed && center) {
+      rows = [];
+      let scanCursor = cursor ?? undefined;
+      let hasMore = false;
+      const batchSize = 100;
+      while (rows.length < requestedLimit) {
+        const batch = await tx.frete.findMany({
+          where: { ...where, ...(scanCursor ? { id: { gt: scanCursor } } : {}) },
+          orderBy: { id: "asc" },
+          take: batchSize,
+          include,
+        });
+        if (!batch.length) break;
+        for (let index = 0; index < batch.length; index++) {
+          const freight = batch[index];
+          scanCursor = freight.id;
+          const origin = freight.endereco_frete_endereco_origem_idToendereco;
+          const destination =
+            freight.endereco_frete_endereco_destino_idToendereco;
+          if (
+            q &&
+            !`${freight.titulo} ${freight.descricao ?? ""} ${origin.bairro ?? ""} ${origin.cidade} ${origin.estado} ${destination.bairro ?? ""} ${destination.cidade} ${destination.estado}`
+              .toLocaleLowerCase("pt-BR")
+              .includes(q)
+          )
+            continue;
+          const hasPickupPoint =
+            origin.latitude !== null && origin.longitude !== null;
+          if (!hasPickupPoint && withinRadius) continue;
+          if (!hasPickupPoint) {
+            rows.push(freight);
+            if (rows.length === requestedLimit) {
+              hasMore = index < batch.length - 1 || batch.length === batchSize;
+              break;
+            }
+            continue;
           }
-        : null;
-      return pickup && distanceKm(center, pickup) <= radius;
-    });
+          const pickup = {
+            lat: Number(origin.latitude),
+            lng: Number(origin.longitude),
+          };
+          const distance = distanceKm(center, pickup);
+          if (withinRadius && distance > radius) continue;
+          rows.push(freight);
+          pickupDistances.set(freight.id, distance);
+          if (rows.length === requestedLimit) {
+            hasMore = index < batch.length - 1 || batch.length === batchSize;
+            break;
+          }
+        }
+        if (rows.length === requestedLimit || batch.length < batchSize) break;
+      }
+      nextCursor = hasMore ? (scanCursor ?? null) : null;
+    } else {
+      const batch = await tx.frete.findMany({
+        where: { ...where, ...(cursor ? { id: { gt: cursor } } : {}) },
+        orderBy: { id: "asc" },
+        take: 51,
+        include,
+      });
+      rows = batch.slice(0, 50);
+      nextCursor = batch.length > 50 ? batch[49].id : null;
+    }
     const conversations = await tx.conversa.findMany({
       where: {
         proposta_id: {
-          in: items.flatMap((freight) =>
+          in: rows.flatMap((freight) =>
             freight.proposta.map((proposal) => proposal.id),
           ),
         },
@@ -349,8 +416,11 @@ export async function freightOperation(
       ]),
     );
     return {
-      items: items.map((f) => ({
+      items: rows.map((f) => ({
         ...listing(f),
+        ...(pickupDistances.has(f.id)
+          ? { pickupDistanceKm: pickupDistances.get(f.id) }
+          : {}),
         ownRequest: f.cliente_id === userId,
         proposalCount: !driver ? f.proposta.length : undefined,
         ...(f.cliente_id === userId &&
@@ -378,7 +448,7 @@ export async function freightOperation(
             })()
           : {}),
       })),
-      nextCursor: rows.length > 50 ? rows[49].id : null,
+      nextCursor,
     };
   }
   if (method === "POST" && (!id || (action === "edit" && !proposalId))) {
@@ -676,7 +746,12 @@ export async function freightOperation(
     return detail(tx, f, userId);
   }
   requireValue(method === "POST", "Operação indisponível.", 404);
-  if ((action === "propose" || action === "company-propose") && !proposalId) {
+  if (
+    (action === "propose" ||
+      action === "proposals" ||
+      action === "company-propose") &&
+    !proposalId
+  ) {
     const assignment =
       action === "company-propose"
         ? await tx.atribuicao_empresa.findFirst({
