@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import {
+  ArrowLeft,
   ArrowRight,
   BadgeCheck,
   Clock3,
@@ -21,6 +22,7 @@ type Props = {
   onVehicles: () => void;
   onServices: () => void;
   onConversations: () => void;
+  onBack: () => void;
   onClient?: () => void;
   onLogout: () => void;
 };
@@ -33,6 +35,7 @@ export function DriverRegistrationStatusView({
   onVehicles,
   onServices,
   onConversations,
+  onBack,
   onClient,
   onLogout,
 }: Props) {
@@ -63,6 +66,9 @@ export function DriverRegistrationStatusView({
         </button>
       </header>
       <main className="onboarding-main">
+        <button type="button" className="back onboarding-back" onClick={onBack}>
+          <ArrowLeft size={17} aria-hidden="true" /> Voltar ao meu perfil
+        </button>
         <section
           className={`panel onboarding-status ${approved ? "approved" : rejected || needsUpdate ? "attention" : "pending"}`}
         >

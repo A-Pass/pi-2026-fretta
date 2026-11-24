@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Truck,
   Home,
@@ -45,9 +45,14 @@ import { FreightDetailsView } from "./FreightDetailsView";
 import { FreightListView } from "./FreightListView";
 import { VehicleBookView } from "./vehicles/VehicleBookView";
 import { NotificationsView } from "./notifications/NotificationsView";
-import { withNotifications, unreadNotifications } from "./notifications/rules";
+import {
+  isUnreadChat,
+  withNotifications,
+  unreadNotifications,
+} from "./notifications/rules";
 import { SubscriptionView } from "./subscription/SubscriptionView";
 import { useNavigation } from "./navigation/useNavigation";
+import { routeUrl } from "./navigation/routes";
 import { reviseOffer } from "./freights/negotiation";
 import { scheduleLabel } from "../lib/dates";
 import { DriverOnboardingView } from "./onboarding/DriverOnboardingView";
@@ -64,6 +69,7 @@ import { authClient } from "../auth/client";
 
 const opportunityCache = new Map<string, FreightFeedItem>();
 const opportunityStorageKey = "fretta-selected-opportunity";
+const primaryTabs = ["inicio", "fretes", "chat", "perfil"] as const;
 
 export function FrettaApp() {
   const navigation = useNavigation();
@@ -91,13 +97,16 @@ export function FrettaApp() {
   const [loadError, setLoadError] = useState("");
   const [googleSignInPending, setGoogleSignInPending] = useState(false);
   const [googleSignInError, setGoogleSignInError] = useState("");
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [updatingDriver, setUpdatingDriver] = useState(false);
   const [modal, setModal] = useState(""),
     [success, setSuccess] = useState<"proposal" | "request" | null>(null);
   const [publishedRequestId, setPublishedRequestId] = useState<string | null>(
     null,
   );
+  const [acceptanceNotice, setAcceptanceNotice] =
+    useState<AppNotification | null>(null);
+  const seenAcceptances = useRef(new Set<string>());
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("TODOS");
   const canSwitchProfile =
@@ -113,6 +122,51 @@ export function FrettaApp() {
   const latest = useRef<Store | null>(null),
     saving = useRef(false),
     main = useRef<HTMLElement>(null);
+  const registrationPage = useRef<HTMLDivElement>(null);
+  const screenDepth = navigation.providerConversationId
+    ? 2
+    : selected || chatId || !primaryTabs.some((item) => item === tab)
+      ? 1
+      : 0;
+  const screenKey = routeUrl(navigation);
+  const previousScreen = useRef({ key: screenKey, tab, depth: screenDepth });
+  const hasStore = store !== null;
+  useLayoutEffect(() => {
+    const previous = previousScreen.current;
+    previousScreen.current = { key: screenKey, tab, depth: screenDepth };
+    if (
+      !hasStore ||
+      previous.key === screenKey ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
+    const currentIndex = primaryTabs.findIndex((item) => item === tab);
+    const previousIndex = primaryTabs.findIndex(
+      (item) => item === previous.tab,
+    );
+    const backward =
+      screenDepth !== previous.depth
+        ? screenDepth < previous.depth
+        : screenDepth === 0 && currentIndex < previousIndex;
+    const transform =
+      tab === "notificacoes"
+        ? "translateY(16px)"
+        : `translateX(${backward ? -44 : 44}px)`;
+    const surface =
+      main.current?.querySelector<HTMLElement>(".conversation-screen") ??
+      registrationPage.current?.querySelector<HTMLElement>(
+        ".onboarding-main",
+      ) ??
+      main.current;
+    const animation = surface?.animate(
+      [
+        { transform, opacity: 0.55 },
+        { transform: "none", opacity: 1 },
+      ],
+      { duration: 240, easing: "cubic-bezier(.2, .7, .2, 1)" },
+    );
+    return () => animation?.cancel();
+  }, [tab, screenKey, screenDepth, hasStore]);
   const name = store?.profile?.name || "",
     profilePhoto = store?.profile?.photo || "";
   useEffect(() => {
@@ -121,6 +175,11 @@ export function FrettaApp() {
       return;
     }
     if (selectedOpportunity?.id === selected) {
+      setResolvedOpportunityId(selected);
+      return;
+    }
+    if (!hasStore) return;
+    if (latest.current?.freights.some((freight) => freight.id === selected)) {
       setResolvedOpportunityId(selected);
       return;
     }
@@ -135,14 +194,37 @@ export function FrettaApp() {
         cached = undefined;
       }
     }
-    if (cached) setSelectedOpportunity(freightFromFeedItem(cached));
-    setResolvedOpportunityId(selected);
-  }, [role, selected, selectedOpportunity?.id]);
+    if (cached) {
+      setSelectedOpportunity(freightFromFeedItem(cached));
+      setResolvedOpportunityId(selected);
+      return;
+    }
+    const controller = new AbortController();
+    void createBackendClient()
+      .freight(selected, controller.signal)
+      .then((freight) => {
+        if (!controller.signal.aborted && isFreightFeedItem(freight))
+          setSelectedOpportunity({
+            ...freightFromFeedItem(freight),
+            photos: freight.photos ?? [],
+          });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!controller.signal.aborted) setResolvedOpportunityId(selected);
+      });
+    return () => controller.abort();
+  }, [role, selected, selectedOpportunity?.id, hasStore]);
   useEffect(() => {
     let active = true;
-    void authClient.getSession().then(({ data }) => {
-      if (active) setAuthenticated(Boolean(data));
-    });
+    void authClient
+      .getSession()
+      .then(({ data }) => {
+        if (active) setAuthenticated(Boolean(data));
+      })
+      .catch(() => {
+        if (active) setAuthenticated(false);
+      });
     return () => {
       active = false;
     };
@@ -172,54 +254,87 @@ export function FrettaApp() {
     };
   }, [authenticated]);
   useEffect(() => {
-    if (!authenticated || role !== "cliente" || !selected) return;
+    if (!authenticated) return;
     let active = true;
-    let refreshing = false;
-    const refresh = () => {
-      if (refreshing || saving.current) return;
-      refreshing = true;
-      void api
-        .load()
-        .then((s) => {
-          if (!active) return;
-          const current = latest.current;
-          const updated = current
-            ? {
-                ...current,
-                proposals: [
-                  ...current.proposals.filter(
-                    (proposal) => proposal.freightId !== selected,
-                  ),
-                  ...s.proposals.filter(
-                    (proposal) => proposal.freightId === selected,
-                  ),
-                ],
-              }
-            : s;
+    let pending = false;
+    const refresh = async () => {
+      const current = latest.current;
+      if (!current || saving.current || pending || document.hidden) return;
+      pending = true;
+      try {
+        const snapshot = await api.load();
+        if (active && !saving.current && latest.current === current) {
+          const updated = {
+            ...current,
+            freights: snapshot.freights,
+            proposals: snapshot.proposals,
+            messages: snapshot.messages,
+            notifications: snapshot.notifications,
+          };
           latest.current = updated;
           setStore(updated);
-        })
-        .catch((failure) => {
-          if (!active) return;
-          setError(
-            failure instanceof Error
-              ? failure.message
-              : "Não foi possível atualizar as propostas recebidas.",
-          );
-        })
-        .finally(() => {
-          refreshing = false;
-        });
+        }
+      } catch {
+        // The next refresh can recover without interrupting the current screen.
+      } finally {
+        pending = false;
+      }
     };
-    refresh();
     window.addEventListener("focus", refresh);
-    const interval = window.setInterval(refresh, 15000);
+    void refresh();
+    const timer = window.setInterval(
+      refresh,
+      tab === "chat" || selected ? 5000 : 12000,
+    );
     return () => {
       active = false;
       window.removeEventListener("focus", refresh);
-      window.clearInterval(interval);
+      window.clearInterval(timer);
     };
-  }, [authenticated, role, selected]);
+  }, [authenticated, selected, tab]);
+  useEffect(() => {
+    if (!chatId || !store || document.hidden) return;
+    const notifications = store.notifications || [];
+    if (!notifications.some((item) => isUnreadChat(item, role, chatId))) return;
+    void save(
+      {
+        ...store,
+        notifications: notifications.map((item) =>
+          isUnreadChat(item, role, chatId) ? { ...item, read: true } : item,
+        ),
+      },
+      false,
+    );
+  }, [chatId, role, store]);
+  useEffect(() => {
+    if (role !== "motorista" || !store?.profile || acceptanceNotice) return;
+    const profileId = store.profile.id;
+    const notice = store.notifications?.find((item) => {
+      if (
+        item.read ||
+        item.role !== "motorista" ||
+        !item.id.startsWith("accepted:") ||
+        !item.proposalId
+      )
+        return false;
+      const key = `fretta:acceptance:${profileId}:${item.id}`;
+      if (seenAcceptances.current.has(key)) return false;
+      try {
+        return localStorage.getItem(key) !== "seen";
+      } catch {
+        return true;
+      }
+    });
+    if (notice?.proposalId === chatId && notice) {
+      const key = `fretta:acceptance:${profileId}:${notice.id}`;
+      seenAcceptances.current.add(key);
+      try {
+        localStorage.setItem(key, "seen");
+      } catch {}
+    } else if (notice) {
+      setAcceptanceNotice(notice);
+    }
+  }, [role, chatId, store, acceptanceNotice]);
   useEffect(() => {
     if (onlyAvailableRole && role !== onlyAvailableRole)
       setRole(onlyAvailableRole, true);
@@ -230,11 +345,16 @@ export function FrettaApp() {
     setError("");
     if (authenticated && !chatId) main.current?.focus({ preventScroll: true });
   }, [role, tab, selected, chatId, providerId, authenticated]);
-  async function save(next: Store): Promise<boolean> {
+  async function save(
+    next: Store,
+    deriveNotifications = true,
+  ): Promise<boolean> {
     if (saving.current) return false;
     saving.current = true;
     try {
-      const enriched = withNotifications(latest.current || next, next);
+      const enriched = deriveNotifications
+        ? withNotifications(latest.current || next, next)
+        : next;
       const persisted = await api.save(enriched);
       latest.current = persisted;
       setStore(persisted);
@@ -396,29 +516,46 @@ export function FrettaApp() {
     return ok;
   }
   async function send(text: string) {
-    if (!store) return false;
-    const p = store.proposals.find((p) => p.id === chatId);
+    const current = latest.current;
+    if (!current) return false;
+    const p = current.proposals.find((p) => p.id === chatId);
     if (
       !p ||
       !text.trim() ||
       text.length > 2000 ||
-      (role === "motorista" && !ownProposal(p, store.profile?.id || ""))
+      (role === "motorista" && !ownProposal(p, current.profile?.id || ""))
     )
       return false;
-    return save({
-      ...store,
-      messages: [
-        ...store.messages,
-        {
-          id: crypto.randomUUID(),
-          freightId: p.freightId,
-          proposalId: p.id,
-          role,
-          text: text.trim(),
-          createdAt: new Date().toISOString(),
-        },
-      ],
-    });
+    return save(
+      {
+        ...current,
+        messages: [
+          ...current.messages,
+          {
+            id: crypto.randomUUID(),
+            freightId: p.freightId,
+            proposalId: p.id,
+            role,
+            text: text.trim(),
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+      false,
+    );
+  }
+  async function completeChatFreight(freightId: string, score: number) {
+    if (saving.current) return false;
+    saving.current = true;
+    try {
+      await createBackendClient().completeFreight(freightId, score);
+      const snapshot = await api.load();
+      latest.current = snapshot;
+      setStore(snapshot);
+      return true;
+    } finally {
+      saving.current = false;
+    }
   }
   function openNotification(n: AppNotification) {
     if (n.proposalId) setChatId(n.proposalId);
@@ -459,7 +596,7 @@ export function FrettaApp() {
       setError("Não foi possível encerrar a sessão. Tente novamente.");
     }
   }
-  if (!ready)
+  if (!ready || authenticated === null)
     return (
       <main className="loading" role="status">
         Preparando seu caminho…
@@ -511,40 +648,44 @@ export function FrettaApp() {
       </main>
     );
   if (role === "motorista" && tab === "cadastro-motorista") {
-    if (!store.driverRegistration || updatingDriver)
-      return (
-        <DriverOnboardingView
-          store={store}
-          onClient={
-            store.roles?.cliente ? () => setRole("cliente") : undefined
-          }
-          onLogout={() => void signOut()}
-          onServices={() => nav("fretes")}
-          onSubmit={async (draft) => {
-            const ok = await save(submitDriverRegistration(store, draft));
-            if (ok) {
-              setUpdatingDriver(false);
-              nav("cadastro-motorista");
-            }
-            return ok;
-          }}
-        />
-      );
     return (
-      <DriverRegistrationStatusView
-        store={store}
-        save={save}
-        onUpdate={() => setUpdatingDriver(true)}
-        onHome={() => nav("inicio")}
-        onProfile={() => nav("editar-perfil")}
-        onVehicles={() => nav("veiculos")}
-        onServices={() => nav("fretes")}
-        onConversations={() => nav("chat")}
-        onClient={
-          store.roles?.cliente ? () => setRole("cliente") : undefined
-        }
-        onLogout={() => void signOut()}
-      />
+      <div className="registration-route" ref={registrationPage}>
+        {!store.driverRegistration || updatingDriver ? (
+          <DriverOnboardingView
+            store={store}
+            onBack={() => nav("perfil")}
+            onClient={
+              store.roles?.cliente ? () => setRole("cliente") : undefined
+            }
+            onLogout={() => void signOut()}
+            onServices={() => nav("fretes")}
+            onSubmit={async (draft) => {
+              const ok = await save(submitDriverRegistration(store, draft));
+              if (ok) {
+                setUpdatingDriver(false);
+                nav("cadastro-motorista");
+              }
+              return ok;
+            }}
+          />
+        ) : (
+          <DriverRegistrationStatusView
+            store={store}
+            save={save}
+            onBack={() => nav("perfil")}
+            onUpdate={() => setUpdatingDriver(true)}
+            onHome={() => nav("inicio")}
+            onProfile={() => nav("editar-perfil")}
+            onVehicles={() => nav("veiculos")}
+            onServices={() => nav("fretes")}
+            onConversations={() => nav("chat")}
+            onClient={
+              store.roles?.cliente ? () => setRole("cliente") : undefined
+            }
+            onLogout={() => void signOut()}
+          />
+        )}
+      </div>
     );
   }
   const list = store.freights.filter(
@@ -555,6 +696,26 @@ export function FrettaApp() {
       (filter === "TODOS" || x.status === filter),
   );
   const unread = unreadNotifications(store, role).length;
+  const unreadChat = (store.notifications || []).some((item) =>
+    isUnreadChat(item, role),
+  );
+  const acceptance =
+    role === "motorista" && !success && !modal ? acceptanceNotice : null;
+  function dismissSuccess(openChat: boolean) {
+    if (acceptance && store?.profile) {
+      const key = `fretta:acceptance:${store.profile.id}:${acceptance.id}`;
+      seenAcceptances.current.add(key);
+      try {
+        localStorage.setItem(key, "seen");
+      } catch {}
+      setAcceptanceNotice(null);
+      if (openChat && acceptance.proposalId) setChatId(acceptance.proposalId);
+    }
+    if (openChat && success === "request" && publishedRequestId)
+      setSelected(publishedRequestId);
+    setSuccess(null);
+    setPublishedRequestId(null);
+  }
   return (
     <div className="shell">
       <a className="skip-link" href="#main-content">
@@ -596,6 +757,9 @@ export function FrettaApp() {
               >
                 <I size={20} />
                 <span>{String(label)}</span>
+                {id === "chat" && unreadChat && (
+                  <span className="nav-chat-unread" aria-hidden="true" />
+                )}
               </button>
             );
           })}
@@ -860,6 +1024,7 @@ export function FrettaApp() {
               role={role}
               save={save}
               onOpen={openNotification}
+              onBack={() => navigation.back("inicio")}
             />
           ) : tab === "chat" ? (
             <ChatView
@@ -874,6 +1039,7 @@ export function FrettaApp() {
               onManageVehicles={() => nav("veiculos")}
               onProvider={navigation.openProvider}
               onFreight={setSelected}
+              onComplete={completeChatFreight}
             />
           ) : role === "motorista" && tab === "inicio" ? (
             <DriverHomeView
@@ -950,26 +1116,30 @@ export function FrettaApp() {
         />
       )}
       <SuccessDialog
-        open={success !== null}
+        open={success !== null || acceptance !== null}
         title={
-          success === "request" ? "Solicitação publicada!" : "Proposta enviada!"
+          acceptance
+            ? "Sua proposta foi aceita!"
+            : success === "request"
+              ? "Solicitação publicada!"
+              : "Proposta enviada!"
         }
         description={
-          success === "request"
+          acceptance
+            ? `${store.freights.find((freight) => freight.id === acceptance.freightId)?.clientName || "O cliente"} aceitou sua proposta. Confira o acordo na conversa.`
+            : success === "request"
             ? "Sua solicitação foi publicada. Abra os detalhes para acompanhar as propostas recebidas."
             : "Acompanhe a resposta em Meus serviços ou continue a conversa pelo chat."
         }
-        actionLabel={success === "request" ? "Ver solicitação" : "Entendi"}
-        onClose={() => {
-          setSuccess(null);
-          setPublishedRequestId(null);
-        }}
-        onAction={() => {
-          if (success === "request" && publishedRequestId)
-            setSelected(publishedRequestId);
-          setSuccess(null);
-          setPublishedRequestId(null);
-        }}
+        actionLabel={
+          acceptance
+            ? "Ir para o chat"
+            : success === "request"
+              ? "Ver solicitação"
+              : "Entendi"
+        }
+        onClose={() => dismissSuccess(false)}
+        onAction={() => dismissSuccess(true)}
       />
     </div>
   );

@@ -54,6 +54,11 @@ export interface Agreement {
   acceptedAt: string;
 }
 export interface Proposal {
+  conversation?: {
+    title: string;
+    clientName: string;
+    freightStatus: FreightStatus;
+  };
   companyId?: string;
   requestRevision?: number;
   providerName?: string;

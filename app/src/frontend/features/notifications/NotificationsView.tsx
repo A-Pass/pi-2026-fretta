@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, CheckCheck } from "lucide-react";
+import { ArrowLeft, Bell, CheckCheck } from "lucide-react";
 import type { AppNotification, Role, Store } from "@/contracts";
 import { dateTime } from "../../lib/dates";
 export function NotificationsView({
@@ -7,11 +7,13 @@ export function NotificationsView({
   role,
   save,
   onOpen,
+  onBack,
 }: {
   store: Store;
   role: Role;
   save: (s: Store) => Promise<boolean>;
   onOpen: (n: AppNotification) => void;
+  onBack: () => void;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -41,6 +43,9 @@ export function NotificationsView({
   }
   return (
     <>
+      <button type="button" className="back" onClick={onBack}>
+        <ArrowLeft size={18} aria-hidden="true" /> Voltar
+      </button>
       <div className="section-head">
         <div>
           <span className="eyebrow">ACOMPANHE AS NOVIDADES</span>

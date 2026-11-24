@@ -57,7 +57,8 @@ export function RequestWizard({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [reading, setReading] = useState(false),
-    [draftReady, setDraftReady] = useState(false);
+    [draftReady, setDraftReady] = useState(false),
+    [closing, setClosing] = useState(false);
   const dirty = initialDraft
     ? JSON.stringify(draft) !== JSON.stringify(initialDraft)
     : !!(
@@ -76,13 +77,36 @@ export function RequestWizard({
         draft.schedule.kind !== "combinar"
       );
   const discard = useDiscardChanges(dirty);
-  const requestClose = () => {
-    if (!busy && !reading) discard.leave(onClose);
-  };
   const dialog = useRef<HTMLDialogElement>(null),
     heading = useRef<HTMLHeadingElement>(null),
     form = useRef<HTMLFormElement>(null),
     body = useRef<HTMLDivElement>(null);
+  const exitAnimation = useRef<Animation | null>(null);
+  function close() {
+    const panel = dialog.current;
+    if (!panel || exitAnimation.current) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onClose();
+      return;
+    }
+    setClosing(true);
+    const animation = panel.animate(
+      [
+        { transform: window.getComputedStyle(panel).transform },
+        { transform: "translateY(100dvh)" },
+      ],
+      {
+        duration: 240,
+        easing: "cubic-bezier(.45, 0, .8, 1)",
+        fill: "forwards",
+      },
+    );
+    exitAnimation.current = animation;
+    void animation.finished.then(onClose, () => {});
+  }
+  const requestClose = () => {
+    if (!busy && !reading && !closing) discard.leave(close);
+  };
   useEffect(() => {
     try {
       const saved = decodeDraft(sessionStorage.getItem(storageKey));
@@ -112,7 +136,10 @@ export function RequestWizard({
   useEffect(() => {
     const el = dialog.current;
     el?.showModal();
-    return () => el?.close();
+    return () => {
+      exitAnimation.current?.cancel();
+      el?.close();
+    };
   }, []);
   useEffect(() => {
     heading.current?.focus();
@@ -123,6 +150,7 @@ export function RequestWizard({
     setError("");
   }
   async function advance() {
+    if (closing) return;
     const message = stepError(draft, step);
     if (message) {
       setError(message);
@@ -170,6 +198,7 @@ export function RequestWizard({
       <dialog
         ref={dialog}
         className="wizard-dialog"
+        data-closing={closing || undefined}
         aria-labelledby="request-title"
         onCancel={(e) => {
           e.preventDefault();
@@ -179,6 +208,7 @@ export function RequestWizard({
         <form
           ref={form}
           className="request-wizard"
+          inert={closing}
           onSubmit={(e) => {
             e.preventDefault();
             void advance();
@@ -352,6 +382,7 @@ export function RequestWizard({
                 addresses={addresses}
                 save={draft.saveDelivery}
                 onSaveChange={(saveDelivery) => update({ saveDelivery })}
+                mapFirst
               />
             )}
             {step === 3 && (
