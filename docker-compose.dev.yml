@@ -12,7 +12,7 @@ services:
 
   database:
     ports:
-      - "127.0.0.1:5433:${DB_PORT}"
+      - "127.0.0.1:5432:${DB_PORT}"
     environment:
       # Sobrescreve o POSTGRES_PASSWORD_FILE da produção para usar a variável do .env local
       POSTGRES_PASSWORD_FILE: ""

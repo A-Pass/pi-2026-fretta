@@ -3,6 +3,7 @@ import type {
   DriverRegistration,
   Freight,
   Message,
+  OperatingArea,
   Proposal,
   ProposalOffer,
   PublicProviderProfile,
@@ -29,7 +30,19 @@ export type FreightFeedItem = Pick<
   | "vehicle"
   | "schedule"
   | "status"
-> & { pickupDistanceKm?: number };
+> & { updatedAt?: string; pickupDistanceKm?: number };
+export type FreightCreateResult = Pick<
+  Freight,
+  | "id"
+  | "title"
+  | "description"
+  | "origin"
+  | "destination"
+  | "vehicle"
+  | "schedule"
+  | "status"
+  | "photos"
+> & { updatedAt: string };
 export type PrivateFreightDetail = {
   freight: Freight;
   addresses?: { pickup: Address; delivery: Address };
@@ -62,10 +75,17 @@ export function createBackendClient(
     me: (signal?: AbortSignal) => http.request<Viewer>("/me", { signal }),
     updateProfile: (profile: { name: string; photoId?: string }) =>
       http.request<Viewer>("/me", { method: "PATCH", body: profile }),
+    saveOperatingArea: (area: OperatingArea) =>
+      http.request<OperatingArea>("/driver/operating-area", {
+        method: "PUT",
+        body: area,
+      }),
     freights: (
       cursor?: string,
       signal?: AbortSignal,
       filters?: {
+        role?: "motorista";
+        scope?: "all" | "area";
         q?: string;
         lat?: number;
         lng?: number;
@@ -82,10 +102,7 @@ export function createBackendClient(
     freight: (value: string, signal?: AbortSignal) =>
       http.request<PrivateFreightDetail>(`/freights/${id(value)}`, { signal }),
     createFreight: (payload: NewFreight) =>
-        post<PrivateFreightDetail & { savedAddresses: SavedAddress[] }>(
-          "/freights",
-          payload,
-        ),
+      post<FreightCreateResult>("/freights", payload),
     cancelFreight: (value: string) =>
       post<PrivateFreightDetail>(`/freights/${id(value)}/cancel`),
     startFreight: (value: string) =>
@@ -94,7 +111,10 @@ export function createBackendClient(
       post<PrivateFreightDetail>(`/freights/${id(value)}/complete`),
     proposals: (value: string, cursor?: string) =>
       http.page<Proposal>(`/freights/${id(value)}/proposals`, cursor),
-    propose: (value: string, payload: NewOffer) =>
+    propose: (
+      value: string,
+      payload: NewOffer & { expectedUpdatedAt: string },
+    ) =>
       post<Proposal>(`/freights/${id(value)}/proposals`, payload),
     revise: (value: string, payload: NewOffer) =>
       post<ProposalOffer>(`/proposals/${id(value)}/offers`, payload),
@@ -103,7 +123,7 @@ export function createBackendClient(
     decline: (value: string, offerId: string) =>
       post<Proposal>(`/proposals/${id(value)}/decline`, { offerId }),
     messages: (value: string, cursor?: string, signal?: AbortSignal) =>
-      http.page<Message>(
+      http.page<Message, { readableNotificationIds?: string[] }>(
         `/conversations/${id(value)}/messages`,
         cursor,
         signal,
@@ -150,7 +170,7 @@ export function createBackendClient(
       }),
     upload: (
       file: File,
-      purpose: "freight" | "profile" | "company" | "license",
+      purpose: "freight" | "profile" | "company" | "company-proof" | "license",
     ) => {
       const form = new FormData();
       form.append("file", file);

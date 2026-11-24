@@ -74,3 +74,29 @@ Contrato a implementar pela frente de identidade/back-end:
 - CSRF/origem para operações com sessão por cookie, limites de uso e trilha de acesso a documentos. Conceder a primeira permissão por migração/seed administrativo controlado, nunca pelo cadastro público. Conta com acesso ao repositório não é automaticamente administradora.
 
 O demo mantém decisões em `adminReviews` e casos fictícios em `adminDemoCases`; o caso `demo-driver` lê e altera `driverRegistration` já existente. Reenvio do motorista mantém o histórico e muda a versão. As proteções locais evitam erros de apresentação, mas não equivalem à autorização ou concorrência transacional de servidor. Os botões antigos de autoaprovação foram retirados da tela do motorista.
+
+### Categorias e reenvios da análise
+
+A revisão inclui `correctionItems`: lista sem duplicatas de `dados`, `foto`, `cnh`, `veiculo`; ao solicitar ajustes, ao menos um item e motivo de 10–1000 caracteres. Retornar esses itens no resumo privado do motorista. Aprovação limpa as correções pendentes sem apagar o histórico. Incrementar `submissionCount` no servidor a cada envio/reenvio, mantendo as decisões anteriores. Os exemplos locais usam contador/instantes como versão; produção precisa de uma versão transacional gerada pelo banco. Não confiar no checklist do navegador para validar documentos ou compatibilidade CNH/veículo.
+
+## Cliente: revisão de solicitação e cancelamento
+
+- PATCH /freights/:id: conteúdo validado + versão esperada. Somente proprietário e ABERTO. Conteúdo alterado incrementa revisão, encerra ofertas anteriores e gera eventos de atualização, mantendo mensagens e histórico; tudo em transação. Sem mudança de conteúdo, não invalidar ofertas.
+- Propostas/ofertas devem guardar a revisão do pedido para a qual foram enviadas; aceite rejeita revisão antiga com 409, mesmo que o navegador envie oferta indevidamente pendente.
+- POST /freights/:id/cancel: motivo de 10–1000 caracteres e versão/situação esperada; somente proprietário em ABERTO/AGENDADO. Registrar autor/data do servidor, motivo e situação anterior; preservar acordo e mensagens, encerrar ofertas e notificar envolvidos. Sem cobrança automática nesta apresentação. Transporte iniciado não aceita este cancelamento.
+- DTO privado pode devolver `revision`, `updatedAt` e resumo autorizado de `cancellation`. Não incluir endereços exatos em feed ou notificações públicas. Rascunhos locais não autorizam cadastro nem alteração de dados de outra conta.
+
+## Equipe da empresa — contratos a implementar
+
+- GET /companies/me: empresas e permissões do usuário derivadas da sessão. Gestor de empresa é diferente de administrador do FRETTA.
+- GET /drivers/by-code/:code: busca exata, autenticada e limitada contra enumeração; retorna somente identificação pública necessária à confirmação. Código único aleatório no servidor, nunca CPF/e-mail como chave de busca pública.
+- POST /companies/:id/invites: destinatário por ID público, criado pelo gestor autorizado. Expiração em sete dias, duplicatas impedidas no banco.
+- POST /company-invites/:id/accept|decline e DELETE /companies/:id/invites/:inviteId: destinatário responde, gestor cancela; validar validade e estado transacionalmente. Aceite não aprova motorista, não ativa plano e não aceita um frete.
+- GET /companies/:id/members; PATCH /companies/:id/members/:driverId; POST /companies/:id/leave: vínculo único ativo, acesso por empresa, histórico preservado e encerramento bloqueado por serviços em andamento. Ativação real aguarda política de plano/preços; não confiar em `activeSeat` enviado pelo navegador.
+- Veículos da empresa separados dos pessoais, com CRUD autorizado por gestor e snapshots por serviço. Não alterar veículo comprometido em atribuição sem resolver a operação.
+- POST /companies/:id/dispatches: motorista aprovado e habilitado, vaga operacional, veículo compatível e solicitação aberta na revisão esperada. Reservar motorista/veículo em transação; a demonstração usa somente uma atribuição em aberto de cada vez.
+- POST /company-dispatches/:id/accept|decline: somente motorista designado. POST /company-dispatches/:id/proposal: somente gestor, após confirmação do motorista. Proposta guarda companyId, motorista, veículo, revisão do pedido e termos; servidor resolve as identidades.
+- GET /me/company-services: somente atribuições do usuário, sem feed público para funcionário vinculado. Endereços privados só após contratação e somente aos participantes autorizados.
+- Chat por negociação com participantes cliente, gestor autorizado e motorista designado; autor/data sempre derivados da sessão/servidor. Nenhuma mensagem externa é enviada pelo protótipo.
+
+Modelo demonstrativo em `FleetState` não é um DTO que pode ser gravado inteiro pelo usuário em produção. Operações reais exigem autorização, concorrência, auditoria, separação de empresas e política de privacidade. `/empresa` não concede permissão real; o modo real permanece indisponível até integrar esses endpoints.

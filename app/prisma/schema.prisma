@@ -1,9 +1,3 @@
-// ============================================================================
-// SCHEMA: Aplicativo de Fretes — Prisma + Better Auth
-// Banco: PostgreSQL 13+
-// Auth: Better Auth (adapter Prisma), com login social Google e Apple
-// ============================================================================
-
 generator client {
   provider = "prisma-client"
   output   = "../src/server/generated/prisma"
@@ -13,107 +7,571 @@ datasource db {
   provider = "postgresql"
 }
 
-// ============================================================================
-// MODELOS DO BETTER AUTH
-// Estrutura padrão exigida pelo adapter Prisma do Better Auth. Os nomes de
-// modelo/campo em camelCase seguem a convenção que o `better-auth` espera;
-// as tabelas no banco ficam em snake_case via @map/@@map.
-// Documentação: https://www.better-auth.com/docs/adapters/prisma
-// ============================================================================
-
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false) @map("email_verified")
-  image         String?
-
-  // --- Campos adicionais do domínio (configurados via `user.additionalFields`
-  //     no better-auth, para trafegarem no signup/sessão) ---
-  documento     String?  @unique // CPF ou CNPJ
-  telefone      String?
-  accountSetupComplete Boolean @default(false) @map("account_setup_complete")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  sessions  Session[]
-  accounts  Account[]
-
-  cliente   Cliente?
-  motorista Motorista?
-  companyProfile DriverCompanyProfile?
-  operatingArea  OperatingArea?
-  savedAddresses SavedAddress[]
-  notifications  AppNotification[]
-  messagesSent   Mensagem[] @relation("MensagemRemetente")
-  messagesReceived Mensagem[] @relation("MensagemDestinatario")
-  reviewsGiven   Avaliacao[] @relation("AvaliacaoAvaliador")
-  reviewsReceived Avaliacao[] @relation("AvaliacaoAvaliado")
-  adminReviews   AdminReview[]
-  freightAgreements AcordoFrete[] @relation("AcordoMotorista")
+  id                                      String                @id @default(cuid())
+  name                                    String
+  email                                   String                @unique
+  emailVerified                           Boolean               @default(false) @map("email_verified")
+  image                                   String?
+  documento                               String?               @unique
+  telefone                                String?
+  createdAt                               DateTime              @default(now()) @map("created_at")
+  updatedAt                               DateTime              @updatedAt @map("updated_at")
+  papel                                   papel_sistema         @default(USUARIO)
+  hide_profile_photo                      Boolean               @default(false)
+  accountSetupComplete                    Boolean               @default(false) @map("account_setup_complete")
+  accounts                                Account[]
+  freightAgreements                       AcordoFrete[]         @relation("AcordoMotorista")
+  areas_atuacao                           OperatingArea?
+  arquivo_upload                          arquivo_upload[]
+  avaliacao_avaliacao_avaliado_idTouser   avaliacao[]           @relation("avaliacao_avaliado_idTouser")
+  avaliacao_avaliacao_avaliador_idTouser  avaliacao[]           @relation("avaliacao_avaliador_idTouser")
+  cliente                                 cliente?
+  empresa                                 empresa?
+  endereco_salvos                         endereco_salvos[]
+  mensagem_mensagem_destinatario_idTouser mensagem[]            @relation("mensagem_destinatario_idTouser")
+  mensagem_mensagem_remetente_idTouser    mensagem[]            @relation("mensagem_remetente_idTouser")
+  motorista                               motorista?
+  notificacao                             notificacao[]
+  notificacoes                            AppNotification[]
+  perfis_empresa                          DriverCompanyProfile?
+  pessoa                                  pessoa?
+  adminReviews                            AdminReview[]
+  sessions                                Session[]
 
   @@map("user")
 }
 
 model Session {
   id        String   @id @default(cuid())
-  token     String   @unique
   expiresAt DateTime @map("expires_at")
-  ipAddress String?  @map("ip_address")
-  userAgent String?  @map("user_agent")
-
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  token     String   @unique
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("session")
 }
 
-// Guarda tanto login social (Google, Apple) quanto login por senha.
-// Para OAuth: providerId = "google" | "apple", accountId = id do usuário no provedor.
-// Para credenciais: providerId = "credential", password = hash da senha.
 model Account {
-  id         String @id @default(cuid())
-  accountId  String @map("account_id")
-  providerId String @map("provider_id")
-
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id                    String    @id @default(cuid())
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
   accessToken           String?   @map("access_token")
   refreshToken          String?   @map("refresh_token")
   idToken               String?   @map("id_token")
   accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
   scope                 String?
-  password              String? // usado somente no provider "credential"
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, accountId])
+  @@index([userId])
   @@map("account")
 }
 
-// Usado para verificação de e-mail e fluxos de "magic link" / troca de senha
 model Verification {
   id         String   @id @default(cuid())
   identifier String
   value      String
   expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  createdAt DateTime? @default(now()) @map("created_at")
-  updatedAt DateTime? @updatedAt @map("updated_at")
-
+  @@index([identifier])
   @@map("verification")
 }
 
-// ============================================================================
-// ENUMS DO DOMÍNIO
-// ============================================================================
+model DriverCompanyProfile {
+  user_id   String   @id
+  tradeName String   @map("nome_fantasia")
+  logo      String
+  about     String
+  city      String
+  updatedAt DateTime @updatedAt @map("atualizado_em")
+  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("perfis_empresa")
+}
+
+model OperatingArea {
+  user_id   String   @id
+  latitude  Decimal  @db.Decimal(10, 7)
+  longitude Decimal  @db.Decimal(10, 7)
+  radiusKm  Decimal  @map("raio_km") @db.Decimal(8, 2)
+  label     String
+  updatedAt DateTime @updatedAt @map("atualizado_em")
+  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("areas_atuacao")
+}
+
+model OfertaProposta {
+  id            String   @id
+  propostaId    String   @map("proposta_id")
+  veiculoId     String?  @map("veiculo_id")
+  veiculoLabel  String   @map("veiculo_label")
+  valorCentavos Int      @map("valor_centavos")
+  disponivelEm  DateTime @map("disponivel_em")
+  mensagem      String
+  status        String
+  createdAt     DateTime @default(now()) @map("criado_em")
+  proposta      proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  veiculo       veiculo? @relation(fields: [veiculoId], references: [id])
+
+  @@index([propostaId, createdAt])
+  @@map("ofertas_proposta")
+}
+
+model AcordoFrete {
+  freteId       String   @id @map("frete_id")
+  propostaId    String   @map("proposta_id")
+  ofertaId      String   @map("oferta_id")
+  motoristaId   String   @map("motorista_id")
+  nomeMotorista String   @map("nome_motorista")
+  nomePrestador String?  @map("nome_prestador")
+  tipoPrestador String?  @map("tipo_prestador")
+  valorCentavos Int      @map("valor_centavos")
+  veiculo       String
+  disponivelEm  DateTime @map("disponivel_em")
+  mensagem      String
+  aceitoEm      DateTime @map("aceito_em")
+  frete         frete    @relation(fields: [freteId], references: [id], onDelete: Cascade)
+  motorista     User     @relation("AcordoMotorista", fields: [motoristaId], references: [id])
+  proposta      proposta @relation(fields: [propostaId], references: [id])
+
+  @@map("acordos_frete")
+}
+
+model AppNotification {
+  id         String
+  user_id    String
+  role       String   @map("perfil")
+  title      String   @map("titulo")
+  body       String
+  createdAt  DateTime @map("criado_em")
+  read       Boolean  @default(false) @map("lida")
+  freightId  String   @map("frete_id")
+  proposalId String?  @map("proposta_id")
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, id])
+  @@index([user_id, createdAt])
+  @@map("notificacoes")
+}
+
+model AdminReview {
+  id         String   @id
+  caseUserId String   @map("usuario_caso_id")
+  version    String
+  actor      String
+  at         DateTime
+  decision   String
+  reason     String
+  caseUser   User     @relation(fields: [caseUserId], references: [id], onDelete: Cascade)
+
+  @@index([caseUserId, at])
+  @@map("revisoes_cadastro")
+}
+
+model arquivo_privado {
+  id                  String               @id
+  motorista_id        String
+  tipo                tipo_arquivo_privado
+  chave_armazenamento String               @unique
+  mime_type           String
+  tamanho_bytes       Int
+  criado_em           DateTime             @default(now())
+  motorista           motorista            @relation(fields: [motorista_id], references: [user_id], onDelete: Cascade)
+
+  @@index([motorista_id, tipo])
+}
+
+model arquivo_upload {
+  id                  String   @id
+  usuario_id          String
+  chave_armazenamento String   @unique
+  mime_type           String
+  tamanho_bytes       Int
+  criado_em           DateTime @default(now())
+  finalidade          String   @default("freight")
+  user                User     @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@index([usuario_id, criado_em])
+}
+
+model atribuicao_empresa {
+  id            String                    @id
+  empresa_id    String
+  motorista_id  String
+  frete_id      String
+  frete_versao  DateTime
+  veiculo_id    String
+  proposta_id   String?                   @unique
+  status        status_atribuicao_empresa @default(PENDENTE)
+  atualizado_em DateTime
+  empresa       empresa                   @relation(fields: [empresa_id], references: [id])
+  frete         frete                     @relation(fields: [frete_id], references: [id])
+  motorista     motorista                 @relation(fields: [motorista_id], references: [user_id])
+  proposta      proposta?                 @relation(fields: [proposta_id, frete_id], references: [id, frete_id])
+  veiculo       veiculo                   @relation(fields: [veiculo_id, motorista_id], references: [id, motorista_id])
+
+  @@unique([empresa_id, frete_id])
+  @@unique([proposta_id, frete_id])
+  @@index([motorista_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model avaliacao {
+  id                                String   @id
+  frete_id                          String
+  avaliador_id                      String
+  avaliado_id                       String
+  nota                              Int
+  comentario                        String?
+  criado_em                         DateTime @default(now())
+  perfil_avaliador                  String   @default("cliente")
+  publica                           Boolean  @default(false)
+  user_avaliacao_avaliado_idTouser  User     @relation("avaliacao_avaliado_idTouser", fields: [avaliado_id], references: [id], onDelete: Cascade)
+  user_avaliacao_avaliador_idTouser User     @relation("avaliacao_avaliador_idTouser", fields: [avaliador_id], references: [id], onDelete: Cascade)
+  frete                             frete    @relation(fields: [frete_id], references: [id], onDelete: Cascade)
+
+  @@unique([frete_id, avaliador_id, avaliado_id])
+  @@index([avaliado_id])
+}
+
+model cadastro_motorista {
+  id               String                    @id
+  motorista_id     String                    @unique
+  tipo_pessoa      tipo_pessoa
+  cnpj             String?                   @unique
+  razao_social     String?
+  cnh_numero       String
+  cnh_categoria    String
+  cnh_validade     DateTime                  @db.Date
+  foto_perfil_id   String
+  documento_cnh_id String
+  veiculo_id       String
+  status           status_cadastro_motorista @default(EM_ANALISE)
+  motivo_ajuste    String?
+  enviado_em       DateTime                  @default(now())
+  analisado_em     DateTime?
+  atualizado_em    DateTime
+  itens_ajuste     String[]                  @default([])
+  itens_conferidos String[]                  @default([])
+  motorista        motorista                 @relation(fields: [motorista_id], references: [user_id], onDelete: Cascade)
+  veiculo          veiculo                   @relation(fields: [veiculo_id, motorista_id], references: [id, motorista_id])
+
+  @@unique([veiculo_id, motorista_id])
+}
+
+model cliente {
+  user_id     String    @id
+  endereco_id String?
+  created_at  DateTime  @default(now())
+  endereco    endereco? @relation(fields: [endereco_id], references: [id])
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  frete       frete[]
+}
+
+model conversa {
+  id            String   @id
+  proposta_id   String
+  criado_em     DateTime @default(now())
+  atualizado_em DateTime
+}
+
+model convite_empresa {
+  id           String                 @id
+  empresa_id   String
+  motorista_id String
+  status       status_convite_empresa @default(PENDENTE)
+  expira_em    DateTime
+  empresa      empresa                @relation(fields: [empresa_id], references: [id])
+  motorista    motorista              @relation(fields: [motorista_id], references: [user_id])
+
+  @@unique([empresa_id, motorista_id])
+  @@index([motorista_id, status])
+}
+
+model empresa {
+  id                 String                  @id
+  gestor_id          String                  @unique
+  nome               String
+  cnpj               String                  @unique
+  vagas              Int                     @default(0)
+  plano_ate          DateTime?
+  criado_em          DateTime                @default(now())
+  razao_social       String                  @default("")
+  responsavel_nome   String                  @default("")
+  responsavel_email  String                  @default("")
+  cadastro_status    status_cadastro_empresa @default(EM_ANALISE)
+  motivo_ajuste      String?
+  logo_id            String?
+  atualizado_em      DateTime
+  documento_cnpj_id  String?
+  pix_demo_id        String?
+  pix_demo_vagas     Int?
+  atribuicao_empresa atribuicao_empresa[]
+  convite_empresa    convite_empresa[]
+  user               User                    @relation(fields: [gestor_id], references: [id])
+  proposta           proposta[]
+  vinculo_empresa    vinculo_empresa[]
+}
+
+model endereco {
+  id                                        String    @id
+  logradouro                                String
+  numero                                    String?
+  complemento                               String?
+  bairro                                    String?
+  cidade                                    String
+  estado                                    String    @db.Char(2)
+  cep                                       String
+  pais                                      String    @default("Brasil")
+  latitude                                  Decimal?  @db.Decimal(10, 7)
+  longitude                                 Decimal?  @db.Decimal(10, 7)
+  created_at                                DateTime  @default(now())
+  cliente                                   cliente[]
+  frete_frete_endereco_destino_idToendereco frete[]   @relation("frete_endereco_destino_idToendereco")
+  frete_frete_endereco_origem_idToendereco  frete[]   @relation("frete_endereco_origem_idToendereco")
+
+  @@index([cidade, estado])
+}
+
+model endereco_salvos {
+  id            String   @id
+  user_id       String
+  label         String
+  logradouro    String
+  numero        String
+  complemento   String
+  bairro        String
+  cidade        String
+  estado        String   @db.Char(2)
+  cep           String?
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+  criado_em     DateTime @default(now())
+  atualizado_em DateTime
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+model evento_webhook {
+  id            String   @id
+  provedor      String
+  evento_id     String
+  tipo          String
+  processado_em DateTime @default(now())
+
+  @@unique([provedor, evento_id])
+  @@index([processado_em])
+}
+
+model frete {
+  id                                           String                @id
+  cliente_id                                   String
+  titulo                                       String
+  descricao                                    String?
+  proposta_aceita_id                           String?
+  tipo_agendamento_enum                        tipo_agendamento_enum @default(COMBINAR)
+  categoria_porte                              Porte
+  carroceria_fechada                           Boolean               @default(false)
+  status_frete_enum                            StatusFrete           @default(ABERTO)
+  endereco_origem_id                           String
+  endereco_destino_id                          String
+  data_coleta_prevista                         DateTime?             @db.Date
+  data_entrega_prevista                        DateTime?             @db.Date
+  valor_referencia                             Decimal?              @db.Decimal(10, 2)
+  motorista_selecionado_id                     String?
+  criado_em                                    DateTime              @default(now())
+  atualizado_em                                DateTime
+  acordo                                       AcordoFrete?
+  atribuicao_empresa                           atribuicao_empresa[]
+  avaliacao                                    avaliacao[]
+  cliente                                      cliente               @relation(fields: [cliente_id], references: [user_id])
+  endereco_frete_endereco_destino_idToendereco endereco              @relation("frete_endereco_destino_idToendereco", fields: [endereco_destino_id], references: [id])
+  endereco_frete_endereco_origem_idToendereco  endereco              @relation("frete_endereco_origem_idToendereco", fields: [endereco_origem_id], references: [id])
+  motorista                                    motorista?            @relation(fields: [motorista_selecionado_id], references: [user_id])
+  frete_foto                                   frete_foto[]
+  mensagem                                     mensagem[]
+  proposta                                     proposta[]
+
+  @@index([categoria_porte])
+  @@index([cliente_id])
+  @@index([status_frete_enum], map: "frete_status_frete_idx")
+}
+
+model frete_foto {
+  id        String   @id
+  frete_id  String
+  url       String
+  ordem     Int      @default(0)
+  criado_em DateTime @default(now())
+  frete     frete    @relation(fields: [frete_id], references: [id], onDelete: Cascade)
+
+  @@unique([frete_id, ordem])
+}
+
+model mensagem {
+  id                                  String    @id
+  frete_id                            String
+  remetente_id                        String
+  destinatario_id                     String
+  conteudo                            String
+  lida                                Boolean   @default(false)
+  criado_em                           DateTime  @default(now())
+  perfil_remetente                    String    @default("cliente")
+  proposta_id                         String?
+  user_mensagem_destinatario_idTouser User      @relation("mensagem_destinatario_idTouser", fields: [destinatario_id], references: [id], onDelete: Cascade)
+  frete                               frete     @relation(fields: [frete_id], references: [id], onDelete: Cascade)
+  proposta                            proposta? @relation(fields: [proposta_id], references: [id], onDelete: Cascade)
+  user_mensagem_remetente_idTouser    User      @relation("mensagem_remetente_idTouser", fields: [remetente_id], references: [id], onDelete: Cascade)
+
+  @@index([frete_id, criado_em])
+}
+
+model motorista {
+  user_id              String               @id
+  cnh_numero           String?              @unique
+  cnh_categoria        String?
+  cnh_validade         DateTime?            @db.Date
+  avaliacao_media      Decimal              @default(0) @db.Decimal(3, 2)
+  total_avaliacao      Int                  @default(0)
+  disponivel           Boolean              @default(true)
+  criado_em            DateTime             @default(now())
+  atualizado_em        DateTime
+  codigo_publico       String               @unique
+  cadastro_status      String?
+  cnh_foto_data_url    String?
+  cnh_numero_mascarado String?
+  cnpj_mascarado       String?
+  documento_mascarado  String?
+  documentos_enviados  Boolean              @default(false)
+  enviado_em           DateTime?
+  feedback             String?
+  nome_completo        String?
+  nome_empresa         String?
+  revisado_em          DateTime?
+  tipo_pessoa          String?
+  arquivo_privado      arquivo_privado[]
+  atribuicao_empresa   atribuicao_empresa[]
+  cadastro_motorista   cadastro_motorista?
+  convite_empresa      convite_empresa[]
+  frete                frete[]
+  user                 User                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  proposta             proposta[]
+  veiculo              veiculo[]
+  vinculo_empresa      vinculo_empresa?
+
+  @@index([disponivel])
+}
+
+model notificacao {
+  id                 String   @id
+  destinatario_id    String
+  evento             String
+  titulo             String
+  corpo              String
+  frete_id           String?
+  proposta_id        String?
+  conversa_id        String?
+  lida               Boolean  @default(false)
+  criado_em          DateTime @default(now())
+  papel_destinatario String
+  user               User     @relation(fields: [destinatario_id], references: [id], onDelete: Cascade)
+
+  @@index([destinatario_id, criado_em, id])
+  @@index([destinatario_id, lida])
+}
+
+model pessoa {
+  user_id       String    @id
+  nome_completo String
+  cpf           String?   @unique
+  celular       String?
+  nascimento    DateTime? @db.Date
+  criado_em     DateTime  @default(now())
+  atualizado_em DateTime
+  user          User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model proposta {
+  id                 String              @id
+  frete_id           String
+  motorista_id       String
+  valor_proposto     Decimal             @db.Decimal(10, 2)
+  status_proposta    StatusProposta      @default(PENDENTE)
+  criado_em          DateTime            @default(now())
+  atualizado_em      DateTime
+  empresa_id         String?
+  acordos            AcordoFrete[]
+  atribuicao_empresa atribuicao_empresa?
+  mensagem           mensagem[]
+  ofertas            OfertaProposta[]
+  empresa            empresa?            @relation(fields: [empresa_id], references: [id], onDelete: Restrict)
+  frete              frete               @relation(fields: [frete_id], references: [id], onDelete: Cascade)
+  motorista          motorista           @relation(fields: [motorista_id], references: [user_id])
+
+  @@unique([frete_id, motorista_id])
+  @@unique([id, frete_id], map: "proposta_id_frete_uq")
+  @@index([status_proposta])
+}
+
+model veiculo {
+  id                 String               @id
+  motorista_id       String
+  categoria          String
+  modelo             String
+  placa              String               @unique
+  marca              String?
+  ano_fabricacao     Int?
+  categoria_porte    Porte
+  carroceria_fechada Boolean              @default(false)
+  capacidade_kg      Float?
+  descricao          String               @default("")
+  ativo              Boolean              @default(true)
+  criado_em          DateTime             @default(now())
+  atualizado_em      DateTime
+  atribuicao_empresa atribuicao_empresa[]
+  cadastro_motorista cadastro_motorista?
+  ofertas            OfertaProposta[]
+  motorista          motorista            @relation(fields: [motorista_id], references: [user_id], onDelete: Cascade)
+
+  @@unique([id, motorista_id])
+  @@index([categoria_porte])
+  @@index([motorista_id])
+}
+
+model vinculo_assinatura {
+  id            String            @id
+  motorista_id  String
+  status        status_assinatura @default(PENDENTE)
+  inicio_em     DateTime?
+  fim_em        DateTime?
+  criado_em     DateTime          @default(now())
+  atualizado_em DateTime
+}
+
+model vinculo_empresa {
+  motorista_id String    @id
+  empresa_id   String
+  criado_em    DateTime  @default(now())
+  empresa      empresa   @relation(fields: [empresa_id], references: [id])
+  motorista    motorista @relation(fields: [motorista_id], references: [user_id])
+
+  @@index([empresa_id])
+}
 
 enum Porte {
   PEQUENO
@@ -143,367 +601,56 @@ enum StatusProposta {
   @@map("status_proposta_enum")
 }
 
-// ============================================================================
-// ENDEREÇOS
-// ============================================================================
-
-model Endereco {
-  id          String  @id @default(cuid())
-  logradouro  String
-  numero      String?
-  complemento String?
-  bairro      String?
-  cidade      String
-  estado      String  @db.Char(2)
-  cep         String
-  pais        String  @default("Brasil")
-  latitude    Decimal? @db.Decimal(10, 7)
-  longitude   Decimal? @db.Decimal(10, 7)
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  clientes        Cliente[]
-  fretesOrigem    Frete[]   @relation("FreteEnderecoOrigem")
-  fretesDestino   Frete[]   @relation("FreteEnderecoDestino")
-
-  @@index([cidade, estado])
-  @@map("enderecos")
+enum papel_sistema {
+  USUARIO
+  ADMIN
 }
 
-// ============================================================================
-// CLIENTES (extensão 1:1 de User)
-// ============================================================================
-
-model Cliente {
-  userId String @id @map("usuario_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  enderecoId String?   @map("endereco_id")
-  endereco   Endereco? @relation(fields: [enderecoId], references: [id])
-
-  createdAt DateTime @default(now()) @map("criado_em")
-
-  fretes Frete[]
-
-  @@map("clientes")
+enum status_assinatura {
+  PENDENTE
+  ATIVA
+  CANCELADA
+  EXPIRADA
 }
 
-// ============================================================================
-// MOTORISTAS / FRETISTAS (extensão 1:1 de User)
-// ============================================================================
-
-model Motorista {
-  userId String @id @map("usuario_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  cnhNumero        String?  @unique @map("cnh_numero")
-  cnhNumeroMascarado String? @map("cnh_numero_mascarado")
-  cnhCategoria     String?  @map("cnh_categoria")
-  cnhValidade      DateTime? @map("cnh_validade") @db.Date
-  avaliacaoMedia   Decimal  @default(0) @map("avaliacao_media") @db.Decimal(3, 2)
-  totalAvaliacoes  Int      @default(0) @map("total_avaliacoes")
-  disponivel       Boolean  @default(true)
-  cadastroStatus   String?  @map("cadastro_status")
-  nomeCompleto     String?  @map("nome_completo")
-  tipoPessoa       String?  @map("tipo_pessoa")
-  documentoMascarado String? @map("documento_mascarado")
-  cnpjMascarado    String?  @map("cnpj_mascarado")
-  nomeEmpresa      String?  @map("nome_empresa")
-  cnhFotoDataUrl   String?  @map("cnh_foto_data_url") @db.Text
-  documentosEnviados Boolean @default(false) @map("documentos_enviados")
-  enviadoEm        DateTime? @map("enviado_em")
-  revisadoEm       DateTime? @map("revisado_em")
-  feedback         String?  @db.Text
-
-  createdAt DateTime @default(now()) @map("criado_em")
-
-  veiculos               Veiculo[]
-  propostas              Proposta[]
-  fretesComoSelecionado  Frete[]    @relation("FreteMotoristaSelecionado")
-
-  @@index([disponivel])
-  @@map("motoristas")
+enum status_atribuicao_empresa {
+  PENDENTE
+  CONFIRMADA
+  RECUSADA
+  CANCELADA
 }
 
-// ============================================================================
-// VEÍCULOS
-// ============================================================================
-
-model Veiculo {
-  id           String @id @default(cuid())
-  motoristaId  String @map("motorista_id")
-  motorista    Motorista @relation(fields: [motoristaId], references: [userId], onDelete: Cascade)
-  ofertas      OfertaProposta[]
-
-  placa              String  @unique
-  modelo             String
-  marca              String?
-  anoFabricacao      Int?    @map("ano_fabricacao")
-  categoriaPorte     Porte   @map("categoria_porte")
-  carroceriaFechada  Boolean @default(false) @map("carroceria_fechada")
-  capacidadeKg       Decimal? @map("capacidade_kg") @db.Decimal(10, 2)
-  descricao          String   @default("")
-  ativo              Boolean @default(true)
-
-  createdAt DateTime @default(now()) @map("criado_em")
-
-  @@index([motoristaId])
-  @@index([categoriaPorte])
-  @@map("veiculos")
+enum status_cadastro_empresa {
+  EM_ANALISE
+  AJUSTES_SOLICITADOS
+  APROVADO
 }
 
-// ============================================================================
-// FRETES (pedidos cadastrados pelos clientes)
-// ============================================================================
-
-model Frete {
-  id String @id @default(cuid())
-
-  clienteId String  @map("cliente_id")
-  cliente   Cliente @relation(fields: [clienteId], references: [userId])
-
-  titulo             String
-  descricao          String?
-  categoriaPorte     Porte       @map("categoria_porte")
-  carroceriaFechada  Boolean     @default(false) @map("carroceria_fechada")
-  statusFrete        StatusFrete @default(ABERTO) @map("status_frete")
-
-  enderecoOrigemId  String   @map("endereco_origem_id")
-  enderecoOrigem    Endereco @relation("FreteEnderecoOrigem", fields: [enderecoOrigemId], references: [id])
-
-  enderecoDestinoId String   @map("endereco_destino_id")
-  enderecoDestino   Endereco @relation("FreteEnderecoDestino", fields: [enderecoDestinoId], references: [id])
-
-  dataColetaPrevista  DateTime? @map("data_coleta_prevista") @db.Date
-  dataEntregaPrevista DateTime? @map("data_entrega_prevista") @db.Date
-  valorReferencia     Decimal?  @map("valor_referencia") @db.Decimal(10, 2)
-
-  motoristaSelecionadoId String?    @map("motorista_selecionado_id")
-  motoristaSelecionado   Motorista? @relation("FreteMotoristaSelecionado", fields: [motoristaSelecionadoId], references: [userId])
-  acordo                 AcordoFrete?
-
-  createdAt DateTime @default(now()) @map("criado_em")
-  updatedAt DateTime @updatedAt @map("atualizado_em")
-
-  fotos      FreteFoto[]
-  propostas  Proposta[]
-  avaliacoes Avaliacao[]
-  mensagens  Mensagem[]
-
-  @@index([statusFrete])
-  @@index([clienteId])
-  @@index([categoriaPorte])
-  @@map("fretes")
+enum status_cadastro_motorista {
+  EM_ANALISE
+  AJUSTES_SOLICITADOS
+  APROVADO
 }
 
-// ============================================================================
-// FOTOS DO FRETE
-// ============================================================================
-
-model FreteFoto {
-  id       String @id @default(cuid())
-  freteId  String @map("frete_id")
-  frete    Frete  @relation(fields: [freteId], references: [id], onDelete: Cascade)
-
-  url   String
-  ordem Int    @default(0)
-
-  createdAt DateTime @default(now()) @map("criado_em")
-
-  @@unique([freteId, ordem])
-  @@map("frete_fotos")
+enum status_convite_empresa {
+  PENDENTE
+  ACEITO
+  RECUSADO
+  CANCELADO
 }
 
-// ============================================================================
-// PROPOSTAS
-// ============================================================================
-
-model Proposta {
-  id String @id @default(cuid())
-
-  freteId String @map("frete_id")
-  frete   Frete  @relation(fields: [freteId], references: [id], onDelete: Cascade)
-
-  motoristaId String    @map("motorista_id")
-  motorista   Motorista @relation(fields: [motoristaId], references: [userId])
-
-  valorProposto  Decimal        @map("valor_proposto") @db.Decimal(10, 2)
-  mensagem       String?
-  statusProposta StatusProposta @default(PENDENTE) @map("status_proposta")
-  ofertas        OfertaProposta[]
-  mensagens      Mensagem[]
-  acordos        AcordoFrete[]
-
-  createdAt DateTime @default(now()) @map("criado_em")
-  updatedAt DateTime @updatedAt @map("atualizado_em")
-
-  @@unique([freteId, motoristaId])
-  @@index([statusProposta])
-  @@map("propostas")
+enum tipo_agendamento_enum {
+  FIXA
+  INTERVALO
+  COMBINAR
 }
 
-// ============================================================================
-// AVALIAÇÕES
-// ============================================================================
-
-model Avaliacao {
-  id String @id @default(cuid())
-
-  freteId String @map("frete_id")
-  frete   Frete  @relation(fields: [freteId], references: [id], onDelete: Cascade)
-
-  avaliadorId String @map("avaliador_id")
-  avaliadoId  String @map("avaliado_id")
-  avaliador   User   @relation("AvaliacaoAvaliador", fields: [avaliadorId], references: [id], onDelete: Cascade)
-  avaliado    User   @relation("AvaliacaoAvaliado", fields: [avaliadoId], references: [id], onDelete: Cascade)
-
-  nota       Int
-  comentario String?
-  publica    Boolean @default(false)
-  perfilAvaliador String @default("cliente") @map("perfil_avaliador")
-
-  createdAt DateTime @default(now()) @map("criado_em")
-
-  @@unique([freteId, avaliadorId, avaliadoId])
-  @@index([avaliadoId])
-  @@map("avaliacoes")
+enum tipo_arquivo_privado {
+  FOTO_PERFIL
+  CNH
 }
 
-// ============================================================================
-// MENSAGENS (chat por frete)
-// ============================================================================
-
-model Mensagem {
-  id String @id @default(cuid())
-
-  freteId String @map("frete_id")
-  frete   Frete  @relation(fields: [freteId], references: [id], onDelete: Cascade)
-
-  remetenteId    String  @map("remetente_id")
-  destinatarioId String  @map("destinatario_id")
-  remetente      User    @relation("MensagemRemetente", fields: [remetenteId], references: [id], onDelete: Cascade)
-  destinatario   User    @relation("MensagemDestinatario", fields: [destinatarioId], references: [id], onDelete: Cascade)
-  propostaId     String? @map("proposta_id")
-  proposta       Proposta? @relation(fields: [propostaId], references: [id], onDelete: Cascade)
-  perfilRemetente String @default("cliente") @map("perfil_remetente")
-  conteudo       String
-  lida           Boolean @default(false)
-
-  createdAt DateTime @default(now()) @map("criado_em")
-
-  @@index([freteId, createdAt])
-  @@map("mensagens")
-}
-
-model SavedAddress {
-  id          String @id @default(cuid())
-  userId      String @map("usuario_id")
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label       String
-  logradouro  String
-  numero      String
-  complemento String
-  bairro      String
-  cidade      String
-  estado      String @db.Char(2)
-  cep         String?
-  latitude    Decimal? @db.Decimal(10, 7)
-  longitude   Decimal? @db.Decimal(10, 7)
-  createdAt   DateTime @default(now()) @map("criado_em")
-  updatedAt   DateTime @updatedAt @map("atualizado_em")
-
-  @@index([userId])
-  @@map("enderecos_salvos")
-}
-
-model DriverCompanyProfile {
-  userId    String @id @map("usuario_id")
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tradeName String @map("nome_fantasia")
-  logo      String @db.Text
-  about     String @db.Text
-  city      String
-  updatedAt DateTime @updatedAt @map("atualizado_em")
-
-  @@map("perfis_empresa")
-}
-
-model OperatingArea {
-  userId   String @id @map("usuario_id")
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  latitude Decimal @db.Decimal(10, 7)
-  longitude Decimal @db.Decimal(10, 7)
-  radiusKm Decimal @map("raio_km") @db.Decimal(8, 2)
-  label    String
-  updatedAt DateTime @updatedAt @map("atualizado_em")
-
-  @@map("areas_atuacao")
-}
-
-model OfertaProposta {
-  id            String @id
-  propostaId    String @map("proposta_id")
-  proposta      Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
-  veiculoId     String? @map("veiculo_id")
-  veiculo       Veiculo? @relation(fields: [veiculoId], references: [id], onDelete: SetNull)
-  veiculoLabel  String @map("veiculo_label")
-  valorCentavos Int @map("valor_centavos")
-  disponivelEm  DateTime @map("disponivel_em")
-  mensagem     String @db.Text
-  status       String
-  createdAt    DateTime @default(now()) @map("criado_em")
-
-  @@index([propostaId, createdAt])
-  @@map("ofertas_proposta")
-}
-
-model AcordoFrete {
-  freteId       String @id @map("frete_id")
-  frete         Frete @relation(fields: [freteId], references: [id], onDelete: Cascade)
-  propostaId    String @map("proposta_id")
-  proposta      Proposta @relation(fields: [propostaId], references: [id], onDelete: Restrict)
-  ofertaId      String @map("oferta_id")
-  motoristaId   String @map("motorista_id")
-  motorista     User @relation("AcordoMotorista", fields: [motoristaId], references: [id], onDelete: Restrict)
-  nomeMotorista String @map("nome_motorista")
-  nomePrestador String? @map("nome_prestador")
-  tipoPrestador String? @map("tipo_prestador")
-  valorCentavos Int @map("valor_centavos")
-  veiculo       String
-  disponivelEm  DateTime @map("disponivel_em")
-  mensagem      String @db.Text
-  aceitoEm      DateTime @map("aceito_em")
-
-  @@map("acordos_frete")
-}
-
-model AppNotification {
-  id         String
-  userId     String @map("usuario_id")
-  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role       String @map("perfil")
-  title      String @map("titulo")
-  body       String @db.Text
-  createdAt  DateTime @map("criado_em")
-  read       Boolean @default(false) @map("lida")
-  freightId  String @map("frete_id")
-  proposalId String? @map("proposta_id")
-
-  @@id([userId, id])
-  @@index([userId, createdAt])
-  @@map("notificacoes")
-}
-
-model AdminReview {
-  id        String @id
-  caseUserId String @map("usuario_caso_id")
-  caseUser  User   @relation(fields: [caseUserId], references: [id], onDelete: Cascade)
-  version   String
-  actor     String
-  at        DateTime
-  decision  String
-  reason    String @db.Text
-
-  @@index([caseUserId, at])
-  @@map("revisoes_cadastro")
+enum tipo_pessoa {
+  PF
+  PJ
 }

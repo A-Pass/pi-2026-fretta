@@ -80,7 +80,9 @@ export function createHttpTransport({
             ? (data as { code?: unknown; message?: unknown })
             : {};
         const message =
-          response.status === 422 && typeof error.message === "string"
+          (response.status === 422 ||
+            (path.startsWith("/company/") && response.status === 409)) &&
+          typeof error.message === "string"
             ? error.message.slice(0, 500)
             : messages[response.status] ||
               "O serviço está indisponível. Tente novamente em instantes.";
@@ -116,7 +118,7 @@ export function createHttpTransport({
       signal?.removeEventListener("abort", abort);
     }
   }
-  async function page<T>(
+  async function page<T, Metadata extends object = {}>(
     path: string,
     cursor?: string,
     signal?: AbortSignal,
@@ -129,7 +131,9 @@ export function createHttpTransport({
         if (value !== undefined) query.set(key, String(value));
       }
     }
-    const result = await request<{ items: T[]; nextCursor: string | null }>(
+    const result = await request<
+      { items: T[]; nextCursor: string | null } & Metadata
+    >(
       `${path}${query.size ? `?${query}` : ""}`,
       { signal },
     );

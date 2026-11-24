@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { clearRequestDrafts } from "../requests/drafts";
 import { usePathname, useRouter } from "next/navigation";
 import type { Role } from "@/contracts";
 import {
@@ -93,7 +94,7 @@ export function useNavigation() {
         selected: null,
         chatId: "",
       }),
-    setRole: (role: Role) =>
+    setRole: (role: Role, replace = false) =>
       navigate({
         role,
         tab: "inicio",
@@ -101,7 +102,7 @@ export function useNavigation() {
         chatId: "",
         providerId: null,
         providerConversationId: null,
-      }),
+      }, replace),
     setSelected: (selected: string | null) =>
       navigate({
         selected,
@@ -136,6 +137,7 @@ export function useNavigation() {
     logout: () => {
       try {
         sessionStorage.removeItem(sessionKey);
+        clearRequestDrafts(sessionStorage);
       } catch {}
       setEntered(false);
       setLoginRequested(false);

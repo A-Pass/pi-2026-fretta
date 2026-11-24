@@ -17,20 +17,39 @@ function databaseForSelectedDriver(availableAt: Date, userId = "driver-1") {
   const savedMessages: { conteudo: string }[] = [];
   const proposal = {
     id: "p1",
-    freteId: "f1",
-    motoristaId: "driver-1",
-    statusProposta: "ACEITA",
-    ofertas: [{ id: "p1", status: "ACEITA" }],
-    frete: { clienteId: "client-1", statusFrete: "ACEITO" },
+    frete_id: "f1",
+    motorista_id: "driver-1",
+    status_proposta: "ACEITA",
+    ofertas: [
+      {
+        id: "p1",
+        status: "ACEITA",
+        disponivelEm: availableAt,
+        valorCentavos: 10000,
+        veiculoLabel: "Veículo de teste",
+        mensagem: "",
+      },
+    ],
+    frete: { cliente_id: "client-1", status_frete_enum: "ACEITO" },
   };
   const freight = {
     id: "f1",
-    clienteId: "client-1",
-    motoristaSelecionadoId: "driver-1",
-    statusFrete: state.statusFrete,
-    avaliacoes: [],
-    acordo: { propostaId: "p1", disponivelEm: availableAt },
-    propostas: [],
+    cliente_id: "client-1",
+    motorista_selecionado_id: "driver-1",
+    status_frete_enum: state.statusFrete,
+    avaliacao: [],
+    acordo: {
+      propostaId: "p1",
+      ofertaId: "p1",
+      disponivelEm: availableAt,
+      motoristaId: "driver-1",
+      nomeMotorista: "Motorista",
+      valorCentavos: 10000,
+      veiculo: "Veículo de teste",
+      mensagem: "",
+      aceitoEm: new Date(),
+    },
+    proposta: [{ id: "p1" }],
   };
   const transaction = {
     user: {
@@ -38,12 +57,17 @@ function databaseForSelectedDriver(availableAt: Date, userId = "driver-1") {
       update: async () => undefined,
     },
     motorista: {
-      findUnique: async () => (userId === "driver-1" ? { userId } : null),
+      findUnique: async () =>
+        userId === "driver-1" ? { user_id: userId } : null,
     },
     frete: {
       findUnique: async () => freight,
-      update: async ({ data }: { data: typeof state }) => {
-        Object.assign(state, data);
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        if (typeof data.status_frete_enum === "string")
+          state.statusFrete = data.status_frete_enum;
+        if ("motorista_selecionado_id" in data)
+          state.motoristaSelecionadoId =
+            data.motorista_selecionado_id as string | null;
         Object.assign(freight, data);
         changes.push("frete");
       },
@@ -55,8 +79,8 @@ function databaseForSelectedDriver(availableAt: Date, userId = "driver-1") {
     },
     proposta: {
       findUnique: async () => proposal,
-      update: async ({ data }: { data: { statusProposta: string } }) => {
-        proposal.statusProposta = data.statusProposta;
+      update: async ({ data }: { data: { status_proposta: string } }) => {
+        proposal.status_proposta = data.status_proposta;
         changes.push("proposta");
       },
       updateMany: async () => undefined,

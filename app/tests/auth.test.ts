@@ -61,18 +61,15 @@ test("endpoint OAuth informa configuração ausente sem iniciar sessão demonstr
   }
 });
 
-test("Docker Compose encaminha as credenciais Google para o servidor", () => {
+test("Docker Compose disponibiliza o ambiente protegido ao servidor", () => {
   const compose = readFileSync(
     new URL("../../docker-compose.yml", import.meta.url),
     "utf8",
   );
 
-  assert.match(compose, /DB_URL:\s+\$\{DB_URL\}/);
+  assert.match(compose, /ENV_FILE:\s+\/run\/secrets\/dot_env/);
+  assert.match(compose, /file:\s+\/dev\/shm\/fretta-app\/\.env/);
   assert.match(compose, /condition:\s+service_healthy/);
-  assert.match(compose, /APP_URL:\s+\$\{APP_URL:-\}/);
-  assert.match(compose, /APP_BETTER_AUTH_SECRET:\s+\$\{APP_BETTER_AUTH_SECRET:-\}/);
-  assert.match(compose, /APP_GOOGLE_CLIENT_ID:\s+\$\{APP_GOOGLE_CLIENT_ID:-\}/);
-  assert.match(compose, /APP_GOOGLE_CLIENT_SECRET:\s+\$\{APP_GOOGLE_CLIENT_SECRET:-\}/);
 });
 
 test("migrações do Prisma são aplicadas antes de iniciar e incluem verification", () => {

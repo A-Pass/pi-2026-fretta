@@ -5,7 +5,7 @@ ALTER TABLE "app_states" DROP CONSTRAINT "app_states_user_id_fkey";
 ALTER TABLE "user" ADD COLUMN     "account_setup_complete" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
-ALTER TABLE "motoristas" ADD COLUMN     "cadastro_status" TEXT,
+ALTER TABLE "motorista" ADD COLUMN     "cadastro_status" TEXT,
 ADD COLUMN     "cnh_foto_data_url" TEXT,
 ADD COLUMN     "cnh_numero_mascarado" TEXT,
 ADD COLUMN     "cnpj_mascarado" TEXT,
@@ -22,20 +22,17 @@ ALTER COLUMN "cnh_categoria" DROP NOT NULL,
 ALTER COLUMN "cnh_validade" DROP NOT NULL;
 
 -- AlterTable
-ALTER TABLE "veiculos" ADD COLUMN     "descricao" TEXT NOT NULL DEFAULT '';
-
--- AlterTable
-ALTER TABLE "avaliacoes" ADD COLUMN     "perfil_avaliador" TEXT NOT NULL DEFAULT 'cliente',
+ALTER TABLE "avaliacao" ADD COLUMN     "perfil_avaliador" TEXT NOT NULL DEFAULT 'cliente',
 ADD COLUMN     "publica" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
-ALTER TABLE "mensagens" ADD COLUMN     "perfil_remetente" TEXT NOT NULL DEFAULT 'cliente',
+ALTER TABLE "mensagem" ADD COLUMN     "perfil_remetente" TEXT NOT NULL DEFAULT 'cliente',
 ADD COLUMN     "proposta_id" TEXT;
 
 -- CreateTable
-CREATE TABLE "enderecos_salvos" (
+CREATE TABLE "endereco_salvos" (
     "id" TEXT NOT NULL,
-    "usuario_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
     "label" TEXT NOT NULL,
     "logradouro" TEXT NOT NULL,
     "numero" TEXT NOT NULL,
@@ -49,31 +46,31 @@ CREATE TABLE "enderecos_salvos" (
     "criado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "atualizado_em" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "enderecos_salvos_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "endereco_salvos_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "perfis_empresa" (
-    "usuario_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
     "nome_fantasia" TEXT NOT NULL,
     "logo" TEXT NOT NULL,
     "about" TEXT NOT NULL,
     "city" TEXT NOT NULL,
     "atualizado_em" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "perfis_empresa_pkey" PRIMARY KEY ("usuario_id")
+    CONSTRAINT "perfis_empresa_pkey" PRIMARY KEY ("user_id")
 );
 
 -- CreateTable
 CREATE TABLE "areas_atuacao" (
-    "usuario_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
     "latitude" DECIMAL(10,7) NOT NULL,
     "longitude" DECIMAL(10,7) NOT NULL,
     "raio_km" DECIMAL(8,2) NOT NULL,
     "label" TEXT NOT NULL,
     "atualizado_em" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "areas_atuacao_pkey" PRIMARY KEY ("usuario_id")
+    CONSTRAINT "areas_atuacao_pkey" PRIMARY KEY ("user_id")
 );
 
 -- CreateTable
@@ -112,7 +109,7 @@ CREATE TABLE "acordos_frete" (
 -- CreateTable
 CREATE TABLE "notificacoes" (
     "id" TEXT NOT NULL,
-    "usuario_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
     "perfil" TEXT NOT NULL,
     "titulo" TEXT NOT NULL,
     "body" TEXT NOT NULL,
@@ -121,7 +118,7 @@ CREATE TABLE "notificacoes" (
     "frete_id" TEXT NOT NULL,
     "proposta_id" TEXT,
 
-    CONSTRAINT "notificacoes_pkey" PRIMARY KEY ("usuario_id", "id")
+    CONSTRAINT "notificacoes_pkey" PRIMARY KEY ("user_id", "id")
 );
 
 -- CreateTable
@@ -138,13 +135,13 @@ CREATE TABLE "revisoes_cadastro" (
 );
 
 -- CreateIndex
-CREATE INDEX "enderecos_salvos_usuario_id_idx" ON "enderecos_salvos"("usuario_id");
+CREATE INDEX "endereco_salvos_user_id_idx" ON "endereco_salvos"("user_id");
 
 -- CreateIndex
 CREATE INDEX "ofertas_proposta_proposta_id_criado_em_idx" ON "ofertas_proposta"("proposta_id", "criado_em");
 
 -- CreateIndex
-CREATE INDEX "notificacoes_usuario_id_criado_em_idx" ON "notificacoes"("usuario_id", "criado_em");
+CREATE INDEX "notificacoes_user_id_criado_em_idx" ON "notificacoes"("user_id", "criado_em");
 
 -- CreateIndex
 CREATE INDEX "revisoes_cadastro_usuario_caso_id_at_idx" ON "revisoes_cadastro"("usuario_caso_id", "at");
@@ -162,8 +159,8 @@ SET
 FROM "app_states" AS s
 WHERE s."user_id" = u."id";
 
-INSERT INTO "motoristas" (
-    "usuario_id", "cadastro_status", "nome_completo", "tipo_pessoa",
+INSERT INTO "motorista" (
+    "user_id", "cadastro_status", "nome_completo", "tipo_pessoa",
     "documento_mascarado", "cnpj_mascarado", "nome_empresa",
     "cnh_numero_mascarado", "cnh_categoria", "cnh_validade",
     "cnh_foto_data_url", "documentos_enviados", "enviado_em",
@@ -198,7 +195,7 @@ WHERE jsonb_typeof(r) = 'object'
   AND NULLIF(r->>'fullName', '') IS NOT NULL
   AND NULLIF(r#>>'{license,numberMasked}', '') IS NOT NULL
   AND NULLIF(r#>>'{license,category}', '') IS NOT NULL
-ON CONFLICT ("usuario_id") DO UPDATE SET
+ON CONFLICT ("user_id") DO UPDATE SET
     "cadastro_status" = EXCLUDED."cadastro_status",
     "nome_completo" = EXCLUDED."nome_completo",
     "tipo_pessoa" = EXCLUDED."tipo_pessoa",
@@ -214,16 +211,16 @@ ON CONFLICT ("usuario_id") DO UPDATE SET
     "revisado_em" = EXCLUDED."revisado_em",
     "feedback" = EXCLUDED."feedback";
 
-INSERT INTO "motoristas" ("usuario_id")
+INSERT INTO "motorista" ("user_id")
 SELECT DISTINCT s."user_id"
 FROM "app_states" AS s
 CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(s."data"->'vehicles') = 'array'
         THEN s."data"->'vehicles' ELSE '[]'::jsonb END
 ) AS v
-ON CONFLICT ("usuario_id") DO NOTHING;
+ON CONFLICT ("user_id") DO NOTHING;
 
-INSERT INTO "veiculos" (
+INSERT INTO "veiculo" (
     "id", "motorista_id", "placa", "modelo", "categoria_porte",
     "capacidade_kg", "descricao", "criado_em"
 )
@@ -253,8 +250,8 @@ WHERE NULLIF(v->>'id', '') IS NOT NULL
   AND v->>'category' IN ('Utilitário', 'Caminhão pequeno', 'Caminhão médio', 'Caminhão grande')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO "enderecos_salvos" (
-    "id", "usuario_id", "label", "logradouro", "numero", "complemento",
+INSERT INTO "endereco_salvos" (
+    "id", "user_id", "label", "logradouro", "numero", "complemento",
     "bairro", "cidade", "estado", "cep", "latitude", "longitude",
     "criado_em", "atualizado_em"
 )
@@ -280,7 +277,7 @@ WHERE NULLIF(a->>'id', '') IS NOT NULL
 ON CONFLICT ("id") DO NOTHING;
 
 INSERT INTO "perfis_empresa" (
-    "usuario_id", "nome_fantasia", "logo", "about", "city", "atualizado_em"
+    "user_id", "nome_fantasia", "logo", "about", "city", "atualizado_em"
 )
 SELECT
     s."user_id", p->>'tradeName', COALESCE(p->>'logo', ''),
@@ -289,10 +286,10 @@ FROM "app_states" AS s
 CROSS JOIN LATERAL (SELECT s."data"->'companyProfile' AS p) AS company
 WHERE jsonb_typeof(p) = 'object'
   AND NULLIF(p->>'tradeName', '') IS NOT NULL
-ON CONFLICT ("usuario_id") DO NOTHING;
+ON CONFLICT ("user_id") DO NOTHING;
 
 INSERT INTO "areas_atuacao" (
-    "usuario_id", "latitude", "longitude", "raio_km", "label", "atualizado_em"
+    "user_id", "latitude", "longitude", "raio_km", "label", "atualizado_em"
 )
 SELECT
     s."user_id",
@@ -307,9 +304,9 @@ WHERE jsonb_typeof(a) = 'object'
   AND a#>>'{center,lat}' ~ '^-?[0-9]+(\.[0-9]+)?$'
   AND a#>>'{center,lng}' ~ '^-?[0-9]+(\.[0-9]+)?$'
   AND a->>'radiusKm' ~ '^[0-9]+(\.[0-9]+)?$'
-ON CONFLICT ("usuario_id") DO NOTHING;
+ON CONFLICT ("user_id") DO NOTHING;
 
-INSERT INTO "clientes" ("usuario_id")
+INSERT INTO "cliente" ("user_id")
 SELECT DISTINCT s."user_id"
 FROM "app_states" AS s
 CROSS JOIN LATERAL jsonb_array_elements(
@@ -317,9 +314,9 @@ CROSS JOIN LATERAL jsonb_array_elements(
         THEN s."data"->'freights' ELSE '[]'::jsonb END
 ) AS f
 WHERE jsonb_typeof(s."data"->'freightAddresses'->(f->>'id')) = 'object'
-ON CONFLICT ("usuario_id") DO NOTHING;
+ON CONFLICT ("user_id") DO NOTHING;
 
-INSERT INTO "enderecos" (
+INSERT INTO "endereco" (
     "id", "logradouro", "numero", "complemento", "bairro", "cidade",
     "estado", "cep", "pais", "latitude", "longitude"
 )
@@ -349,7 +346,7 @@ WHERE jsonb_typeof(a->'pickup') = 'object'
   AND length(a#>>'{pickup,state}') = 2
 ON CONFLICT ("id") DO NOTHING;
 
-INSERT INTO "enderecos" (
+INSERT INTO "endereco" (
     "id", "logradouro", "numero", "complemento", "bairro", "cidade",
     "estado", "cep", "pais", "latitude", "longitude"
 )
@@ -379,9 +376,9 @@ WHERE jsonb_typeof(a->'delivery') = 'object'
   AND length(a#>>'{delivery,state}') = 2
 ON CONFLICT ("id") DO NOTHING;
 
-INSERT INTO "fretes" (
+INSERT INTO "frete" (
     "id", "cliente_id", "titulo", "descricao", "categoria_porte",
-    "status_frete", "endereco_origem_id", "endereco_destino_id",
+    "status_frete_enum", "endereco_origem_id", "endereco_destino_id",
     "data_coleta_prevista", "data_entrega_prevista", "motorista_selecionado_id",
     "criado_em", "atualizado_em"
 )
@@ -407,8 +404,8 @@ SELECT
     CASE WHEN f#>>'{schedule,end}' ~ '^\d{4}-\d{2}-\d{2}'
         THEN (f#>>'{schedule,end}')::timestamptz::date ELSE NULL END,
     CASE WHEN EXISTS (
-        SELECT 1 FROM "motoristas" AS driver
-        WHERE driver."usuario_id" = f#>>'{agreement,driverId}'
+        SELECT 1 FROM "motorista" AS driver
+        WHERE driver."user_id" = f#>>'{agreement,driverId}'
     ) THEN NULLIF(f#>>'{agreement,driverId}', '') ELSE NULL END,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
@@ -423,10 +420,10 @@ WHERE NULLIF(f->>'id', '') IS NOT NULL
   AND jsonb_typeof(a->'delivery') = 'object'
   AND NULLIF(a#>>'{pickup,street}', '') IS NOT NULL
   AND NULLIF(a#>>'{delivery,street}', '') IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM "fretes" existing WHERE existing."id" = f->>'id')
+  AND NOT EXISTS (SELECT 1 FROM "frete" existing WHERE existing."id" = f->>'id')
 ON CONFLICT ("id") DO NOTHING;
 
-INSERT INTO "frete_fotos" ("id", "frete_id", "url", "ordem")
+INSERT INTO "frete_foto" ("id", "frete_id", "url", "ordem")
 SELECT
     (f->>'id') || ':photo:' || (photo.ordinality - 1)::text,
     f->>'id',
@@ -441,10 +438,10 @@ CROSS JOIN LATERAL jsonb_array_elements_text(
     CASE WHEN jsonb_typeof(f->'photos') = 'array'
         THEN f->'photos' ELSE '[]'::jsonb END
 ) WITH ORDINALITY AS photo(url, ordinality)
-WHERE EXISTS (SELECT 1 FROM "fretes" existing WHERE existing."id" = f->>'id')
+WHERE EXISTS (SELECT 1 FROM "frete" existing WHERE existing."id" = f->>'id')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO "motoristas" ("usuario_id")
+INSERT INTO "motorista" ("user_id")
 SELECT DISTINCT p->>'driverId'
 FROM "app_states" AS s
 CROSS JOIN LATERAL jsonb_array_elements(
@@ -453,18 +450,17 @@ CROSS JOIN LATERAL jsonb_array_elements(
 ) AS p
 JOIN "user" AS driver ON driver."id" = p->>'driverId'
 WHERE NULLIF(p->>'driverId', '') IS NOT NULL
-ON CONFLICT ("usuario_id") DO NOTHING;
+ON CONFLICT ("user_id") DO NOTHING;
 
-INSERT INTO "propostas" (
+INSERT INTO "proposta" (
     "id", "frete_id", "motorista_id", "valor_proposto",
-    "mensagem", "status_proposta", "criado_em", "atualizado_em"
+    "status_proposta", "criado_em", "atualizado_em"
 )
 SELECT DISTINCT ON (p->>'id')
     p->>'id',
     p->>'freightId',
     p->>'driverId',
     ((p->>'priceCents')::numeric / 100),
-    NULLIF(left(COALESCE(p->>'message', ''), 2000), ''),
     CASE p->>'status'
         WHEN 'ACEITA' THEN 'ACEITA'::"status_proposta_enum"
         WHEN 'ENCERRADA' THEN 'CANCELADA'::"status_proposta_enum"
@@ -477,8 +473,8 @@ CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(s."data"->'proposals') = 'array'
         THEN s."data"->'proposals' ELSE '[]'::jsonb END
 ) AS p
-JOIN "fretes" AS freight ON freight."id" = p->>'freightId'
-JOIN "motoristas" AS driver ON driver."usuario_id" = p->>'driverId'
+JOIN "frete" AS freight ON freight."id" = p->>'freightId'
+JOIN "motorista" AS driver ON driver."user_id" = p->>'driverId'
 WHERE NULLIF(p->>'id', '') IS NOT NULL
   AND p->>'priceCents' ~ '^[0-9]+$'
   AND (p->>'priceCents')::integer > 0
@@ -514,8 +510,8 @@ CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(p->'offers') = 'array' AND jsonb_array_length(p->'offers') > 0
         THEN p->'offers' ELSE jsonb_build_array(p) END
 ) AS offer
-JOIN "propostas" AS proposal ON proposal."id" = p->>'id'
-LEFT JOIN "veiculos" AS v
+JOIN "proposta" AS proposal ON proposal."id" = p->>'id'
+LEFT JOIN "veiculo" AS v
     ON v."id" = NULLIF(offer->>'vehicleId', '')
    AND v."motorista_id" = proposal."motorista_id"
 WHERE NULLIF(offer->>'id', '') IS NOT NULL
@@ -527,15 +523,15 @@ ON CONFLICT ("id") DO NOTHING;
 
 INSERT INTO "ofertas_proposta" (
     "id", "proposta_id", "veiculo_label", "valor_centavos",
-    "disponivel_em", "mensagem", "status", "criado_em"
+    "disponivel_em", "status", "criado_em"
 )
 SELECT
     p."id", p."id", 'Veículo cadastrado',
     GREATEST(1, round(p."valor_proposto" * 100)::integer),
-    p."criado_em", COALESCE(p."mensagem", ''),
+    p."criado_em",
     CASE WHEN p."status_proposta" = 'ACEITA' THEN 'ACEITA' ELSE 'PENDENTE' END,
     p."criado_em"
-FROM "propostas" AS p
+FROM "proposta" AS p
 WHERE NOT EXISTS (
     SELECT 1 FROM "ofertas_proposta" o WHERE o."proposta_id" = p."id"
 )
@@ -554,7 +550,7 @@ WITH legacy_status AS (
     ORDER BY p->>'id',
         CASE WHEN p->>'status' = 'ACEITA' THEN 0 ELSE 1 END
 )
-UPDATE "propostas" AS proposal
+UPDATE "proposta" AS proposal
 SET "status_proposta" = CASE legacy_status.status
     WHEN 'ACEITA' THEN 'ACEITA'::"status_proposta_enum"
     WHEN 'ENCERRADA' THEN 'CANCELADA'::"status_proposta_enum"
@@ -597,7 +593,7 @@ SELECT
     CASE WHEN legacy.agreement->>'acceptedAt' ~ '^\d{4}-\d{2}-\d{2}T'
         THEN (legacy.agreement->>'acceptedAt')::timestamptz ELSE CURRENT_TIMESTAMP END
 FROM legacy_agreements AS legacy
-JOIN "propostas" AS proposal
+JOIN "proposta" AS proposal
     ON proposal."id" = legacy.agreement->>'proposalId'
    AND proposal."frete_id" = legacy.freight_id
 JOIN "ofertas_proposta" AS offer
@@ -606,14 +602,14 @@ JOIN "ofertas_proposta" AS offer
 JOIN "user" AS driver ON driver."id" = proposal."motorista_id"
 ON CONFLICT ("frete_id") DO NOTHING;
 
-UPDATE "fretes" AS freight
+UPDATE "frete" AS freight
 SET
-    "status_frete" = 'ACEITO',
+    "status_frete_enum" = 'ACEITO',
     "motorista_selecionado_id" = agreement."motorista_id"
 FROM "acordos_frete" AS agreement
 WHERE agreement."frete_id" = freight."id";
 
-UPDATE "propostas" AS proposal
+UPDATE "proposta" AS proposal
 SET "status_proposta" = CASE
     WHEN agreement."proposta_id" = proposal."id"
         THEN 'ACEITA'::"status_proposta_enum"
@@ -631,15 +627,15 @@ END
 FROM "acordos_frete" AS agreement
 WHERE agreement."proposta_id" = offer."proposta_id";
 
-UPDATE "avaliacoes" AS review
+UPDATE "avaliacao" AS review
 SET "perfil_avaliador" = CASE
     WHEN review."avaliador_id" = freight."cliente_id" THEN 'cliente'
     ELSE 'motorista'
 END
-FROM "fretes" AS freight
+FROM "frete" AS freight
 WHERE freight."id" = review."frete_id";
 
-INSERT INTO "avaliacoes" (
+INSERT INTO "avaliacao" (
     "frete_id", "avaliador_id", "avaliado_id", "nota", "comentario",
     "publica", "perfil_avaliador", "criado_em"
 )
@@ -665,7 +661,7 @@ CROSS JOIN LATERAL jsonb_each(
     CASE WHEN jsonb_typeof(freight_state->'reviews') = 'object'
         THEN freight_state->'reviews' ELSE '{}'::jsonb END
 ) AS reviewer(role, score)
-JOIN "fretes" AS f ON f."id" = freight_state->>'id'
+JOIN "frete" AS f ON f."id" = freight_state->>'id'
 JOIN "acordos_frete" AS agreement ON agreement."frete_id" = f."id"
 WHERE reviewer.role IN ('cliente', 'motorista')
   AND reviewer.score #>> '{}' ~ '^[1-5]$'
@@ -673,10 +669,10 @@ ORDER BY f."id", reviewer.role,
     CASE WHEN reviewer.score #>> '{}' ~ '^[1-5]$' THEN 0 ELSE 1 END
 ON CONFLICT ("frete_id", "avaliador_id", "avaliado_id") DO NOTHING;
 
-UPDATE "mensagens" AS m
+UPDATE "mensagem" AS m
 SET "proposta_id" = (
     SELECT p."id"
-    FROM "propostas" AS p
+    FROM "proposta" AS p
     WHERE p."frete_id" = m."frete_id"
       AND (p."motorista_id" = m."remetente_id" OR p."motorista_id" = m."destinatario_id")
     ORDER BY p."criado_em"
@@ -684,15 +680,15 @@ SET "proposta_id" = (
 )
 WHERE m."proposta_id" IS NULL;
 
-UPDATE "mensagens" AS message
+UPDATE "mensagem" AS message
 SET "perfil_remetente" = CASE
     WHEN message."remetente_id" = freight."cliente_id" THEN 'cliente'
     ELSE 'motorista'
 END
-FROM "fretes" AS freight
+FROM "frete" AS freight
 WHERE freight."id" = message."frete_id";
 
-INSERT INTO "mensagens" (
+INSERT INTO "mensagem" (
     "id", "frete_id", "remetente_id", "destinatario_id", "proposta_id",
     "perfil_remetente", "conteudo", "lida", "criado_em"
 )
@@ -710,8 +706,8 @@ CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(s."data"->'messages') = 'array'
         THEN s."data"->'messages' ELSE '[]'::jsonb END
 ) AS m
-JOIN "propostas" AS p ON p."id" = m->>'proposalId'
-JOIN "fretes" AS f ON f."id" = p."frete_id"
+JOIN "proposta" AS p ON p."id" = m->>'proposalId'
+JOIN "frete" AS f ON f."id" = p."frete_id"
 WHERE NULLIF(m->>'id', '') IS NOT NULL
   AND m->>'freightId' = p."frete_id"
   AND (
@@ -721,7 +717,7 @@ WHERE NULLIF(m->>'id', '') IS NOT NULL
 ON CONFLICT ("id") DO NOTHING;
 
 INSERT INTO "notificacoes" (
-    "id", "usuario_id", "perfil", "titulo", "body", "criado_em",
+    "id", "user_id", "perfil", "titulo", "body", "criado_em",
     "lida", "frete_id", "proposta_id"
 )
 SELECT DISTINCT ON (s."user_id", n->>'id')
@@ -740,7 +736,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
 WHERE NULLIF(n->>'id', '') IS NOT NULL
   AND n->>'role' IN ('cliente', 'motorista')
 ORDER BY s."user_id", n->>'id'
-ON CONFLICT ("usuario_id", "id") DO NOTHING;
+ON CONFLICT ("user_id", "id") DO NOTHING;
 
 INSERT INTO "revisoes_cadastro" (
     "id", "usuario_caso_id", "version", "actor", "at", "decision", "reason"
@@ -765,46 +761,46 @@ ON CONFLICT ("id") DO NOTHING;
 DROP TABLE "app_states";
 
 -- AddForeignKey
-ALTER TABLE "avaliacoes" ADD CONSTRAINT "avaliacoes_avaliador_id_fkey" FOREIGN KEY ("avaliador_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "avaliacao" ADD CONSTRAINT "avaliacao_avaliador_id_fkey" FOREIGN KEY ("avaliador_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "avaliacoes" ADD CONSTRAINT "avaliacoes_avaliado_id_fkey" FOREIGN KEY ("avaliado_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "avaliacao" ADD CONSTRAINT "avaliacao_avaliado_id_fkey" FOREIGN KEY ("avaliado_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "mensagens" ADD CONSTRAINT "mensagens_remetente_id_fkey" FOREIGN KEY ("remetente_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "mensagem" ADD CONSTRAINT "mensagem_remetente_id_fkey" FOREIGN KEY ("remetente_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "mensagens" ADD CONSTRAINT "mensagens_destinatario_id_fkey" FOREIGN KEY ("destinatario_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "mensagem" ADD CONSTRAINT "mensagem_destinatario_id_fkey" FOREIGN KEY ("destinatario_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "mensagens" ADD CONSTRAINT "mensagens_proposta_id_fkey" FOREIGN KEY ("proposta_id") REFERENCES "propostas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "mensagem" ADD CONSTRAINT "mensagem_proposta_id_fkey" FOREIGN KEY ("proposta_id") REFERENCES "proposta"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "enderecos_salvos" ADD CONSTRAINT "enderecos_salvos_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "endereco_salvos" ADD CONSTRAINT "endereco_salvos_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "perfis_empresa" ADD CONSTRAINT "perfis_empresa_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "perfis_empresa" ADD CONSTRAINT "perfis_empresa_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "areas_atuacao" ADD CONSTRAINT "areas_atuacao_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "areas_atuacao" ADD CONSTRAINT "areas_atuacao_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ofertas_proposta" ADD CONSTRAINT "ofertas_proposta_proposta_id_fkey" FOREIGN KEY ("proposta_id") REFERENCES "propostas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ofertas_proposta" ADD CONSTRAINT "ofertas_proposta_proposta_id_fkey" FOREIGN KEY ("proposta_id") REFERENCES "proposta"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ofertas_proposta" ADD CONSTRAINT "ofertas_proposta_veiculo_id_fkey" FOREIGN KEY ("veiculo_id") REFERENCES "veiculos"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "ofertas_proposta" ADD CONSTRAINT "ofertas_proposta_veiculo_id_fkey" FOREIGN KEY ("veiculo_id") REFERENCES "veiculo"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "acordos_frete" ADD CONSTRAINT "acordos_frete_frete_id_fkey" FOREIGN KEY ("frete_id") REFERENCES "fretes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "acordos_frete" ADD CONSTRAINT "acordos_frete_frete_id_fkey" FOREIGN KEY ("frete_id") REFERENCES "frete"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "acordos_frete" ADD CONSTRAINT "acordos_frete_proposta_id_fkey" FOREIGN KEY ("proposta_id") REFERENCES "propostas"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "acordos_frete" ADD CONSTRAINT "acordos_frete_proposta_id_fkey" FOREIGN KEY ("proposta_id") REFERENCES "proposta"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "acordos_frete" ADD CONSTRAINT "acordos_frete_motorista_id_fkey" FOREIGN KEY ("motorista_id") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "notificacoes" ADD CONSTRAINT "notificacoes_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "notificacoes" ADD CONSTRAINT "notificacoes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "revisoes_cadastro" ADD CONSTRAINT "revisoes_cadastro_usuario_caso_id_fkey" FOREIGN KEY ("usuario_caso_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Building2,
   Package,
   Truck,
 } from "lucide-react";
@@ -8,7 +9,6 @@ import type { Role } from "@/contracts";
 type Props = {
   role: Role;
   onBack: () => void;
-  onContinue: () => void;
   onGoogleSignIn: () => void;
   googleSignInPending: boolean;
   googleSignInError: string;
@@ -22,6 +22,8 @@ export function LoginView({
   googleSignInError,
 }: Props) {
   const driver = role === "motorista";
+  const company = role === "empresa";
+  const Icon = company ? Building2 : driver ? Truck : Package;
 
   return (
     <main className="login-page">
@@ -33,7 +35,7 @@ export function LoginView({
       </button>
       <section className="login-card" aria-labelledby="login-title">
         <span className="login-symbol">
-          {driver ? <Truck size={28} /> : <Package size={28} />}
+          <Icon size={28} />
         </span>
         <span className="eyebrow">SEU PRÓXIMO CAMINHO COMEÇA AQUI</span>
         <h1 id="login-title">
@@ -42,14 +44,16 @@ export function LoginView({
           <em>com a FRETTA.</em>
         </h1>
         <p className="muted">
-          {driver
-            ? "Encontre oportunidades de frete e conecte seu trabalho a quem precisa."
-            : "Organize seu frete, compare propostas e converse com motoristas."}
+          {company
+            ? "Cadastre sua transportadora, organize sua equipe e acompanhe os fretes."
+            : driver
+              ? "Encontre oportunidades de frete e conecte seu trabalho a quem precisa."
+              : "Organize seu frete, compare propostas e converse com motoristas."}
         </p>
         <p className="muted">Sua sessão é protegida pela autenticação Google.</p>
         <div className="login-role">
-          {driver ? <Truck size={18} /> : <Package size={18} />} Você está
-          entrando como <strong>{driver ? "motorista" : "cliente"}</strong>
+          <Icon size={18} /> Você está entrando como{" "}
+          <strong>{company ? "empresa" : driver ? "motorista" : "cliente"}</strong>
         </div>
         <div className="login-provider-divider">
           <span>ou entre com</span>

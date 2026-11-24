@@ -23,15 +23,14 @@ RUN npm ci
 
 COPY --chown=node:node . .
 
-ARG APP_PORT=3000
-ENV PORT=$APP_PORT
-EXPOSE $APP_PORT
-
 # Estágio de desenvolvimento (com devDependencies, watch e debug)
 FROM base AS development
+ARG APP_PORT=3000
+ENV PORT=$APP_PORT
 ENV NODE_ENV=development
 EXPOSE 9229
-CMD ["npm", "run", "dev"]
+
+CMD ["sh", "-c", "set -a && [ -f \"$ENV_FILE\" ] && . \"$ENV_FILE\"; set +a && exec npm run dev"]
 
 # Gera o servidor standalone e mantém o Prisma CLI disponível para as migrações.
 FROM base AS production-build

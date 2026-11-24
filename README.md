@@ -21,7 +21,7 @@ Para autenticação Google local, configure no `app/.env.local` as variáveis
 `APP_GOOGLE_CLIENT_ID` e `APP_GOOGLE_CLIENT_SECRET`. Gere um segredo com
 `openssl rand -base64 32` e registre no cliente OAuth do Google a URI
 `http://localhost:3100/api/auth/callback/google`. Não compartilhe nem versione
-segredos. O `database/env.example` contém os nomes das variáveis; preserve
+segredos. O `.env-sample` da raiz contém os nomes das variáveis; preserve
 valores locais já existentes ao configurá-las.
 Para executar via Docker Compose, configure essas variáveis também no `.env` da
 raiz do produto; preserve as configurações de banco já existentes.

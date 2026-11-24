@@ -14,6 +14,7 @@ import type {
   AppNotification,
   FreightRequestDraft,
   Freight,
+  OperatingArea,
   Proposal,
   ProposalOffer,
   Store,
@@ -99,6 +100,16 @@ export function FrettaApp() {
   );
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("TODOS");
+  const canSwitchProfile =
+    store?.roles?.cliente === true && store.roles.motorista === true;
+  const onlyAvailableRole =
+    store?.roles?.cliente && !store.roles.motorista
+      ? "cliente"
+      : store?.roles?.motorista && !store.roles.cliente
+        ? "motorista"
+        : null;
+  const roleRedirectPending =
+    onlyAvailableRole !== null && role !== onlyAvailableRole;
   const latest = useRef<Store | null>(null),
     saving = useRef(false),
     main = useRef<HTMLElement>(null);
@@ -210,6 +221,10 @@ export function FrettaApp() {
     };
   }, [authenticated, role, selected]);
   useEffect(() => {
+    if (onlyAvailableRole && role !== onlyAvailableRole)
+      setRole(onlyAvailableRole, true);
+  }, [onlyAvailableRole, role, setRole]);
+  useEffect(() => {
     setModal("");
     setUpdatingDriver(false);
     setError("");
@@ -220,15 +235,38 @@ export function FrettaApp() {
     saving.current = true;
     try {
       const enriched = withNotifications(latest.current || next, next);
-      await api.save(enriched);
-      latest.current = enriched;
-      setStore(enriched);
+      const persisted = await api.save(enriched);
+      latest.current = persisted;
+      setStore(persisted);
       setError("");
       return true;
     } catch (e) {
       setError(
         e instanceof Error
           ? e.message
+          : "Não foi possível salvar. Tente novamente.",
+      );
+      return false;
+    } finally {
+      saving.current = false;
+    }
+  }
+  async function saveOperatingArea(area: OperatingArea): Promise<boolean> {
+    if (saving.current || !latest.current) return false;
+    saving.current = true;
+    try {
+      const savedArea = await createBackendClient().saveOperatingArea(area);
+      const current = latest.current;
+      if (!current) return false;
+      const updated = { ...current, operatingArea: savedArea };
+      latest.current = updated;
+      setStore(updated);
+      setError("");
+      return true;
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
           : "Não foi possível salvar. Tente novamente.",
       );
       return false;
@@ -262,20 +300,34 @@ export function FrettaApp() {
   async function createRequest(draft: FreightRequestDraft) {
     if (!store) return false;
     try {
-      const { freight, savedAddresses = [] } = await createBackendClient().createFreight({
+      const backend = createBackendClient();
+      const uploads = await Promise.all(
+        draft.photos.map(async (image, index) => {
+          const blob = await (await fetch(image)).blob();
+          return backend.upload(
+            new File([blob], `foto-${index}`, { type: blob.type }),
+            "freight",
+          );
+        }),
+      );
+      const created = await backend.createFreight({
         title: draft.title,
         description: draft.description,
         vehicle: draft.vehicle,
         schedule: draft.schedule,
         pickup: draft.pickup,
         delivery: draft.delivery,
-        photoIds: draft.photos,
+        photoIds: uploads.map((upload) => upload.id),
         savePickup: draft.savePickup,
         saveDelivery: draft.saveDelivery,
       });
+      const freight: Freight = {
+        ...created,
+        vehicle: draft.vehicle,
+        reviews: {},
+      };
       const next: Store = {
         ...store,
-        addresses: [...(store.addresses || []), ...savedAddresses],
         freights: [freight, ...store.freights.filter((item) => item.id !== freight.id)],
         freightAddresses: {
           ...store.freightAddresses,
@@ -297,7 +349,9 @@ export function FrettaApp() {
           ? error.message
           : "Não foi possível publicar a solicitação.",
       );
-      return false;
+      throw error instanceof Error
+        ? error
+        : new Error("Não foi possível publicar a solicitação.");
     }
   }
   async function propose(offer: ProposalOffer) {
@@ -315,11 +369,14 @@ export function FrettaApp() {
     let next: Store;
     if (existing) next = reviseOffer(store, existing.id, offer);
     else {
+      if (!f.updatedAt)
+        throw new Error("Atualize a solicitação antes de enviar uma proposta.");
       const p = await createBackendClient().propose(f.id, {
         priceCents: offer.priceCents,
         vehicleId: offer.vehicleId || "",
         availableAt: offer.availableAt,
         message: offer.message,
+        expectedUpdatedAt: f.updatedAt,
       });
       next = { ...store, proposals: [...store.proposals, p] };
     }
@@ -416,7 +473,6 @@ export function FrettaApp() {
         onGoogleSignIn={() => void signInWithGoogle()}
         googleSignInPending={googleSignInPending}
         googleSignInError={googleSignInError}
-        onContinue={() => void signInWithGoogle()}
       />
     );
   if (!authenticated)
@@ -448,12 +504,20 @@ export function FrettaApp() {
         )}
       </main>
     );
+  if (roleRedirectPending)
+    return (
+      <main className="loading" role="status">
+        Carregando seu perfil…
+      </main>
+    );
   if (role === "motorista" && tab === "cadastro-motorista") {
     if (!store.driverRegistration || updatingDriver)
       return (
         <DriverOnboardingView
           store={store}
-          onClient={() => setRole("cliente")}
+          onClient={
+            store.roles?.cliente ? () => setRole("cliente") : undefined
+          }
           onLogout={() => void signOut()}
           onServices={() => nav("fretes")}
           onSubmit={async (draft) => {
@@ -476,7 +540,9 @@ export function FrettaApp() {
         onVehicles={() => nav("veiculos")}
         onServices={() => nav("fretes")}
         onConversations={() => nav("chat")}
-        onClient={() => setRole("cliente")}
+        onClient={
+          store.roles?.cliente ? () => setRole("cliente") : undefined
+        }
         onLogout={() => void signOut()}
       />
     );
@@ -549,13 +615,15 @@ export function FrettaApp() {
           <small>
             {role === "cliente" ? "Perfil de cliente" : "Perfil de motorista"}
           </small>
-          <button
-            onClick={() =>
-              setRole(role === "cliente" ? "motorista" : "cliente")
-            }
-          >
-            Alternar perfil
-          </button>
+          {canSwitchProfile && (
+            <button
+              onClick={() =>
+                setRole(role === "cliente" ? "motorista" : "cliente")
+              }
+            >
+              Alternar perfil
+            </button>
+          )}
         </div>
       </aside>
       <div className="content">
@@ -774,15 +842,17 @@ export function FrettaApp() {
                   setModal("");
                 }}
               />
-              <button
-                className="secondary mobile-switch-profile"
-                onClick={() =>
-                  setRole(role === "cliente" ? "motorista" : "cliente")
-                }
-              >
-                Alternar para perfil de{" "}
-                {role === "cliente" ? "motorista" : "cliente"}
-              </button>
+              {canSwitchProfile && (
+                <button
+                  className="secondary mobile-switch-profile"
+                  onClick={() =>
+                    setRole(role === "cliente" ? "motorista" : "cliente")
+                  }
+                >
+                  Alternar para perfil de{" "}
+                  {role === "cliente" ? "motorista" : "cliente"}
+                </button>
+              )}
             </>
           ) : tab === "notificacoes" ? (
             <NotificationsView
@@ -809,7 +879,7 @@ export function FrettaApp() {
             <DriverHomeView
               store={store}
               name={name}
-              save={save}
+              saveOperatingArea={saveOperatingArea}
               onSelect={(freight) => {
                 opportunityCache.clear();
                 opportunityCache.set(freight.id, freight);

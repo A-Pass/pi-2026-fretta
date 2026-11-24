@@ -38,7 +38,6 @@ test("tela de acesso oferece os campos e ações de autenticação sem simular c
     <LoginView
       role="cliente"
       onBack={() => {}}
-      onContinue={() => {}}
       onGoogleSignIn={() => {}}
       googleSignInPending={false}
       googleSignInError=""

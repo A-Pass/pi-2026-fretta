@@ -12,6 +12,7 @@ export function acceptProposal(
     !f ||
     f.status !== "ABERTO" ||
     p.status !== "PENDENTE" ||
+    (p.requestRevision || 0) !== (f.revision || 0) ||
     (offerId && proposalOffers(p).at(-1)?.id !== offerId)
   )
     throw new Error("Esta proposta não está mais disponível.");

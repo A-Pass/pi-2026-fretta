@@ -86,10 +86,42 @@ Veja [a entrega e as dependências](frontend-handoff.md). A conferência visual 
 
 ## Painel administrativo de prestadores
 
-- [x] Rota /admin, link demonstrativo em Meu perfil e na situação do cadastro.
+- [x] Rota /admin separada. A pedido de Cleiton, os atalhos administrativos foram removidos das telas de cliente e motorista.
 - [x] Busca/filtros, detalhes mascarados, checklist, aprovação e solicitação de correções com confirmação.
 - [x] Histórico das decisões e atualização do cadastro do motorista da demonstração, com verificação de versão e preservação do histórico no reenvio.
 - [x] Retirados os controles de autoaprovação da interface do motorista.
 - [ ] Sessão/permissão administrativa, fila de contas reais, documentos privados e auditoria no servidor. O painel real permanece bloqueado enquanto não houver integração.
 
 Veja [o roteiro e limites do painel](admin-panel.md).
+
+### Refinamentos administrativos — 17/11/2026
+
+- [x] Itens de correção enviados ao resumo do motorista e registrados no histórico.
+- [x] Avisos e bloqueio de aprovação para pendências de foto, documentação, validade e veículo.
+- [x] Contagem de envios e última solicitação de ajustes para contextualizar reanálise.
+- [x] Diálogo de sucesso, confirmação de descarte e preservação de texto ao detectar atualizações externas.
+- [x] Ampliação de foto e visualizador com zoom/rotação usando documento ilustrativo explicitamente fictício nos exemplos. CNH real ainda depende do back-end.
+
+## Fluxos do cliente — 17/11/2026
+
+- [x] Edição de solicitação aberta com endereços/dados pré-preenchidos, revisão e encerramento das propostas anteriores quando houver mudanças.
+- [x] Novas ofertas vinculadas à revisão atual; aceite antigo bloqueado, mantendo chat/histórico.
+- [x] Acompanhamento visual por situação, sem rastreamento GPS.
+- [x] Revisão completa antes de publicar, com descrição, fotos, agenda e endereços privados do próprio cliente.
+- [x] Cancelamento antes do início do transporte, inclusive após aceite, com motivo, confirmação, registro e notificações locais; sem multa automática.
+- [x] Recuperação de rascunho após recarregar, com opção retomar/descartar, validade de 24 horas na sessão da aba e limpeza ao sair/publicar.
+
+Roteiro e limites em [fluxos do cliente](client-lifecycle.md).
+
+## Empresa com equipe — 17/11/2026
+
+- [x] Área /empresa com Equipe, Frota, Serviços e Plano (preços a definir).
+- [x] Busca por código público, confirmação do perfil, convite por sete dias, aceite/recusa/cancelamento e prevenção de duplicatas.
+- [x] Vínculo separado da aprovação administrativa e da ativação demonstrativa; sem cobrança individual duplicada.
+- [x] Atribuição por motorista/veículo, confirmação de disponibilidade e proposta da empresa com identificação do condutor.
+- [x] Feed do funcionário somente com suas atribuições, início do transporte pelo designado e conversa identificada por autor.
+- [x] Bloqueio de saída/desativação/alteração de veículo com operação em aberto e preservação de histórico.
+- [ ] Definição de preços, autenticação/autorizações por empresa, banco, cobrança e comunicação remota. Seleção de atores atual é somente demonstrativa.
+- [ ] Link compartilhável de convite e confirmação de substituição de motorista após contratação em etapa posterior.
+
+Veja [o roteiro e os limites da equipe](company-team.md).

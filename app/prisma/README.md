@@ -25,5 +25,6 @@ O Prisma CLI usa `prisma.config.ts` na raiz de `app`. O datasource usa `DB_URL`.
 
 - `20261121024628_init`: estrutura inicial do banco;
 - `20261121180100_relational_user_data`: migração do estado legado por usuário para tabelas relacionais e remoção do estado único `app_states`.
+- `20261122195926_merge_compatibility`: adiciona compatibilidade com os fluxos de fretes, conversas e empresas, preservando e migrando os dados relacionais existentes. Esta migration foi gerada, mas não aplicada.
 
 Não substitua migrations antigas nem copie scripts finais de `src-system/database` como migração automática.

@@ -11,17 +11,18 @@ import type { Store, OperatingArea, MapPoint } from "@/contracts";
 import { LocationPicker } from "../../components/LocationPicker";
 import { EmptyState } from "../../components/EmptyState";
 import { createBackendClient, type FreightFeedItem } from "../../api/backend";
+import { sortFeedItemsByPickupDistance } from "./rules";
 type Props = {
   store: Store;
   name: string;
-  save: (s: Store) => Promise<boolean>;
+  saveOperatingArea: (area: OperatingArea) => Promise<boolean>;
   schedule: (f: FreightFeedItem) => string | undefined;
   onSelect: (freight: FreightFeedItem) => void;
 };
 export function DriverHomeView({
   store,
   name,
-  save,
+  saveOperatingArea,
   schedule,
   onSelect,
 }: Props) {
@@ -35,39 +36,47 @@ export function DriverHomeView({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [visible, setVisible] = useState(12);
+  const [feedScope, setFeedScope] = useState<"area" | "all">("area");
   const [matches, setMatches] = useState<
-    { freight: FreightFeedItem; distance: number }[]
+    { freight: FreightFeedItem; distance: number | null }[]
   >([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   useEffect(
     () => setVisible(12),
-    [query, area?.center.lat, area?.center.lng, radiusKm],
+    [query, feedScope, area?.center.lat, area?.center.lng, radiusKm],
   );
   useEffect(() => {
     if (!area) return;
+    const operatingArea = area;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setSearching(true);
       setSearchError("");
-      createBackendClient()
-        .freights(undefined, controller.signal, {
-          q: query.trim() || undefined,
-          lat: area.center.lat,
-          lng: area.center.lng,
-          radiusKm: area.radiusKm,
-          limit: 100,
-        })
-        .then(({ items }) => {
-          setMatches(
-            items
-              .filter((freight) => freight.pickupDistanceKm != null)
-              .map((freight) => ({
-                freight,
-                distance: freight.pickupDistanceKm as number,
-              }))
-              .sort((a, b) => a.distance - b.distance),
-          );
+      const backend = createBackendClient();
+      async function loadFreights() {
+        const items: FreightFeedItem[] = [];
+        let cursor: string | undefined;
+        do {
+          const page = await backend.freights(cursor, controller.signal, {
+            role: "motorista",
+            scope: feedScope === "all" ? "all" : "area",
+            q: query.trim() || undefined,
+            lat: operatingArea.center.lat,
+            lng: operatingArea.center.lng,
+            radiusKm:
+              feedScope === "area" ? operatingArea.radiusKm : undefined,
+            limit: 100,
+          });
+          items.push(...page.items);
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor && !controller.signal.aborted);
+        return items;
+      }
+      loadFreights()
+        .then((items) => {
+          if (controller.signal.aborted) return;
+          setMatches(sortFeedItemsByPickupDistance(items));
         })
         .catch((failure) => {
           if (!controller.signal.aborted) {
@@ -89,6 +98,7 @@ export function DriverHomeView({
     };
   }, [
     query,
+    feedScope,
     area?.center.lat,
     area?.center.lng,
     radiusKm,
@@ -146,13 +156,10 @@ export function DriverHomeView({
               setBusy(true);
               try {
                 if (
-                  await save({
-                    ...store,
-                    operatingArea: {
-                      center: point,
-                      radiusKm: radius,
-                      label: label.trim() || "Base selecionada no mapa",
-                    },
+                  await saveOperatingArea({
+                    center: point,
+                    radiusKm: radius,
+                    label: label.trim() || "Base selecionada no mapa",
                   })
                 )
                   setEditing(false);
@@ -244,11 +251,17 @@ export function DriverHomeView({
       </section>
       <div className="section-head opportunities-heading">
         <div>
-          <h2>Solicitações na sua área</h2>
+          <h2>
+            {feedScope === "area"
+              ? "Solicitações na sua área"
+              : "Todos os fretes disponíveis"}
+          </h2>
           <p className="muted">
-            {area
-              ? `Retiradas dentro do raio de ${area.radiusKm} km aplicado acima.`
-              : "Defina sua área de operação para encontrar solicitações próximas."}
+            {!area
+              ? "Defina uma base para ordenar os fretes por proximidade."
+              : feedScope === "area"
+                ? `Retiradas dentro do raio de ${area.radiusKm} km aplicado acima.`
+                : "Ordenados da retirada mais próxima à mais distante da sua base."}
           </p>
         </div>
         <span className="badge">
@@ -256,6 +269,22 @@ export function DriverHomeView({
           {matches.length === 1 ? "oportunidade" : "oportunidades"}
         </span>
       </div>
+      <label className="driver-feed-filter">
+        Mostrar
+        <select
+          aria-label="Filtrar fretes por área de operação"
+          value={feedScope}
+          disabled={!area}
+          onChange={(event) =>
+            setFeedScope(event.target.value === "all" ? "all" : "area")
+          }
+        >
+          <option value="area">
+            Apenas dentro do raio de operação ({radiusKm} km)
+          </option>
+          <option value="all">Todos os fretes disponíveis</option>
+        </select>
+      </label>
       <label className="search driver-search">
         <Search size={18} />
         <input
@@ -283,7 +312,9 @@ export function DriverHomeView({
                 <Package />
               </span>
               <span className="badge">
-                Retirada a aproximadamente {Math.round(distance)} km
+                {distance == null
+                  ? "Distância indisponível"
+                  : `Retirada a aproximadamente ${Math.round(distance)} km`}
               </span>
             </div>
             <h3>{f.title}</h3>
@@ -313,10 +344,21 @@ export function DriverHomeView({
             </button>
           </article>
         ))}
-        {!matches.length && (
-          <EmptyState title="Nenhuma retirada nesta área por enquanto">
-            Aumente o raio ou altere sua base para buscar oportunidades em
-            outra região.
+        {!matches.length && !searching && (
+          <EmptyState
+            title={
+              !area
+                ? "Defina sua área de operação"
+                : feedScope === "area"
+                  ? "Nenhuma retirada nesta área por enquanto"
+                  : "Nenhum frete disponível por enquanto"
+            }
+          >
+            {!area
+              ? "Configure uma base para ordenar as oportunidades por distância."
+              : feedScope === "area"
+                ? "Aumente o raio ou altere sua base para buscar oportunidades em outra região."
+                : "Novas oportunidades aparecerão aqui assim que forem publicadas."}
           </EmptyState>
         )}
       </div>

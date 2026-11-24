@@ -11,6 +11,7 @@ import {
   todayLocal,
   publicRegion,
 } from "./addresses/rules";
+import { decodeDraft, draftKey } from "./requests/drafts";
 const steps = ["Itens", "Retirada", "Entrega", "Veículo", "Quando", "Datas"];
 const vehicles = [
   ["Utilitário", "Poucos itens e pequenos volumes"],
@@ -22,41 +23,58 @@ export function RequestWizard({
   addresses,
   onClose,
   onSubmit,
+  initialDraft,
+  editId,
+  revision = 0,
+  draftScope,
 }: {
   addresses: SavedAddress[];
+  initialDraft?: FreightRequestDraft;
+  editId?: string;
+  revision?: number;
+  draftScope?: string;
   onClose: () => void;
   onSubmit: (draft: FreightRequestDraft) => Promise<boolean>;
 }) {
+  const storageKey =
+    draftKey(editId, revision) + (draftScope ? `:${draftScope}` : "");
   const [step, setStep] = useState(0),
-    [draft, setDraft] = useState<FreightRequestDraft>({
-      title: "",
-      description: "",
-      photos: [],
-      pickup: emptyAddress(),
-      delivery: emptyAddress(),
-      savePickup: false,
-      saveDelivery: false,
-      vehicle: "",
-      schedule: { kind: "combinar" },
-    }),
+    [draft, setDraft] = useState<FreightRequestDraft>(() =>
+      structuredClone(
+        initialDraft ?? {
+          title: "",
+          description: "",
+          photos: [],
+          pickup: emptyAddress(),
+          delivery: emptyAddress(),
+          savePickup: false,
+          saveDelivery: false,
+          vehicle: "",
+          schedule: { kind: "combinar" },
+        },
+      ),
+    ),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [reading, setReading] = useState(false);
-  const dirty = !!(
-    draft.title ||
-    draft.description ||
-    draft.photos.length ||
-    draft.vehicle ||
-    draft.pickup.point ||
-    draft.pickup.street ||
-    draft.pickup.city ||
-    draft.pickup.neighborhood ||
-    draft.delivery.point ||
-    draft.delivery.street ||
-    draft.delivery.city ||
-    draft.delivery.neighborhood ||
-    draft.schedule.kind !== "combinar"
-  );
+    [reading, setReading] = useState(false),
+    [draftReady, setDraftReady] = useState(false);
+  const dirty = initialDraft
+    ? JSON.stringify(draft) !== JSON.stringify(initialDraft)
+    : !!(
+        draft.title ||
+        draft.description ||
+        draft.photos.length ||
+        draft.vehicle ||
+        draft.pickup.point ||
+        draft.pickup.street ||
+        draft.pickup.city ||
+        draft.pickup.neighborhood ||
+        draft.delivery.point ||
+        draft.delivery.street ||
+        draft.delivery.city ||
+        draft.delivery.neighborhood ||
+        draft.schedule.kind !== "combinar"
+      );
   const discard = useDiscardChanges(dirty);
   const requestClose = () => {
     if (!busy && !reading) discard.leave(onClose);
@@ -65,6 +83,32 @@ export function RequestWizard({
     heading = useRef<HTMLHeadingElement>(null),
     form = useRef<HTMLFormElement>(null),
     body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      const saved = decodeDraft(sessionStorage.getItem(storageKey));
+      if (!initialDraft && saved && saved.draft.schedule !== null) {
+        setDraft({
+          ...saved.draft,
+          schedule: saved.draft.schedule,
+        });
+        setStep(saved.step);
+      }
+    } catch {
+      setError("O navegador não permitiu recuperar o rascunho.");
+    }
+    setDraftReady(true);
+  }, [initialDraft, storageKey]);
+  useEffect(() => {
+    if (!draftReady) return;
+    try {
+      sessionStorage.setItem(
+        storageKey,
+        JSON.stringify({ draft, step, at: Date.now() }),
+      );
+    } catch {
+      setError("O navegador não permitiu salvar o rascunho.");
+    }
+  }, [draft, draftReady, step, storageKey]);
   useEffect(() => {
     const el = dialog.current;
     el?.showModal();
@@ -101,12 +145,22 @@ export function RequestWizard({
     setBusy(true);
     setError("");
     try {
-      if (!(await onSubmit(draft)))
-        setError(
-          "Não foi possível salvar a solicitação. Confira o espaço disponível no navegador e tente novamente.",
-        );
-    } catch {
-      setError("Não foi possível publicar. Tente novamente.");
+      const submitted = await onSubmit(draft);
+      if (!submitted) {
+        setError("Não foi possível publicar. Tente novamente.");
+      } else {
+        try {
+          sessionStorage.removeItem(storageKey);
+        } catch {
+          setError("A solicitação foi salva, mas o rascunho não foi removido.");
+        }
+      }
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Não foi possível publicar. Tente novamente.",
+      );
     } finally {
       setBusy(false);
     }

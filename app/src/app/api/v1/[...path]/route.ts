@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getAuthConfigurationError } from "@/server/auth/env";
 import {
+  activateAdminDriverSubscription,
   loadAccountStore,
   loadAdminDocuments,
   loadAdminRegistrations,
   reviewDriverRegistration,
   saveAccountStore,
+  saveDriverOperatingArea,
+  StorePersistenceError,
 } from "@/server/modules/store/persistence";
 import {
   ADMIN_COOKIE,
@@ -17,6 +20,12 @@ import {
   verifyAdminCredentials,
   verifyAdminToken,
 } from "@/server/admin-auth";
+import {
+  obterUpload,
+  salvarUpload,
+  UploadError,
+  type FinalidadeUpload,
+} from "@/server/modules/uploads/services/upload-service";
 
 type FreightFeedItem = {
   id: string;
@@ -32,6 +41,17 @@ type FreightFeedItem = {
 
 function error(code: string, message: string, status: number) {
   return Response.json({ code, message }, { status });
+}
+
+function uploadPurpose(
+  value: FormDataEntryValue | null,
+): value is FinalidadeUpload {
+  return (
+    value === "freight" ||
+    value === "profile" ||
+    value === "company" ||
+    value === "company-proof"
+  );
 }
 
 async function getSession(request: NextRequest) {
@@ -54,6 +74,54 @@ async function getSession(request: NextRequest) {
   return session;
 }
 
+async function createUpload(request: NextRequest) {
+  const session = await getSession(request);
+  const origin = request.headers.get("origin");
+  if (
+    origin &&
+    origin !== new URL(process.env.APP_URL || request.url).origin
+  )
+    return error("INVALID_ORIGIN", "Origem inválida.", 403);
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return error("INVALID_BODY", "Informe um arquivo para enviar.", 422);
+  }
+  const file = form.get("file");
+  const purpose = form.get("purpose");
+  if (!(file instanceof File))
+    return error("INVALID_FILE", "Informe um arquivo para enviar.", 422);
+  if (!uploadPurpose(purpose))
+    return error(
+      "INVALID_UPLOAD_PURPOSE",
+      "Finalidade de upload inválida.",
+      422,
+    );
+
+  const upload = await salvarUpload(
+    session.user.id,
+    Buffer.from(await file.arrayBuffer()),
+    purpose,
+  );
+  return Response.json(upload, {
+    status: 201,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
+async function readUpload(request: NextRequest, uploadId: string) {
+  const session = await getSession(request);
+  const image = await obterUpload(uploadId, session.user.id);
+  return new Response(new Uint8Array(image.bytes), {
+    headers: {
+      "Content-Type": image.mimeType,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 async function stateStore(request: NextRequest, method: "GET" | "PUT") {
   const session = await getSession(request);
   const { prisma } = await import("@/server/db");
@@ -67,6 +135,28 @@ async function stateStore(request: NextRequest, method: "GET" | "PUT") {
   return Response.json(await loadAccountStore(prisma, userId));
 }
 
+async function driverOperatingAreaStore(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  if (
+    origin &&
+    origin !== new URL(process.env.APP_URL || request.url).origin
+  )
+    return error("INVALID_ORIGIN", "Origem inválida.", 403);
+  const session = await getSession(request);
+  const value = await request.json().catch(() => null);
+  const { prisma } = await import("@/server/db");
+  try {
+    const area = await saveDriverOperatingArea(prisma, session.user.id, value);
+    return Response.json(area, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (failure) {
+    if (failure instanceof StorePersistenceError)
+      return error(failure.code, failure.message, failure.status);
+    throw failure;
+  }
+}
+
 function approximateRegion(address: {
   bairro: string | null;
   cidade: string;
@@ -78,6 +168,17 @@ function approximateRegion(address: {
     )
     .join(", ");
   return region;
+}
+
+type RouteContext = { params: Promise<{ path: string[] }> };
+
+function routeContextFromRequest(request: NextRequest): RouteContext {
+  const marker = "/api/v1/";
+  const pathname = new URL(request.url).pathname;
+  const path = pathname.includes(marker)
+    ? pathname.slice(pathname.indexOf(marker) + marker.length)
+    : "";
+  return { params: Promise.resolve({ path: path.split("/").filter(Boolean) }) };
 }
 
 async function adminRegistrations(request: NextRequest) {
@@ -114,6 +215,18 @@ async function reviewAdminRegistration(
   return Response.json({ reviewedCase: result.case, review: result.review });
 }
 
+async function activateAdminRegistrationSubscription(
+  request: NextRequest,
+  userId: string,
+) {
+  if (!adminTokenUsername(readAdminCookie(request.headers.get("cookie"))))
+    return error("UNAUTHORIZED", "Faça login como administrador.", 401);
+  const { prisma } = await import("@/server/db");
+  const result = await activateAdminDriverSubscription(prisma, userId);
+  if ("error" in result) return result.error;
+  return Response.json({ subscription: result.subscription });
+}
+
 function distanceKm(
   latA: number,
   lngA: number,
@@ -132,7 +245,7 @@ function distanceKm(
 }
 
 async function freightFeed(request: NextRequest) {
-  await getSession(request);
+  const session = await getSession(request);
   const { prisma } = await import("@/server/db");
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor")?.trim() || undefined;
@@ -161,13 +274,16 @@ async function freightFeed(request: NextRequest) {
 
   while (items.length < limit && !reachedEnd) {
     const freights = await prisma.frete.findMany({
-      where: { statusFrete: "ABERTO" },
-      include: {
-        enderecoOrigem: true,
-        enderecoDestino: true,
-        fotos: { orderBy: { ordem: "asc" }, select: { url: true } },
+      where: {
+        status_frete_enum: "ABERTO",
+        cliente_id: { not: session.user.id },
       },
-      orderBy: { createdAt: "desc" },
+      include: {
+        endereco_frete_endereco_origem_idToendereco: true,
+        endereco_frete_endereco_destino_idToendereco: true,
+        frete_foto: { orderBy: { ordem: "asc" }, select: { url: true } },
+      },
+      orderBy: { criado_em: "desc" },
       take: 100,
       ...(scanCursor ? { cursor: { id: scanCursor }, skip: 1 } : {}),
     });
@@ -178,8 +294,12 @@ async function freightFeed(request: NextRequest) {
     }
 
     for (const freight of freights) {
-      const origin = approximateRegion(freight.enderecoOrigem);
-      const destination = approximateRegion(freight.enderecoDestino);
+      const originAddress =
+        freight.endereco_frete_endereco_origem_idToendereco;
+      const destinationAddress =
+        freight.endereco_frete_endereco_destino_idToendereco;
+      const origin = approximateRegion(originAddress);
+      const destination = approximateRegion(destinationAddress);
       if (
         q &&
         !`${freight.titulo} ${freight.descricao ?? ""} ${origin} ${destination}`
@@ -193,8 +313,8 @@ async function freightFeed(request: NextRequest) {
       let pickupDistanceKm: number | undefined;
       if (hasArea) {
         if (
-          freight.enderecoOrigem.latitude == null ||
-          freight.enderecoOrigem.longitude == null
+          originAddress.latitude == null ||
+          originAddress.longitude == null
         ) {
           scanCursor = freight.id;
           continue;
@@ -202,8 +322,8 @@ async function freightFeed(request: NextRequest) {
         pickupDistanceKm = distanceKm(
           lat,
           lng,
-          Number(freight.enderecoOrigem.latitude),
-          Number(freight.enderecoOrigem.longitude),
+          Number(originAddress.latitude),
+          Number(originAddress.longitude),
         );
         if (pickupDistanceKm > radiusKm) {
           scanCursor = freight.id;
@@ -211,8 +331,8 @@ async function freightFeed(request: NextRequest) {
         }
       }
 
-      const start = freight.dataColetaPrevista?.toISOString();
-      const end = freight.dataEntregaPrevista?.toISOString();
+      const start = freight.data_coleta_prevista?.toISOString();
+      const end = freight.data_entrega_prevista?.toISOString();
       items.push({
         id: freight.id,
         title: freight.titulo,
@@ -220,9 +340,9 @@ async function freightFeed(request: NextRequest) {
         origin,
         destination,
         vehicle:
-          freight.categoriaPorte === "PEQUENO"
+          freight.categoria_porte === "PEQUENO"
             ? "Caminhão pequeno"
-            : freight.categoriaPorte === "MEDIO"
+            : freight.categoria_porte === "MEDIO"
               ? "Caminhão médio"
               : "Caminhão grande",
         schedule: start
@@ -373,21 +493,21 @@ async function createFreight(request: NextRequest) {
 
   const { freight, savedAddresses } = await prisma.$transaction(async (tx) => {
     const cliente = await tx.cliente.upsert({
-      where: { userId: session.user.id },
-      create: { userId: session.user.id },
+      where: { user_id: session.user.id },
+      create: { user_id: session.user.id },
       update: {},
     });
     const [pickupAddressRow, deliveryAddressRow] = await Promise.all([
-      tx.endereco.create({ data: pickupData }),
-      tx.endereco.create({ data: deliveryData }),
+      tx.endereco.create({ data: { id: randomUUID(), ...pickupData } }),
+      tx.endereco.create({ data: { id: randomUUID(), ...deliveryData } }),
     ]);
     const savedAddresses = [];
     if (payload.savePickup === true) {
       savedAddresses.push(
-        await tx.savedAddress.create({
+        await tx.endereco_salvos.create({
           data: {
             id: randomUUID(),
-            userId: session.user.id,
+            user_id: session.user.id,
             label: text(pickupAddress.label, 80) || "Retirada",
             logradouro: pickupData.logradouro,
             numero: pickupData.numero ?? "",
@@ -398,16 +518,17 @@ async function createFreight(request: NextRequest) {
             cep: pickupData.cep,
             latitude: pickupData.latitude,
             longitude: pickupData.longitude,
+            atualizado_em: new Date(),
           },
         }),
       );
     }
     if (payload.saveDelivery === true) {
       savedAddresses.push(
-        await tx.savedAddress.create({
+        await tx.endereco_salvos.create({
           data: {
             id: randomUUID(),
-            userId: session.user.id,
+            user_id: session.user.id,
             label: text(deliveryAddress.label, 80) || "Entrega",
             logradouro: deliveryData.logradouro,
             numero: deliveryData.numero ?? "",
@@ -418,34 +539,45 @@ async function createFreight(request: NextRequest) {
             cep: deliveryData.cep,
             latitude: deliveryData.latitude,
             longitude: deliveryData.longitude,
+            atualizado_em: new Date(),
           },
         }),
       );
     }
     const freight = await tx.frete.create({
       data: {
-        clienteId: cliente.userId,
+        id: randomUUID(),
+        cliente_id: cliente.user_id,
         titulo: title,
         descricao: description,
-        categoriaPorte: category,
-        statusFrete: "ABERTO",
-        enderecoOrigemId: pickupAddressRow.id,
-        enderecoDestinoId: deliveryAddressRow.id,
-        dataColetaPrevista:
+        categoria_porte: category,
+        status_frete_enum: "ABERTO",
+        endereco_origem_id: pickupAddressRow.id,
+        endereco_destino_id: deliveryAddressRow.id,
+        data_coleta_prevista:
           kind === "fixa" || kind === "intervalo" ? startDate : null,
-        dataEntregaPrevista: kind === "intervalo" ? endDate : null,
-        fotos: {
-          create: photoIds.map((url, index) => ({ url, ordem: index })),
+        data_entrega_prevista: kind === "intervalo" ? endDate : null,
+        atualizado_em: new Date(),
+        frete_foto: {
+          create: photoIds.map((url, index) => ({
+            id: randomUUID(),
+            url,
+            ordem: index,
+          })),
         },
       },
       include: {
-        enderecoOrigem: true,
-        enderecoDestino: true,
-        fotos: { orderBy: { ordem: "asc" } },
+        endereco_frete_endereco_origem_idToendereco: true,
+        endereco_frete_endereco_destino_idToendereco: true,
+        frete_foto: { orderBy: { ordem: "asc" } },
       },
     });
     return { freight, savedAddresses };
   });
+  const originAddress =
+    freight.endereco_frete_endereco_origem_idToendereco;
+  const destinationAddress =
+    freight.endereco_frete_endereco_destino_idToendereco;
 
   return Response.json(
     {
@@ -453,8 +585,8 @@ async function createFreight(request: NextRequest) {
         id: freight.id,
         title: freight.titulo,
         description: freight.descricao ?? "",
-        origin: approximateRegion(freight.enderecoOrigem),
-        destination: approximateRegion(freight.enderecoDestino),
+        origin: approximateRegion(originAddress),
+        destination: approximateRegion(destinationAddress),
         vehicle,
         schedule: kind === "combinar"
           ? { kind: "combinar" }
@@ -466,7 +598,7 @@ async function createFreight(request: NextRequest) {
                 end: endDate?.toISOString(),
               },
         status: "ABERTO",
-        photos: freight.fotos.map((photo) => photo.url),
+        photos: freight.frete_foto.map((photo) => photo.url),
         reviews: {},
       },
       savedAddresses: savedAddresses.map((address) => ({
@@ -528,32 +660,32 @@ async function createProposal(request: NextRequest, freightId: string) {
     const [freight, driver, vehicle, existing] = await Promise.all([
       tx.frete.findUnique({ where: { id: freightId } }),
       tx.motorista.findUnique({
-        where: { userId: session.user.id },
-        include: { user: { include: { companyProfile: true } } },
+        where: { user_id: session.user.id },
+        include: { user: { include: { perfis_empresa: true } } },
       }),
       tx.veiculo.findFirst({
-        where: { id: vehicleId, motoristaId: session.user.id, ativo: true },
+        where: { id: vehicleId, motorista_id: session.user.id, ativo: true },
       }),
       tx.proposta.findUnique({
         where: {
-          freteId_motoristaId: {
-            freteId: freightId,
-            motoristaId: session.user.id,
+          frete_id_motorista_id: {
+            frete_id: freightId,
+            motorista_id: session.user.id,
           },
         },
         select: { id: true },
       }),
     ]);
     if (!freight) return { error: "FREIGHT_NOT_FOUND" as const };
-    if (freight.statusFrete !== "ABERTO")
+    if (freight.status_frete_enum !== "ABERTO")
       return { error: "FREIGHT_CLOSED" as const };
-    if (freight.clienteId === session.user.id)
+    if (freight.cliente_id === session.user.id)
       return { error: "OWN_FREIGHT" as const };
     if (
       !driver ||
-      driver.cadastroStatus !== "APROVADO" ||
-      !driver.cnhValidade ||
-      driver.cnhValidade.getTime() + 86_400_000 <= Date.now()
+      driver.cadastro_status !== "APROVADO" ||
+      !driver.cnh_validade ||
+      driver.cnh_validade.getTime() + 86_400_000 <= Date.now()
     )
       return { error: "DRIVER_NOT_REGISTERED" as const };
     if (!vehicle) return { error: "VEHICLE_NOT_FOUND" as const };
@@ -561,9 +693,9 @@ async function createProposal(request: NextRequest, freightId: string) {
 
     const vehicleLabel =
       [
-        vehicle.categoriaPorte === "PEQUENO"
+        vehicle.categoria_porte === "PEQUENO"
           ? "Caminhão pequeno"
-          : vehicle.categoriaPorte === "MEDIO"
+          : vehicle.categoria_porte === "MEDIO"
             ? "Caminhão médio"
             : "Caminhão grande",
         vehicle.modelo,
@@ -573,11 +705,12 @@ async function createProposal(request: NextRequest, freightId: string) {
     await tx.proposta.create({
       data: {
         id: proposalId,
-        freteId: freightId,
-        motoristaId: session.user.id,
-        valorProposto: (priceCents / 100).toFixed(2),
-        mensagem: message,
-        statusProposta: "PENDENTE",
+        frete_id: freightId,
+        motorista_id: session.user.id,
+        valor_proposto: (priceCents / 100).toFixed(2),
+        status_proposta: "PENDENTE",
+        atualizado_em: new Date(),
+        empresa_id: null,
         ofertas: {
           create: {
             id: offerId,
@@ -594,7 +727,7 @@ async function createProposal(request: NextRequest, freightId: string) {
     await tx.appNotification.create({
       data: {
         id: `proposal:${offerId}`,
-        userId: freight.clienteId,
+        user_id: freight.cliente_id,
         role: "cliente",
         title: "Nova proposta recebida",
         body: `${session.user.name} enviou uma proposta.`,
@@ -609,11 +742,11 @@ async function createProposal(request: NextRequest, freightId: string) {
         freightId,
         driverId: session.user.id,
         driver: session.user.name,
-        rating: Number(driver.avaliacaoMedia),
-        ...(driver.user.companyProfile
+        rating: Number(driver.avaliacao_media),
+        ...(driver.user.perfis_empresa
           ? {
-              providerName: driver.user.companyProfile.tradeName,
-              providerLogo: driver.user.companyProfile.logo,
+              providerName: driver.user.perfis_empresa.tradeName,
+              providerLogo: driver.user.perfis_empresa.logo,
               providerKind: "empresa" as const,
             }
           : {
@@ -667,10 +800,12 @@ async function createProposal(request: NextRequest, freightId: string) {
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ path: string[] }> },
+  context: RouteContext = routeContextFromRequest(request),
 ) {
   try {
     const { path } = await context.params;
+    const uploadPath = /^uploads\/([^/]+)$/.exec(path.join("/"));
+    if (uploadPath) return await readUpload(request, uploadPath[1]);
     if (path.join("/") === "admin/me") {
       const authenticated = verifyAdminToken(
         readAdminCookie(request.headers.get("cookie")),
@@ -694,6 +829,8 @@ export async function GET(
     return error("NOT_IMPLEMENTED", "Esta operação ainda não está disponível.", 501);
   } catch (failure) {
     if (failure instanceof Response) return failure;
+    if (failure instanceof UploadError)
+      return error(failure.code, failure.message, failure.status);
     console.error("API request failed", failure);
     return error("SERVER_ERROR", "Não foi possível concluir a operação.", 500);
   }
@@ -701,11 +838,13 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ path: string[] }> },
+  context: RouteContext = routeContextFromRequest(request),
 ) {
   try {
     const { path } = await context.params;
     if (path.join("/") === "state") return await stateStore(request, "PUT");
+    if (path.join("/") === "driver/operating-area")
+      return await driverOperatingAreaStore(request);
     return error("NOT_IMPLEMENTED", "Esta operação ainda não está disponível.", 501);
   } catch (failure) {
     if (failure instanceof Response) return failure;
@@ -716,10 +855,15 @@ export async function PUT(
 
 export async function POST(
   request: NextRequest,
-  context: { params: Promise<{ path: string[] }> },
+  context: RouteContext = routeContextFromRequest(request),
 ) {
   try {
     const { path } = await context.params;
+    if (path.join("/") === "uploads") return await createUpload(request);
+    const subscriptionPath =
+      /^admin\/registrations\/([^/]+)\/subscription$/.exec(path.join("/"));
+    if (subscriptionPath)
+      return await activateAdminRegistrationSubscription(request, path[2]);
     const reviewPath = /^admin\/registrations\/([^/]+)\/review$/.exec(
       path.join("/"),
     );
@@ -784,6 +928,8 @@ export async function POST(
     return GET(request, context);
   } catch (failure) {
     if (failure instanceof Response) return failure;
+    if (failure instanceof UploadError)
+      return error(failure.code, failure.message, failure.status);
     console.error("POST request failed", failure);
     return error("SERVER_ERROR", "Não foi possível concluir o login.", 500);
   }
@@ -791,7 +937,7 @@ export async function POST(
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ path: string[] }> },
+  context: RouteContext = routeContextFromRequest(request),
 ) {
   return PUT(request, context);
 }

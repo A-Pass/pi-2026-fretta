@@ -1,7 +1,5 @@
 # Assinaturas
 
-Não existe módulo de cobrança ou assinatura no backend atual.
+O painel administrativo pode conceder manualmente ao motorista aprovado um período de acesso de 30 dias. A concessão cria ou atualiza um vínculo de assinatura ativo; se já houver um vínculo vigente, a ativação é idempotente e preserva a data de término existente.
 
-A tela `Minha assinatura` é demonstrativa: informa que o uso das funcionalidades do motorista não depende de assinatura e não cobra valores. Não cria planos, cobranças, clientes de gateway, períodos ou benefícios no banco.
-
-Qualquer implementação futura precisará de uma confirmação de escopo explícita para definir gateway, preço, prazo, cancelamento e regras de acesso. Nenhuma cobrança real deve ser inferida do protótipo.
+Isso não representa uma cobrança, confirmação de pagamento ou integração com gateway. Planos comerciais, preços, pagamentos, renovação e cancelamento continuam fora do escopo atual.

@@ -1,5 +1,10 @@
 import type { Freight, MapPoint, OperatingArea, Store, Proposal } from "@/contracts";
 import type { FreightFeedItem } from "../../api/backend";
+export const defaultArea: OperatingArea = {
+  center: { lat: -16.377, lng: -39.58 },
+  radiusKm: 20,
+  label: "Eunápolis · base de exemplo",
+};
 export function distanceKm(a: MapPoint, b: MapPoint) {
   const rad = (n: number) => (n * Math.PI) / 180;
   const dLat = rad(b.lat - a.lat),
@@ -19,6 +24,18 @@ export function opportunities(store: Store, area: OperatingArea) {
       return distance <= area.radiusKm ? [{ freight: f, distance }] : [];
     })
     .sort((a, b) => a.distance - b.distance);
+}
+export function sortFeedItemsByPickupDistance(items: FreightFeedItem[]) {
+  return items
+    .map((freight) => ({
+      freight,
+      distance: freight.pickupDistanceKm ?? null,
+    }))
+    .sort(
+      (a, b) =>
+        (a.distance ?? Number.POSITIVE_INFINITY) -
+        (b.distance ?? Number.POSITIVE_INFINITY),
+    );
 }
 export function isFreightFeedItem(value: unknown): value is FreightFeedItem {
   if (!value || typeof value !== "object") return false;

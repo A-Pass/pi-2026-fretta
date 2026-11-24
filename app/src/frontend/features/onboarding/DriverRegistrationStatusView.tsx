@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import Link from "next/link";
 import {
   ArrowRight,
   BadgeCheck,
@@ -22,7 +21,7 @@ type Props = {
   onVehicles: () => void;
   onServices: () => void;
   onConversations: () => void;
-  onClient: () => void;
+  onClient?: () => void;
   onLogout: () => void;
 };
 export function DriverRegistrationStatusView({
@@ -198,9 +197,11 @@ export function DriverRegistrationStatusView({
             <button className="secondary" onClick={onConversations}>
               Conversas
             </button>
-            <button className="back" onClick={onClient}>
-              Continuar como cliente
-            </button>
+            {onClient && (
+              <button className="back" onClick={onClient}>
+                Continuar como cliente
+              </button>
+            )}
           </div>
           <div className="onboarding-note">
             <ShieldCheck size={20} />
@@ -208,16 +209,6 @@ export function DriverRegistrationStatusView({
               <b>Análise do cadastro</b> · Os documentos são tratados por um fluxo privado e só podem ser revisados por pessoas autorizadas.
             </span>
           </div>
-          {pending && (
-            <div className="onboarding-admin-link">
-              <p>
-                O resultado da análise será disponibilizado pelo painel administrativo autorizado.
-              </p>
-              <Link className="secondary" href="/admin">
-                Consultar painel administrativo
-              </Link>
-            </div>
-          )}
         </section>
       </main>
     </div>

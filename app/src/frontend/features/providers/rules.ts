@@ -6,6 +6,7 @@ import type {
 } from "@/contracts";
 import { ownProposal } from "../driver/rules";
 export function providerId(p: Proposal) {
+  if (p.providerKind === "empresa" && p.companyId) return p.companyId;
   return p.driverId || `provider:${p.driver}`;
 }
 export function providerName(p: Proposal) {

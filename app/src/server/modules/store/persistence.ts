@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { correctionItems } from "@/contracts/driver-corrections";
 import type {
   Address,
   AdminCase,
   AdminReview,
   DriverRegistration,
   Freight,
+  OperatingArea,
   Proposal,
   ProposalOffer,
   Role,
@@ -36,6 +38,38 @@ function record(value: unknown): RecordValue | null {
 
 function string(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function parseOperatingArea(value: unknown): OperatingArea {
+  const area = record(value);
+  const center = record(area?.center);
+  const lat = center?.lat;
+  const lng = center?.lng;
+  const radiusKm = area?.radiusKm;
+  if (
+    typeof lat !== "number" ||
+    !Number.isFinite(lat) ||
+    lat < -90 ||
+    lat > 90 ||
+    typeof lng !== "number" ||
+    !Number.isFinite(lng) ||
+    lng < -180 ||
+    lng > 180 ||
+    typeof radiusKm !== "number" ||
+    !Number.isFinite(radiusKm) ||
+    radiusKm <= 0 ||
+    radiusKm > 1000
+  )
+    throw new StorePersistenceError(
+      "INVALID_AREA",
+      "A região de atendimento informada é inválida.",
+      422,
+    );
+  return {
+    center: { lat, lng },
+    radiusKm,
+    label: string(area?.label, 160),
+  };
 }
 
 function categoryFromPorte(value: string) {
@@ -79,7 +113,7 @@ function proposalStatus(value: string): Proposal["status"] {
 function freightStatus(
   value: string,
 ): Freight["status"] {
-  if (value === "ACEITO") return "AGENDADO";
+  if (value === "ACEITO" || value === "AGENDADO") return "AGENDADO";
   if (
     value === "EM_TRANSPORTE" ||
     value === "CONCLUIDO" ||
@@ -156,74 +190,74 @@ function savedAddressFromRow(address: {
 
 function vehicleFromRow(vehicle: {
   id: string;
-  categoriaPorte: "PEQUENO" | "MEDIO" | "GRANDE";
+  categoria_porte: "PEQUENO" | "MEDIO" | "GRANDE";
   modelo: string;
   placa: string;
-  capacidadeKg: Prisma.Decimal | null;
+  capacidade_kg: number | null;
   descricao: string;
 }): Vehicle {
   return {
     id: vehicle.id,
-    category: categoryFromPorte(vehicle.categoriaPorte),
+    category: categoryFromPorte(vehicle.categoria_porte),
     model: vehicle.modelo,
     plate: vehicle.placa,
     capacityKg:
-      vehicle.capacidadeKg == null ? undefined : Number(vehicle.capacidadeKg),
+      vehicle.capacidade_kg == null ? undefined : Number(vehicle.capacidade_kg),
     description: vehicle.descricao,
   };
 }
 
 function registrationFromRow(
   driver: {
-    cadastroStatus: string | null;
-    nomeCompleto: string | null;
-    tipoPessoa: string | null;
-    documentoMascarado: string | null;
-    cnpjMascarado: string | null;
-    nomeEmpresa: string | null;
-    cnhNumeroMascarado: string | null;
-    cnhCategoria: string | null;
-    cnhValidade: Date | null;
-    cnhFotoDataUrl: string | null;
-    documentosEnviados: boolean;
-    enviadoEm: Date | null;
-    revisadoEm: Date | null;
+    cadastro_status: string | null;
+    nome_completo: string | null;
+    tipo_pessoa: string | null;
+    documento_mascarado: string | null;
+    cnpj_mascarado: string | null;
+    nome_empresa: string | null;
+    cnh_numero_mascarado: string | null;
+    cnh_categoria: string | null;
+    cnh_validade: Date | null;
+    cnh_foto_data_url: string | null;
+    documentos_enviados: boolean;
+    enviado_em: Date | null;
+    revisado_em: Date | null;
     feedback: string | null;
   }): DriverRegistration | undefined {
   if (
-    !driver.cadastroStatus ||
-    !driver.nomeCompleto ||
-    !driver.cnhNumeroMascarado ||
-    !driver.cnhCategoria ||
-    !driver.cnhValidade ||
-    !driver.enviadoEm
+    !driver.cadastro_status ||
+    !driver.nome_completo ||
+    !driver.cnh_numero_mascarado ||
+    !driver.cnh_categoria ||
+    !driver.cnh_validade ||
+    !driver.enviado_em
   )
     return undefined;
-  const expiresOn = driver.cnhValidade.toISOString().slice(0, 10);
+  const expiresOn = driver.cnh_validade.toISOString().slice(0, 10);
   return {
     status:
-      driver.cadastroStatus === "APROVADO"
+      driver.cadastro_status === "APROVADO"
         ? "APROVADO"
-        : driver.cadastroStatus === "AJUSTES_SOLICITADOS"
+        : driver.cadastro_status === "AJUSTES_SOLICITADOS"
           ? "AJUSTES_SOLICITADOS"
           : "EM_ANALISE",
-    fullName: driver.nomeCompleto,
-    personType: driver.tipoPessoa === "pj" ? "pj" : "pf",
-    cpfMasked: driver.documentoMascarado ?? "",
-    ...(driver.cnpjMascarado ? { cnpjMasked: driver.cnpjMascarado } : {}),
-    ...(driver.nomeEmpresa ? { companyName: driver.nomeEmpresa } : {}),
+    fullName: driver.nome_completo,
+    personType: driver.tipo_pessoa === "pj" ? "pj" : "pf",
+    cpfMasked: driver.documento_mascarado ?? "",
+    ...(driver.cnpj_mascarado ? { cnpjMasked: driver.cnpj_mascarado } : {}),
+    ...(driver.nome_empresa ? { companyName: driver.nome_empresa } : {}),
     license: {
-      numberMasked: driver.cnhNumeroMascarado,
-      category: driver.cnhCategoria,
+      numberMasked: driver.cnh_numero_mascarado,
+      category: driver.cnh_categoria,
       expiresOn,
     },
-    ...(driver.cnhFotoDataUrl
-      ? { licensePhotoDataUrl: driver.cnhFotoDataUrl }
+    ...(driver.cnh_foto_data_url
+      ? { licensePhotoDataUrl: driver.cnh_foto_data_url }
       : {}),
-    documentsSubmitted: driver.documentosEnviados,
-    submittedAt: driver.enviadoEm.toISOString(),
-    ...(driver.revisadoEm
-      ? { reviewedAt: driver.revisadoEm.toISOString() }
+    documentsSubmitted: driver.documentos_enviados,
+    submittedAt: driver.enviado_em.toISOString(),
+    ...(driver.revisado_em
+      ? { reviewedAt: driver.revisado_em.toISOString() }
       : {}),
     ...(driver.feedback ? { feedback: driver.feedback } : {}),
   };
@@ -231,16 +265,15 @@ function registrationFromRow(
 
 function proposalFromRow(proposal: {
   id: string;
-  freteId: string;
-  motoristaId: string;
-  valorProposto: Prisma.Decimal;
-  mensagem: string | null;
-  statusProposta: string;
+  frete_id: string;
+  motorista_id: string;
+  valor_proposto: Prisma.Decimal;
+  status_proposta: string;
   motorista: {
-    avaliacaoMedia: Prisma.Decimal;
+    avaliacao_media: Prisma.Decimal;
     user: {
       name: string;
-      companyProfile: {
+      perfis_empresa: {
         tradeName: string;
         logo: string;
       } | null;
@@ -268,13 +301,13 @@ function proposalFromRow(proposal: {
     status: offerStatus(offer.status),
   }));
   const latest = offers.at(-1);
-  const company = proposal.motorista.user.companyProfile;
+  const company = proposal.motorista.user.perfis_empresa;
   return {
     id: proposal.id,
-    freightId: proposal.freteId,
-    driverId: proposal.motoristaId,
+    freightId: proposal.frete_id,
+    driverId: proposal.motorista_id,
     driver: proposal.motorista.user.name,
-    rating: Number(proposal.motorista.avaliacaoMedia),
+    rating: Number(proposal.motorista.avaliacao_media),
     ...(company
       ? {
           providerKind: "empresa" as const,
@@ -287,10 +320,10 @@ function proposalFromRow(proposal: {
         }),
     ...(latest?.vehicleId ? { vehicleId: latest.vehicleId } : {}),
     vehicle: latest?.vehicle ?? "Veículo cadastrado",
-    priceCents: latest?.priceCents ?? moneyToCents(proposal.valorProposto),
+    priceCents: latest?.priceCents ?? moneyToCents(proposal.valor_proposto),
     availableAt: latest?.availableAt ?? "",
-    message: latest?.message ?? proposal.mensagem ?? "",
-    status: proposalStatus(proposal.statusProposta),
+    message: latest?.message ?? "",
+    status: proposalStatus(proposal.status_proposta),
     offers,
   };
 }
@@ -308,42 +341,43 @@ export async function loadAccountStore(
     database.user.findUnique({
       where: { id: userId },
       include: {
-        motorista: { include: { veiculos: { where: { ativo: true } } } },
-        companyProfile: true,
-        operatingArea: true,
-        savedAddresses: { orderBy: { createdAt: "asc" } },
-        notifications: { orderBy: { createdAt: "desc" } },
+        cliente: true,
+        motorista: { include: { veiculo: { where: { ativo: true } } } },
+        perfis_empresa: true,
+        areas_atuacao: true,
+        endereco_salvos: { orderBy: { criado_em: "asc" } },
+        notificacoes: { orderBy: { createdAt: "desc" } },
       },
     }),
     database.frete.findMany({
       where: {
-        OR: [{ clienteId: userId }, { motoristaSelecionadoId: userId }],
+        OR: [{ cliente_id: userId }, { motorista_selecionado_id: userId }],
       },
       include: {
         cliente: { include: { user: true } },
-        enderecoOrigem: true,
-        enderecoDestino: true,
-        fotos: { orderBy: { ordem: "asc" } },
-        avaliacoes: true,
+        endereco_frete_endereco_origem_idToendereco: true,
+        endereco_frete_endereco_destino_idToendereco: true,
+        frete_foto: { orderBy: { ordem: "asc" } },
+        avaliacao: true,
         acordo: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { criado_em: "desc" },
     }),
     database.proposta.findMany({
       where: {
-        OR: [{ motoristaId: userId }, { frete: { clienteId: userId } }],
+        OR: [{ motorista_id: userId }, { frete: { cliente_id: userId } }],
       },
       include: {
         motorista: {
-          include: { user: { include: { companyProfile: true } } },
+          include: { user: { include: { perfis_empresa: true } } },
         },
         ofertas: { orderBy: { createdAt: "asc" } },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: { criado_em: "asc" },
     }),
     database.mensagem.findMany({
-      where: { OR: [{ remetenteId: userId }, { destinatarioId: userId }] },
-      orderBy: { createdAt: "asc" },
+      where: { OR: [{ remetente_id: userId }, { destinatario_id: userId }] },
+      orderBy: { criado_em: "asc" },
     }),
   ]);
   if (!user)
@@ -356,6 +390,9 @@ export async function loadAccountStore(
   const freights: Freight[] = [];
   const freightAddresses: NonNullable<Store["freightAddresses"]> = {};
   for (const freight of freightRows) {
+    const originAddress = freight.endereco_frete_endereco_origem_idToendereco;
+    const destinationAddress = freight.endereco_frete_endereco_destino_idToendereco;
+    if (!originAddress || !destinationAddress) continue;
     const agreement = freight.acordo;
     const reviews: Freight["reviews"] = {};
     const reviewComments: NonNullable<Freight["reviewComments"]> = {};
@@ -363,13 +400,13 @@ export async function loadAccountStore(
       Freight["reviewPublicComments"]
     > = {};
     const reviewDates: NonNullable<Freight["reviewDates"]> = {};
-    for (const review of freight.avaliacoes) {
-      const role = review.perfilAvaliador as Role;
+    for (const review of freight.avaliacao) {
+      const role = review.perfil_avaliador as Role;
       if (role !== "cliente" && role !== "motorista") continue;
       reviews[role] = review.nota;
       reviewComments[role] = review.comentario ?? "";
       reviewPublicComments[role] = review.publica;
-      reviewDates[role] = review.createdAt.toISOString();
+      reviewDates[role] = review.criado_em.toISOString();
     }
 
     freights.push({
@@ -377,23 +414,23 @@ export async function loadAccountStore(
       clientName: freight.cliente.user.name,
       title: freight.titulo,
       description: freight.descricao ?? "",
-      origin: approximateRegion(freight.enderecoOrigem),
-      destination: approximateRegion(freight.enderecoDestino),
-      vehicle: categoryFromPorte(freight.categoriaPorte),
-      schedule: freight.dataColetaPrevista
-        ? freight.dataEntregaPrevista
+      origin: approximateRegion(originAddress),
+      destination: approximateRegion(destinationAddress),
+      vehicle: categoryFromPorte(freight.categoria_porte),
+      schedule: freight.data_coleta_prevista
+        ? freight.data_entrega_prevista
           ? {
               kind: "intervalo",
-              start: freight.dataColetaPrevista.toISOString(),
-              end: freight.dataEntregaPrevista.toISOString(),
+              start: freight.data_coleta_prevista.toISOString(),
+              end: freight.data_entrega_prevista.toISOString(),
             }
           : {
               kind: "fixa",
-              start: freight.dataColetaPrevista.toISOString(),
+              start: freight.data_coleta_prevista.toISOString(),
             }
         : { kind: "combinar" },
-      status: freightStatus(freight.statusFrete),
-      photos: freight.fotos.map((photo) => photo.url),
+      status: freightStatus(freight.status_frete_enum),
+      photos: freight.frete_foto.map((photo) => photo.url),
       ...(agreement
         ? {
             acceptedProposalId: agreement.propostaId,
@@ -426,49 +463,60 @@ export async function loadAccountStore(
     });
 
     if (
-      freight.clienteId === userId ||
-      freight.motoristaSelecionadoId === userId
+      freight.cliente_id === userId ||
+      freight.motorista_selecionado_id === userId
     ) {
       freightAddresses[freight.id] = {
-        pickup: toAddress(freight.enderecoOrigem),
-        delivery: toAddress(freight.enderecoDestino),
+        pickup: toAddress(originAddress),
+        delivery: toAddress(destinationAddress),
       };
     }
   }
 
-  const proposals = proposalRows.map(proposalFromRow);
+  const proposals = proposalRows
+    .filter(
+      (
+        proposal,
+      ): proposal is typeof proposal & { valor_proposto: Prisma.Decimal } =>
+        proposal.valor_proposto !== null,
+    )
+    .map(proposalFromRow);
   const registration = user.motorista
     ? registrationFromRow(user.motorista)
     : undefined;
   return {
     accountSetupComplete: user.accountSetupComplete,
+    roles: {
+      cliente: Boolean(user.cliente),
+      motorista: Boolean(user.motorista),
+    },
     profile: { id: user.id, name: user.name, photo: user.image ?? "" },
     ...(registration ? { driverRegistration: registration } : {}),
-    vehicles: user.motorista?.veiculos.map(vehicleFromRow) ?? [],
-    ...(user.companyProfile
+    vehicles: user.motorista?.veiculo.map(vehicleFromRow) ?? [],
+    ...(user.perfis_empresa
       ? {
-          companyProfile: {
-            tradeName: user.companyProfile.tradeName,
-            logo: user.companyProfile.logo,
-            about: user.companyProfile.about,
-            city: user.companyProfile.city,
+          perfis_empresa: {
+            tradeName: user.perfis_empresa.tradeName,
+            logo: user.perfis_empresa.logo,
+            about: user.perfis_empresa.about,
+            city: user.perfis_empresa.city,
           },
         }
       : {}),
-    ...(user.operatingArea
+    ...(user.areas_atuacao
       ? {
           operatingArea: {
             center: {
-              lat: Number(user.operatingArea.latitude),
-              lng: Number(user.operatingArea.longitude),
+              lat: Number(user.areas_atuacao.latitude),
+              lng: Number(user.areas_atuacao.longitude),
             },
-            radiusKm: Number(user.operatingArea.radiusKm),
-            label: user.operatingArea.label,
+            radiusKm: Number(user.areas_atuacao.radiusKm),
+            label: user.areas_atuacao.label,
           },
         }
       : {}),
-    addresses: user.savedAddresses.map(savedAddressFromRow),
-    notifications: user.notifications.map((notification) => ({
+    addresses: user.endereco_salvos.map(savedAddressFromRow),
+    notifications: user.notificacoes.map((notification) => ({
       id: notification.id,
       role: notification.role as Role,
       title: notification.title,
@@ -485,11 +533,11 @@ export async function loadAccountStore(
     proposals,
     messages: messageRows.map((message) => ({
       id: message.id,
-      freightId: message.freteId,
-      proposalId: message.propostaId ?? "",
-      role: message.perfilRemetente as Role,
+      freightId: message.frete_id,
+      proposalId: message.proposta_id ?? "",
+      role: message.perfil_remetente as Role,
       text: message.conteudo,
-      createdAt: message.createdAt.toISOString(),
+      createdAt: message.criado_em.toISOString(),
     })),
   };
 }
@@ -603,18 +651,20 @@ function parseRegistration(value: unknown) {
       422,
     );
   return {
-    status: "EM_ANALISE",
-    nomeCompleto: fullName,
-    tipoPessoa: personType,
-    documentoMascarado: cpfMasked,
-    cnpjMascarado: cnpjMasked || null,
-    nomeEmpresa: companyName || null,
-    cnhNumeroMascarado: numberMasked,
-    cnhCategoria: category,
-    cnhValidade: expiryDate,
-    cnhFotoDataUrl: typeof photo === "string" ? photo : null,
-    documentosEnviados: registration.documentsSubmitted === true,
-    enviadoEm: submittedDate,
+    cadastro_status: "EM_ANALISE",
+    nome_completo: fullName,
+    tipo_pessoa: personType,
+    documento_mascarado: cpfMasked,
+    cnpj_mascarado: cnpjMasked || null,
+    nome_empresa: companyName || null,
+    cnh_numero_mascarado: numberMasked,
+    cnh_categoria: category,
+    cnh_validade: expiryDate,
+    cnh_foto_data_url: typeof photo === "string" ? photo : null,
+    documentos_enviados: registration.documentsSubmitted === true,
+    enviado_em: submittedDate,
+    revisado_em: null,
+    feedback: null,
   };
 }
 
@@ -653,10 +703,11 @@ function parseVehicle(value: unknown) {
     );
   return {
     id,
+    categoria: string(vehicle.category, 80),
     modelo: model,
     placa: plate,
-    categoriaPorte: porteFromCategory(vehicle.category),
-    capacidadeKg: capacityKg,
+    categoria_porte: porteFromCategory(vehicle.category),
+    capacidade_kg: capacityKg,
     descricao: description,
   };
 }
@@ -682,19 +733,19 @@ async function saveAddresses(
         422,
       );
     ids.add(address.id);
-    const existing = await tx.savedAddress.findUnique({
+    const existing = await tx.endereco_salvos.findUnique({
       where: { id: address.id },
-      select: { userId: true },
+      select: { user_id: true },
     });
-    if (existing && existing.userId !== userId)
+    if (existing && existing.user_id !== userId)
       throw new StorePersistenceError(
         "FORBIDDEN",
         "Não é permitido alterar endereços de outra conta.",
         403,
       );
-    await tx.savedAddress.upsert({
+    await tx.endereco_salvos.upsert({
       where: { id: address.id },
-      create: { ...address, userId },
+      create: { ...address, user_id: userId, atualizado_em: new Date() },
       update: {
         label: address.label,
         logradouro: address.logradouro,
@@ -706,11 +757,12 @@ async function saveAddresses(
         cep: address.cep,
         latitude: address.latitude,
         longitude: address.longitude,
+        atualizado_em: new Date(),
       },
     });
   }
-  await tx.savedAddress.deleteMany({
-    where: { userId, ...(ids.size ? { id: { notIn: [...ids] } } : {}) },
+  await tx.endereco_salvos.deleteMany({
+    where: { user_id: userId, ...(ids.size ? { id: { notIn: [...ids] } } : {}) },
   });
 }
 
@@ -726,7 +778,7 @@ async function saveVehicles(
       422,
     );
   if (!values.length) {
-    await tx.veiculo.deleteMany({ where: { motoristaId: userId } });
+    await tx.veiculo.deleteMany({ where: { motorista_id: userId } });
     return;
   }
   const vehicles = values.map(parseVehicle);
@@ -741,9 +793,9 @@ async function saveVehicles(
     ids.add(vehicle.id);
     const existing = await tx.veiculo.findUnique({
       where: { id: vehicle.id },
-      select: { motoristaId: true },
+      select: { motorista_id: true },
     });
-    if (existing && existing.motoristaId !== userId)
+    if (existing && existing.motorista_id !== userId)
       throw new StorePersistenceError(
         "FORBIDDEN",
         "Não é permitido alterar veículos de outra conta.",
@@ -751,12 +803,16 @@ async function saveVehicles(
       );
     await tx.veiculo.upsert({
       where: { id: vehicle.id },
-      create: { ...vehicle, motoristaId: userId },
+      create: {
+        ...vehicle,
+        motorista_id: userId,
+        atualizado_em: new Date(),
+      },
       update: vehicle,
     });
   }
   await tx.veiculo.deleteMany({
-    where: { motoristaId: userId, id: { notIn: [...ids] } },
+    where: { motorista_id: userId, id: { notIn: [...ids] } },
   });
 }
 
@@ -768,14 +824,19 @@ async function saveDriverRegistration(
   if (incoming === undefined) return;
   const submitted = parseRegistration(incoming);
   const existing = await tx.motorista.findUnique({
-    where: { userId },
-    select: { cadastroStatus: true, enviadoEm: true },
+    where: { user_id: userId },
+    select: { cadastro_status: true, enviado_em: true },
   });
-  if (existing?.enviadoEm?.getTime() === submitted.enviadoEm.getTime())
+  if (existing?.enviado_em?.getTime() === submitted.enviado_em.getTime())
     return;
   await tx.motorista.upsert({
-    where: { userId },
-    create: { userId, ...submitted },
+    where: { user_id: userId },
+    create: {
+      user_id: userId,
+      codigo_publico: randomUUID(),
+      atualizado_em: new Date(),
+      ...submitted,
+    },
     update: submitted,
   });
 }
@@ -794,7 +855,7 @@ async function saveProposals(
     });
     if (!proposal) continue;
 
-    if (proposal.motoristaId === userId) {
+    if (proposal.motorista_id === userId) {
       const offers = Array.isArray(input.offers)
         ? input.offers.map((offer) => record(offer)).filter(Boolean)
         : [];
@@ -802,9 +863,9 @@ async function saveProposals(
       if (!latest || proposal.ofertas.some((offer) => offer.id === latest.id))
         continue;
       if (
-        (proposal.statusProposta !== "PENDENTE" &&
-          proposal.statusProposta !== "REJEITADA") ||
-        proposal.frete.statusFrete !== "ABERTO"
+        (proposal.status_proposta !== "PENDENTE" &&
+          proposal.status_proposta !== "REJEITADA") ||
+        proposal.frete.status_frete_enum !== "ABERTO"
       )
         throw new StorePersistenceError(
           "PROPOSAL_CLOSED",
@@ -820,7 +881,7 @@ async function saveProposals(
       const vehicleId = string(latest.vehicleId, 120);
       const message = string(latest.message, 2000);
       const vehicle = await tx.veiculo.findFirst({
-        where: { id: vehicleId, motoristaId: userId, ativo: true },
+        where: { id: vehicleId, motorista_id: userId, ativo: true },
       });
       if (
         !Number.isSafeInteger(priceCents) ||
@@ -843,7 +904,7 @@ async function saveProposals(
           "A oferta não tem um identificador válido.",
           422,
         );
-      const label = `${categoryFromPorte(vehicle.categoriaPorte)} · ${vehicle.modelo}`;
+      const label = `${categoryFromPorte(vehicle.categoria_porte)} · ${vehicle.modelo}`;
       await tx.ofertaProposta.create({
         data: {
           id: offerId,
@@ -859,18 +920,17 @@ async function saveProposals(
       await tx.proposta.update({
         where: { id: proposal.id },
         data: {
-          valorProposto: (priceCents / 100).toFixed(2),
-          mensagem: message,
-          statusProposta: "PENDENTE",
+          valor_proposto: (priceCents / 100).toFixed(2),
+          status_proposta: "PENDENTE",
         },
       });
       continue;
     }
 
     if (
-      proposal.frete.clienteId === userId &&
+      proposal.frete.cliente_id === userId &&
       input.status === "ENCERRADA" &&
-      proposal.statusProposta === "PENDENTE"
+      proposal.status_proposta === "PENDENTE"
     ) {
       const declinedOfferId = Array.isArray(input.offers)
         ? input.offers
@@ -890,7 +950,7 @@ async function saveProposals(
         );
       await tx.proposta.update({
         where: { id: proposal.id },
-        data: { statusProposta: "REJEITADA" },
+        data: { status_proposta: "REJEITADA" },
       });
       await tx.ofertaProposta.update({
         where: { id: latestOffer.id },
@@ -929,19 +989,19 @@ async function acceptFreight(
     where: { id: freightId },
     include: { acordo: true },
   });
-  if (!freight || freight.clienteId !== userId)
+  if (!freight || freight.cliente_id !== userId)
     throw new StorePersistenceError(
       "FORBIDDEN",
-      "Não é permitido aceitar propostas neste frete.",
+      "Não é permitido aceitar proposta neste frete.",
       403,
     );
   if (
-    freight.statusFrete === "ACEITO" &&
+    freight.status_frete_enum === "ACEITO" &&
     freight.acordo?.propostaId === proposalId &&
     freight.acordo.ofertaId === offerId
   )
     return;
-  if (freight.statusFrete !== "ABERTO" && freight.statusFrete !== "EM_NEGOCIACAO")
+  if (freight.status_frete_enum !== "ABERTO" && freight.status_frete_enum !== "EM_NEGOCIACAO")
     throw new StorePersistenceError(
       "FREIGHT_CLOSED",
       "Este frete não está mais disponível para aceite.",
@@ -950,18 +1010,18 @@ async function acceptFreight(
   const proposal = await tx.proposta.findUnique({
     where: { id: proposalId },
     include: {
-      motorista: { include: { user: { include: { companyProfile: true } } } },
+      motorista: { include: { user: { include: { perfis_empresa: true } } } },
       ofertas: true,
     },
   });
   const offer = proposal?.ofertas.find((entry) => entry.id === offerId);
   if (
     !proposal ||
-    proposal.freteId !== freightId ||
-    proposal.statusProposta !== "PENDENTE" ||
+    proposal.frete_id !== freightId ||
+    proposal.status_proposta !== "PENDENTE" ||
     !offer ||
     offer.status !== "PENDENTE" ||
-    proposal.motorista.cadastroStatus !== "APROVADO"
+    proposal.motorista.cadastro_status !== "APROVADO"
   )
     throw new StorePersistenceError(
       "PROPOSAL_CHANGED",
@@ -978,34 +1038,34 @@ async function acceptFreight(
   await tx.frete.update({
     where: { id: freightId },
     data: {
-      statusFrete: "ACEITO",
-      motoristaSelecionadoId: proposal.motoristaId,
+      status_frete_enum: "ACEITO",
+      motorista_selecionado_id: proposal.motorista_id,
     },
   });
   await tx.proposta.updateMany({
-    where: { freteId: freightId },
-    data: { statusProposta: "CANCELADA" },
+    where: { frete_id: freightId },
+    data: { status_proposta: "CANCELADA" },
   });
   await tx.proposta.update({
     where: { id: proposalId },
-    data: { statusProposta: "ACEITA" },
+    data: { status_proposta: "ACEITA" },
   });
   await tx.ofertaProposta.updateMany({
-    where: { proposta: { freteId: freightId }, status: "PENDENTE" },
+    where: { proposta: { frete_id: freightId }, status: "PENDENTE" },
     data: { status: "ENCERRADA" },
   });
   await tx.ofertaProposta.update({
     where: { id: offerId },
     data: { status: "ACEITA" },
   });
-  const company = proposal.motorista.user.companyProfile;
+  const company = proposal.motorista.user.perfis_empresa;
   await tx.acordoFrete.upsert({
     where: { freteId: freightId },
     create: {
       freteId: freightId,
       propostaId: proposalId,
       ofertaId: offerId,
-      motoristaId: proposal.motoristaId,
+      motoristaId: proposal.motorista_id,
       nomeMotorista: proposal.motorista.user.name,
       nomePrestador: company?.tradeName ?? null,
       tipoPrestador: company ? "empresa" : "autonomo",
@@ -1018,7 +1078,7 @@ async function acceptFreight(
     update: {
       propostaId: proposalId,
       ofertaId: offerId,
-      motoristaId: proposal.motoristaId,
+      motoristaId: proposal.motorista_id,
       nomeMotorista: proposal.motorista.user.name,
       nomePrestador: company?.tradeName ?? null,
       tipoPrestador: company ? "empresa" : "autonomo",
@@ -1030,10 +1090,10 @@ async function acceptFreight(
     },
   });
   await tx.appNotification.upsert({
-    where: { userId_id: { userId: proposal.motoristaId, id: `accepted:${offerId}` } },
+    where: { user_id_id: { user_id: proposal.motorista_id, id: `accepted:${offerId}` } },
     create: {
       id: `accepted:${offerId}`,
-      userId: proposal.motoristaId,
+      user_id: proposal.motorista_id,
       role: "motorista",
       title: "Sua proposta foi aceita!",
       body: "Consulte o acordo e os endereços do serviço.",
@@ -1058,36 +1118,36 @@ async function saveFreights(
     const freight = await tx.frete.findUnique({
       where: { id: input.id },
       include: {
-        avaliacoes: true,
+        avaliacao: true,
         acordo: true,
-        propostas: {
-          where: { statusProposta: "PENDENTE" },
+        proposta: {
+          where: { status_proposta: "PENDENTE" },
           select: { id: true },
         },
       },
     });
     if (!freight) continue;
-    if (freight.clienteId !== userId && freight.motoristaSelecionadoId !== userId)
+    if (freight.cliente_id !== userId && freight.motorista_selecionado_id !== userId)
       continue;
 
     const requestedStatus = input.status;
-    const isClient = freight.clienteId === userId;
-    const isSelectedDriver = freight.motoristaSelecionadoId === userId;
+    const isClient = freight.cliente_id === userId;
+    const isSelectedDriver = freight.motorista_selecionado_id === userId;
     if (
       isClient &&
       requestedStatus === "AGENDADO" &&
-      (freight.statusFrete === "ABERTO" ||
-        freight.statusFrete === "EM_NEGOCIACAO")
+      (freight.status_frete_enum === "ABERTO" ||
+        freight.status_frete_enum === "EM_NEGOCIACAO")
     ) {
       await acceptFreight(tx, userId, freight.id, input);
     } else if (
-      requestedStatus !== freightStatus(freight.statusFrete) &&
+      requestedStatus !== freightStatus(freight.status_frete_enum) &&
       isClient
     ) {
       if (requestedStatus === "CANCELADO") {
         if (
           !["ABERTO", "EM_NEGOCIACAO", "ACEITO", "EM_TRANSPORTE"].includes(
-            freight.statusFrete,
+            freight.status_frete_enum,
           )
         )
           throw new StorePersistenceError(
@@ -1097,33 +1157,33 @@ async function saveFreights(
           );
         const proposalIds = freight.acordo
           ? [freight.acordo.propostaId]
-          : freight.propostas.map((proposal) => proposal.id);
+          : freight.proposta.map((proposal) => proposal.id);
         requireCancellationMessages(messages, proposalIds, "cliente");
         await tx.frete.update({
           where: { id: freight.id },
-          data: { statusFrete: "CANCELADO" },
+          data: { status_frete_enum: "CANCELADO" },
         });
         await tx.proposta.updateMany({
           where: {
-            freteId: freight.id,
-            statusProposta: { in: ["PENDENTE", "ACEITA"] },
+            frete_id: freight.id,
+            status_proposta: { in: ["PENDENTE", "ACEITA"] },
           },
-          data: { statusProposta: "CANCELADA" },
+          data: { status_proposta: "CANCELADA" },
         });
         await tx.ofertaProposta.updateMany({
           where: {
-            proposta: { freteId: freight.id },
+            proposta: { frete_id: freight.id },
             status: { in: ["PENDENTE", "ACEITA"] },
           },
           data: { status: "ENCERRADA" },
         });
       } else if (
-        (freight.statusFrete === "EM_TRANSPORTE" &&
+        (freight.status_frete_enum === "EM_TRANSPORTE" &&
           requestedStatus === "CONCLUIDO")
       ) {
         await tx.frete.update({
           where: { id: freight.id },
-          data: { statusFrete: "CONCLUIDO" },
+          data: { status_frete_enum: "CONCLUIDO" },
         });
       } else {
         throw new StorePersistenceError(
@@ -1133,23 +1193,23 @@ async function saveFreights(
         );
       }
     } else if (
-      requestedStatus !== freightStatus(freight.statusFrete) &&
+      requestedStatus !== freightStatus(freight.status_frete_enum) &&
       isSelectedDriver
     ) {
       if (
         requestedStatus === "EM_TRANSPORTE" &&
-        freight.statusFrete === "ACEITO" &&
+        freight.status_frete_enum === "ACEITO" &&
         freight.acordo &&
         freight.acordo.disponivelEm.getTime() <= Date.now()
       ) {
         await tx.frete.update({
           where: { id: freight.id },
-          data: { statusFrete: "EM_TRANSPORTE" },
+          data: { status_frete_enum: "EM_TRANSPORTE" },
         });
       } else if (
         requestedStatus === "ABERTO" &&
-        (freight.statusFrete === "ACEITO" ||
-          freight.statusFrete === "EM_TRANSPORTE") &&
+        (freight.status_frete_enum === "ACEITO" ||
+          freight.status_frete_enum === "EM_TRANSPORTE") &&
         freight.acordo
       ) {
         requireCancellationMessages(
@@ -1160,11 +1220,14 @@ async function saveFreights(
         await tx.acordoFrete.delete({ where: { freteId: freight.id } });
         await tx.frete.update({
           where: { id: freight.id },
-          data: { statusFrete: "ABERTO", motoristaSelecionadoId: null },
+          data: {
+            status_frete_enum: "ABERTO",
+            motorista_selecionado_id: null,
+          },
         });
         await tx.proposta.update({
           where: { id: freight.acordo.propostaId },
-          data: { statusProposta: "CANCELADA" },
+          data: { status_proposta: "CANCELADA" },
         });
         await tx.ofertaProposta.updateMany({
           where: {
@@ -1180,7 +1243,7 @@ async function saveFreights(
           409,
         );
       }
-    } else if (requestedStatus !== freightStatus(freight.statusFrete)) {
+    } else if (requestedStatus !== freightStatus(freight.status_frete_enum)) {
       throw new StorePersistenceError(
         "INVALID_FREIGHT_TRANSITION",
         "A situação do frete mudou; atualize os dados antes de tentar novamente.",
@@ -1193,19 +1256,19 @@ async function saveFreights(
     const publicComments = record(input.reviewPublicComments);
     const dates = record(input.reviewDates);
     const role: Role =
-      freight.clienteId === userId ? "cliente" : "motorista";
+      freight.cliente_id === userId ? "cliente" : "motorista";
     const score = reviews?.[role];
     if (score !== undefined) {
-      const existing = freight.avaliacoes.find(
-        (review) => review.avaliadorId === userId,
+      const existing = freight.avaliacao.find(
+        (review) => review.avaliador_id === userId,
       );
       if (existing) continue;
       const targetId =
         role === "cliente"
-          ? freight.motoristaSelecionadoId
-          : freight.clienteId;
+          ? freight.motorista_selecionado_id
+          : freight.cliente_id;
       if (
-        freight.statusFrete !== "CONCLUIDO" ||
+        freight.status_frete_enum !== "CONCLUIDO" ||
         !targetId ||
         !Number.isInteger(score) ||
         Number(score) < 1 ||
@@ -1218,15 +1281,16 @@ async function saveFreights(
         );
       await tx.avaliacao.create({
         data: {
-          freteId: freight.id,
-          avaliadorId: userId,
-          avaliadoId: targetId,
-          perfilAvaliador: role,
+          id: randomUUID(),
+          frete_id: freight.id,
+          avaliador_id: userId,
+          avaliado_id: targetId,
+          perfil_avaliador: role,
           nota: Number(score),
           comentario: string(comments?.[role], 1000),
           publica: publicComments?.[role] === true,
           ...(typeof dates?.[role] === "string"
-            ? { createdAt: new Date(String(dates[role])) }
+            ? { criado_em: new Date(String(dates[role])) }
             : {}),
         },
       });
@@ -1276,12 +1340,12 @@ async function saveMessages(
     if (!id || !proposalId || !text) continue;
     const existing = await tx.mensagem.findUnique({
       where: { id },
-      select: { remetenteId: true, destinatarioId: true },
+      select: { remetente_id: true, destinatario_id: true },
     });
     if (existing) {
       if (
-        existing.remetenteId !== userId &&
-        existing.destinatarioId !== userId
+        existing.remetente_id !== userId &&
+        existing.destinatario_id !== userId
       )
         throw new StorePersistenceError(
           "FORBIDDEN",
@@ -1296,8 +1360,8 @@ async function saveMessages(
     });
     if (
       !proposal ||
-      input.freightId !== proposal.freteId ||
-      (proposal.frete.clienteId !== userId && proposal.motoristaId !== userId)
+      input.freightId !== proposal.frete_id ||
+      (proposal.frete.cliente_id !== userId && proposal.motorista_id !== userId)
     )
       throw new StorePersistenceError(
         "FORBIDDEN",
@@ -1305,7 +1369,7 @@ async function saveMessages(
         403,
       );
     const role: Role =
-      proposal.frete.clienteId === userId ? "cliente" : "motorista";
+      proposal.frete.cliente_id === userId ? "cliente" : "motorista";
     if (input.role !== role)
       throw new StorePersistenceError(
         "INVALID_MESSAGE",
@@ -1313,34 +1377,34 @@ async function saveMessages(
         422,
       );
     const recipientId =
-      role === "cliente" ? proposal.motoristaId : proposal.frete.clienteId;
+      role === "cliente" ? proposal.motorista_id : proposal.frete.cliente_id;
     await tx.mensagem.create({
       data: {
         id,
-        freteId: proposal.freteId,
-        propostaId: proposal.id,
-        remetenteId: userId,
-        destinatarioId: recipientId,
-        perfilRemetente: role,
+        frete_id: proposal.frete_id,
+        proposta_id: proposal.id,
+        remetente_id: userId,
+        destinatario_id: recipientId,
+        perfil_remetente: role,
         conteudo: text,
       },
     });
     await tx.appNotification.upsert({
       where: {
-        userId_id: {
-          userId: recipientId,
+        user_id_id: {
+          user_id: recipientId,
           id: `message:${id}`,
         },
       },
       create: {
         id: `message:${id}`,
-        userId: recipientId,
+        user_id: recipientId,
         role: role === "cliente" ? "motorista" : "cliente",
         title: "Nova mensagem",
         body: text.slice(0, 140),
         createdAt: new Date(),
         read: false,
-        freightId: proposal.freteId,
+        freightId: proposal.frete_id,
         proposalId,
       },
       update: {},
@@ -1384,10 +1448,10 @@ async function saveNotifications(
       );
     ids.add(id);
     await tx.appNotification.upsert({
-      where: { userId_id: { userId, id } },
+      where: { user_id_id: { user_id: userId, id } },
       create: {
         id,
-        userId,
+        user_id: userId,
         role,
         title: string(notification.title, 160),
         body: string(notification.body, 1000),
@@ -1399,6 +1463,32 @@ async function saveNotifications(
       update: notification.read === true ? { read: true } : {},
     });
   }
+}
+
+export async function saveDriverOperatingArea(
+  database: PrismaClient,
+  userId: string,
+  value: unknown,
+): Promise<OperatingArea> {
+  const area = parseOperatingArea(value);
+  await database.operatingArea.upsert({
+    where: { user_id: userId },
+    create: {
+      user_id: userId,
+      latitude: area.center.lat,
+      longitude: area.center.lng,
+      radiusKm: area.radiusKm,
+      label: area.label,
+      updatedAt: new Date(),
+    },
+    update: {
+      latitude: area.center.lat,
+      longitude: area.center.lng,
+      radiusKm: area.radiusKm,
+      label: area.label,
+    },
+  });
+  return area;
 }
 
 export async function saveAccountStore(
@@ -1463,40 +1553,56 @@ export async function saveAccountStore(
               : {}),
           },
         });
+        if (
+          input.accountSetupComplete === true &&
+          input.accountSetupRole === "cliente"
+        )
+          await tx.cliente.upsert({
+              where: { user_id: userId },
+              create: { user_id: userId },
+              update: {},
+          });
         await saveDriverRegistration(tx, userId, input.driverRegistration);
 
         const driverExists = await tx.motorista.findUnique({
-          where: { userId },
-          select: { userId: true },
+          where: { user_id: userId },
+          select: { user_id: true },
         });
         if (Array.isArray(input.vehicles)) {
           if (input.vehicles.length && !driverExists)
-            await tx.motorista.create({ data: { userId } });
+            await tx.motorista.create({
+              data: {
+                user_id: userId,
+                codigo_publico: randomUUID(),
+                atualizado_em: new Date(),
+              },
+            });
           await saveVehicles(tx, userId, input.vehicles);
         }
         if (Array.isArray(input.addresses))
           await saveAddresses(tx, userId, input.addresses);
 
-        const company = record(input.companyProfile);
+        const company = record(input.perfis_empresa);
         if (company) {
           const registration = await tx.motorista.findUnique({
-            where: { userId },
-            select: { tipoPessoa: true },
+            where: { user_id: userId },
+            select: { tipo_pessoa: true },
           });
-          if (registration?.tipoPessoa !== "pj")
+          if (registration?.tipo_pessoa !== "pj")
             throw new StorePersistenceError(
               "FORBIDDEN",
               "Perfil de empresa exige cadastro de motorista pessoa jurídica.",
               403,
             );
           await tx.driverCompanyProfile.upsert({
-            where: { userId },
+            where: { user_id: userId },
             create: {
-              userId,
+              user_id: userId,
               tradeName: string(company.tradeName, 160),
               logo: string(company.logo, 7_000_000),
               about: string(company.about, 2000),
               city: string(company.city, 120),
+              updatedAt: new Date(),
             },
             update: {
               tradeName: string(company.tradeName, 160),
@@ -1507,45 +1613,24 @@ export async function saveAccountStore(
           });
         }
 
-        const area = record(input.operatingArea);
-        if (area) {
-          const center = record(area.center);
-          const lat = center?.lat;
-          const lng = center?.lng;
-          const radiusKm = area.radiusKm;
-          if (
-            typeof lat !== "number" ||
-            !Number.isFinite(lat) ||
-            lat < -90 ||
-            lat > 90 ||
-            typeof lng !== "number" ||
-            !Number.isFinite(lng) ||
-            lng < -180 ||
-            lng > 180 ||
-            typeof radiusKm !== "number" ||
-            !Number.isFinite(radiusKm) ||
-            radiusKm <= 0 ||
-            radiusKm > 1000
-          )
-            throw new StorePersistenceError(
-              "INVALID_AREA",
-              "A região de atendimento informada é inválida.",
-              422,
-            );
+        const areaInput = input.operatingArea ?? input.areas_atuacao;
+        if (areaInput !== undefined && areaInput !== null) {
+          const area = parseOperatingArea(areaInput);
           await tx.operatingArea.upsert({
-            where: { userId },
+            where: { user_id: userId },
             create: {
-              userId,
-              latitude: lat,
-              longitude: lng,
-              radiusKm,
-              label: string(area.label, 160),
+              user_id: userId,
+              latitude: area.center.lat,
+              longitude: area.center.lng,
+              radiusKm: area.radiusKm,
+              label: area.label,
+              updatedAt: new Date(),
             },
             update: {
-              latitude: lat,
-              longitude: lng,
-              radiusKm,
-              label: string(area.label, 160),
+              latitude: area.center.lat,
+              longitude: area.center.lng,
+              radiusKm: area.radiusKm,
+              label: area.label,
             },
           });
         }
@@ -1584,19 +1669,19 @@ export async function saveAccountStore(
 }
 
 function registrationFromDriver(driver: {
-  cadastroStatus: string | null;
-  nomeCompleto: string | null;
-  tipoPessoa: string | null;
-  documentoMascarado: string | null;
-  cnpjMascarado: string | null;
-  nomeEmpresa: string | null;
-  cnhNumeroMascarado: string | null;
-  cnhCategoria: string | null;
-  cnhValidade: Date | null;
-  cnhFotoDataUrl: string | null;
-  documentosEnviados: boolean;
-  enviadoEm: Date | null;
-  revisadoEm: Date | null;
+  cadastro_status: string | null;
+  nome_completo: string | null;
+  tipo_pessoa: string | null;
+  documento_mascarado: string | null;
+  cnpj_mascarado: string | null;
+  nome_empresa: string | null;
+  cnh_numero_mascarado: string | null;
+  cnh_categoria: string | null;
+  cnh_validade: Date | null;
+  cnh_foto_data_url: string | null;
+  documentos_enviados: boolean;
+  enviado_em: Date | null;
+  revisado_em: Date | null;
   feedback: string | null;
 }): DriverRegistration | undefined {
   return registrationFromRow(driver);
@@ -1607,28 +1692,56 @@ function registrationVersion(registration: DriverRegistration) {
     registration.submittedAt,
     registration.reviewedAt || "",
     registration.status,
+    String(registration.submissionCount || 1),
   ].join("|");
 }
 
 export async function loadAdminRegistrations(database: PrismaClient) {
   const drivers = await database.motorista.findMany({
-    where: { cadastroStatus: { not: null } },
+    where: { cadastro_status: { not: null } },
     include: {
       user: true,
-      veiculos: { where: { ativo: true } },
+      veiculo: { where: { ativo: true } },
+      cadastro_motorista: true,
     },
   });
+  const now = new Date();
+  const activeSubscriptions = drivers.length
+    ? await database.vinculo_assinatura.findMany({
+        where: {
+          motorista_id: { in: drivers.map((driver) => driver.user_id) },
+          status: "ATIVA",
+          inicio_em: { lte: now },
+          fim_em: { gt: now },
+        },
+        orderBy: [{ fim_em: "desc" }, { criado_em: "desc" }],
+        select: { motorista_id: true, fim_em: true },
+      })
+    : [];
+  const subscriptionByDriver = new Map<string, string>();
+  for (const subscription of activeSubscriptions)
+    if (subscription.fim_em && !subscriptionByDriver.has(subscription.motorista_id))
+      subscriptionByDriver.set(subscription.motorista_id, subscription.fim_em.toISOString());
   const cases: AdminCase[] = drivers.flatMap((driver) => {
     const registration = registrationFromDriver(driver);
+    const subscriptionExpiresAt = subscriptionByDriver.get(driver.user_id);
     return registration
       ? [
           {
-            id: driver.userId,
+            id: driver.user_id,
             registration: {
               ...registration,
               licensePhotoDataUrl: undefined,
             },
-            vehicles: driver.veiculos.map(vehicleFromRow),
+            vehicles: driver.veiculo.map(vehicleFromRow),
+            ...(subscriptionExpiresAt
+              ? {
+                  subscription: {
+                    active: true as const,
+                    expiresAt: subscriptionExpiresAt,
+                  },
+                }
+              : {}),
           },
         ]
       : [];
@@ -1655,8 +1768,8 @@ export async function loadAdminDocuments(
   const [user, driver] = await Promise.all([
     database.user.findUnique({ where: { id: userId }, select: { image: true } }),
     database.motorista.findUnique({
-      where: { userId },
-      select: { cnhFotoDataUrl: true },
+      where: { user_id: userId },
+      select: { cnh_foto_data_url: true },
     }),
   ]);
   const safeImage = (value: string | null | undefined) =>
@@ -1667,7 +1780,101 @@ export async function loadAdminDocuments(
       : null;
   return {
     profilePhoto: safeImage(user?.image),
-    licensePhoto: safeImage(driver?.cnhFotoDataUrl),
+    licensePhoto: safeImage(driver?.cnh_foto_data_url),
+  };
+}
+
+async function driverRegistrationApproved(
+  tx: Transaction,
+  userId: string,
+): Promise<boolean> {
+  const driver = await tx.motorista.findUnique({
+    where: { user_id: userId },
+    select: {
+      cadastro_status: true,
+      cadastro_motorista: { select: { status: true } },
+    },
+  });
+  const registrationStatus = driver?.cadastro_motorista
+    ? driver.cadastro_motorista.status
+    : driver?.cadastro_status;
+  return registrationStatus === "APROVADO";
+}
+
+async function grantDriverSubscription(
+  tx: Transaction,
+  userId: string,
+): Promise<Date> {
+  const now = new Date();
+  const active = await tx.vinculo_assinatura.findFirst({
+    where: {
+      motorista_id: userId,
+      status: "ATIVA",
+      inicio_em: { lte: now },
+      fim_em: { gt: now },
+    },
+    orderBy: [{ fim_em: "desc" }, { criado_em: "desc" }],
+    select: { id: true, fim_em: true },
+  });
+  if (active?.fim_em) return active.fim_em;
+
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const latest = await tx.vinculo_assinatura.findFirst({
+    where: { motorista_id: userId },
+    orderBy: [{ criado_em: "desc" }, { id: "desc" }],
+    select: { id: true },
+  });
+  if (latest) {
+    await tx.vinculo_assinatura.update({
+      where: { id: latest.id },
+      data: {
+        status: "ATIVA",
+        inicio_em: now,
+        fim_em: expiresAt,
+        atualizado_em: now,
+      },
+    });
+  } else {
+    await tx.vinculo_assinatura.create({
+      data: {
+        id: randomUUID(),
+        motorista_id: userId,
+        status: "ATIVA",
+        inicio_em: now,
+        fim_em: expiresAt,
+        atualizado_em: now,
+      },
+    });
+  }
+  return expiresAt;
+}
+
+export async function activateAdminDriverSubscription(
+  database: PrismaClient,
+  userId: string,
+): Promise<
+  | { subscription: { active: true; expiresAt: string } }
+  | { error: Response }
+> {
+  const expiresAt = await database.$transaction(
+    async (tx) =>
+      (await driverRegistrationApproved(tx, userId))
+        ? grantDriverSubscription(tx, userId)
+        : null,
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+  if (!expiresAt)
+    return {
+      error: Response.json(
+        {
+          code: "DRIVER_NOT_APPROVED",
+          message: "A assinatura só pode ser ativada após a aprovação do cadastro.",
+        },
+        { status: 409 },
+      ),
+    };
+  return {
+    subscription: { active: true, expiresAt: expiresAt.toISOString() },
   };
 }
 
@@ -1681,6 +1888,7 @@ export async function reviewDriverRegistration(
   | { error: Response }
 > {
   const decision = input.decision;
+  const activateSubscription = input.activateSubscription === true;
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
   const checks = input.checks;
   const requiredChecks = [
@@ -1695,6 +1903,9 @@ export async function reviewDriverRegistration(
     requiredChecks.every((check) => checks.includes(check));
   if (
     (decision !== "APROVADO" && decision !== "AJUSTES_SOLICITADOS") ||
+    (input.activateSubscription !== undefined &&
+      typeof input.activateSubscription !== "boolean") ||
+    (activateSubscription && decision !== "APROVADO") ||
     typeof input.expectedVersion !== "string" ||
     reason.length > 1000 ||
     (decision === "AJUSTES_SOLICITADOS" && reason.length < 10) ||
@@ -1710,10 +1921,11 @@ export async function reviewDriverRegistration(
   const outcome = await database.$transaction(
     async (tx) => {
       const driver = await tx.motorista.findUnique({
-        where: { userId },
+        where: { user_id: userId },
         include: {
           user: true,
-          veiculos: { where: { ativo: true } },
+          veiculo: { where: { ativo: true } },
+          cadastro_motorista: true,
         },
       });
       const registration = driver && registrationFromDriver(driver);
@@ -1736,7 +1948,7 @@ export async function reviewDriverRegistration(
         decision === "APROVADO" &&
         (!registration.documentsSubmitted ||
           expiresOn < todayInBahia ||
-          driver.veiculos.length === 0 ||
+          driver.veiculo.length === 0 ||
           !driver.user.image ||
           !registration.licensePhotoDataUrl)
       )
@@ -1744,17 +1956,33 @@ export async function reviewDriverRegistration(
 
       const at = new Date();
       const updatedDriver = await tx.motorista.update({
-        where: { userId },
+        where: { user_id: userId },
         data: {
-          cadastroStatus: decision,
-          revisadoEm: at,
+          cadastro_status: decision,
+          revisado_em: at,
           feedback: decision === "AJUSTES_SOLICITADOS" ? reason : null,
         },
         include: {
           user: true,
-          veiculos: { where: { ativo: true } },
+          veiculo: { where: { ativo: true } },
+          cadastro_motorista: true,
         },
       });
+      if (decision === "APROVADO" && driver.cadastro_motorista)
+        await tx.cadastro_motorista.update({
+          where: { motorista_id: userId },
+          data: {
+            status: "APROVADO",
+            motivo_ajuste: null,
+            itens_ajuste: [],
+            itens_conferidos: correctionItems.map((item) => item.id),
+            analisado_em: at,
+            atualizado_em: at,
+          },
+        });
+      const subscriptionExpiresAt = activateSubscription
+        ? await grantDriverSubscription(tx, userId)
+        : null;
       const review = await tx.adminReview.create({
         data: {
           id: randomUUID(),
@@ -1770,8 +1998,9 @@ export async function reviewDriverRegistration(
       if (!updatedRegistration) return null;
       return {
         registration: updatedRegistration,
-        vehicles: updatedDriver.veiculos.map(vehicleFromRow),
+        vehicles: updatedDriver.veiculo.map(vehicleFromRow),
         review,
+        subscriptionExpiresAt,
       };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -1814,6 +2043,14 @@ export async function reviewDriverRegistration(
       id: userId,
       registration: safeRegistration,
       vehicles: outcome.vehicles,
+      ...(outcome.subscriptionExpiresAt
+        ? {
+            subscription: {
+              active: true as const,
+              expiresAt: outcome.subscriptionExpiresAt.toISOString(),
+            },
+          }
+        : {}),
     },
     review,
   };

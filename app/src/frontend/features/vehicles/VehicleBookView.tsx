@@ -4,11 +4,17 @@ import type { Vehicle } from "@/contracts";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { validateVehicle, vehicleCategories, vehicleLabel } from "./rules";
 type Props = {
+  companyMode?: boolean;
   vehicles: Vehicle[];
   onSave: (vehicles: Vehicle[]) => Promise<boolean>;
   onBack: () => void;
 };
-export function VehicleBookView({ vehicles, onSave, onBack }: Props) {
+export function VehicleBookView({
+  vehicles,
+  onSave,
+  onBack,
+  companyMode = false,
+}: Props) {
   const [draft, setDraft] = useState<Vehicle | null>(null);
   const [removing, setRemoving] = useState<Vehicle | null>(null);
   const [busy, setBusy] = useState(false),
@@ -55,12 +61,13 @@ export function VehicleBookView({ vehicles, onSave, onBack }: Props) {
   return (
     <>
       <button className="back" onClick={onBack}>
-        <ArrowLeft size={18} /> Voltar ao meu perfil
+        <ArrowLeft size={18} />{" "}
+        {companyMode ? "Voltar à equipe" : "Voltar ao meu perfil"}
       </button>
       <div className="section-head">
         <div>
           <span className="eyebrow">PRONTO PARA A PRÓXIMA VIAGEM</span>
-          <h1>Meus veículos</h1>
+          <h1>{companyMode ? "Veículos da empresa" : "Meus veículos"}</h1>
         </div>
         {!draft && (
           <button className="primary" onClick={() => edit()}>

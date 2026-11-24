@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import {
   Truck,
   Home,
+  Building2,
   Package,
   MessageCircle,
   User,
@@ -20,8 +21,22 @@ import { acceptProposal, money } from "./freights/rules";
 import { statusLabels as labels, StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 
-type Props = { role: Role; setRole: (r: Role) => void; onEnter: () => void };
-export function WelcomeView({ role, setRole, onEnter }: Props) {
+type Props = {
+  role: Role;
+  setRole: (r: Role) => void;
+  onEnter: () => void;
+  real?: boolean;
+  companySelected?: boolean;
+  onSelectCompany?: () => void;
+};
+export function WelcomeView({
+  role,
+  setRole,
+  onEnter,
+  real = false,
+  companySelected = false,
+  onSelectCompany,
+}: Props) {
   return (
     <main className="welcome">
       <div className="brand">
@@ -42,7 +57,7 @@ export function WelcomeView({ role, setRole, onEnter }: Props) {
         <div className="role-grid">
           <button
             onClick={() => setRole("cliente")}
-            className={role === "cliente" ? "chosen" : ""}
+            className={!companySelected && role === "cliente" ? "chosen" : ""}
           >
             <Package />
             <b>Preciso de um frete</b>
@@ -50,15 +65,31 @@ export function WelcomeView({ role, setRole, onEnter }: Props) {
           </button>
           <button
             onClick={() => setRole("motorista")}
-            className={role === "motorista" ? "chosen" : ""}
+            className={!companySelected && role === "motorista" ? "chosen" : ""}
           >
             <Truck />
             <b>Sou motorista</b>
             <span>Encontre oportunidades</span>
           </button>
+          {onSelectCompany && (
+            <button
+              type="button"
+              onClick={onSelectCompany}
+              aria-pressed={companySelected}
+              className={
+                companySelected
+                  ? "role-grid-company chosen"
+                  : "role-grid-company"
+              }
+            >
+              <Building2 />
+              <b>Sou uma empresa de transporte</b>
+              <span>Gerencie motoristas e fretes</span>
+            </button>
+          )}
         </div>
         <button className="primary" onClick={() => onEnter()}>
-          Entrar na FRETTA <ArrowRight size={18} />
+          {real ? "Continuar" : "Entrar na FRETTA"} <ArrowRight size={18} />
         </button>
       </div>
       <div className="road-art">

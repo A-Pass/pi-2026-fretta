@@ -205,14 +205,22 @@ export function scheduleError(s: Schedule, today = todayLocal()) {
     return "O fim do intervalo deve ser igual ou posterior ao início.";
   return "";
 }
-export function stepError(d: FreightRequestDraft, step: number) {
-  if (step === 0)
-    return !d.title.trim() || !d.description.trim()
-      ? "Preencha o título e descreva o que precisa transportar."
-      : "";
+export function stepError(
+  d: Omit<FreightRequestDraft, "schedule"> & { schedule: Schedule | null },
+  step: number,
+) {
+  if (step === 0) {
+    if (d.title.trim().length < 3)
+      return "Digite um título com pelo menos 3 caracteres.";
+    if (!d.description.trim()) return "Descreva o que precisa transportar.";
+    return "";
+  }
   if (step === 1) return addressError(d.pickup, d.savePickup);
   if (step === 2) return addressError(d.delivery, d.saveDelivery);
   if (step === 3) return d.vehicle ? "" : "Selecione o veículo necessário.";
-  if (step === 5) return scheduleError(d.schedule);
+  if (step === 4 || step === 5) {
+    if (!d.schedule) return "Escolha quando você quer o frete.";
+    if (step === 5) return scheduleError(d.schedule);
+  }
   return "";
 }

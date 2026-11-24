@@ -103,4 +103,3 @@ export function readAdminCookie(cookieHeader: string | null) {
     )
     ?.slice(ADMIN_COOKIE.length + 1);
 }
-
