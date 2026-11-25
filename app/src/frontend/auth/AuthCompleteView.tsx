@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { Camera, Package, Truck } from "lucide-react";
+import { Camera, Package } from "lucide-react";
 import { ProfileCamera } from "../components/ProfileCamera";
 import { api } from "../api/client";
 import { prepareOnboardingPhoto } from "../features/onboarding/images";
@@ -13,10 +13,9 @@ type Props = {
   name: string;
   email: string;
   image: string | null;
-  role: "cliente" | "motorista";
 };
 
-export function AuthCompleteView({ name, email, image, role }: Props) {
+export function AuthCompleteView({ name, email, image }: Props) {
   const [pending, setPending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -24,7 +23,6 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
   const [documentValue, setDocumentValue] = useState("");
   const [cpfError, setCpfError] = useState("");
   const documentInput = useRef<HTMLInputElement>(null);
-  const isCpf = role === "cliente";
   const [profilePhoto, setProfilePhoto] = useState(image || "");
   const [readingPhoto, setReadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
@@ -56,17 +54,13 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
       return;
     }
     const documentValidation = identityDocumentError(
-      role,
-      isCpf ? "cpf" : "cnh",
+      "cliente",
+      "cpf",
       documentValue,
     );
     if (documentValidation) {
-      if (isCpf) {
-        setCpfError(documentValidation);
-        documentInput.current?.focus();
-      } else {
-        setError(documentValidation);
-      }
+      setCpfError(documentValidation);
+      documentInput.current?.focus();
       return;
     }
 
@@ -83,10 +77,10 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
             photo: profilePhoto,
           },
         },
-        role,
+        "cliente",
       );
       setDocumentValue("");
-      window.location.assign(`/${role}/inicio`);
+      window.location.assign("/cliente/inicio");
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -128,8 +122,8 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
         <h1 id="auth-title">Complete seu cadastro</h1>
         <p className="auth-account-email">{email}</p>
         <div className="auth-role">
-          {role === "motorista" ? <Truck size={18} /> : <Package size={18} />}
-          Perfil de <strong>{role}</strong>
+          <Package size={18} />
+          Perfil de <strong>cliente</strong>
         </div>
         {error && (
           <p className="login-notice" role="alert">
@@ -192,20 +186,17 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
           </div>
 
           <label>
-            {isCpf ? "CPF" : "Carteira de motorista (CNH)"}
+            CPF
             <input
               ref={documentInput}
               aria-invalid={cpfError ? true : undefined}
               aria-describedby={cpfError ? "auth-cpf-error" : undefined}
               autoComplete="off"
               inputMode="numeric"
-              maxLength={isCpf ? undefined : 18}
-              required={!isCpf}
-              aria-required={isCpf ? true : undefined}
+              aria-required="true"
               value={documentValue}
               onChange={(event) => {
-                const value = event.target.value;
-                setDocumentValue(isCpf ? formatCpf(value) : value);
+                setDocumentValue(formatCpf(event.target.value));
                 setCpfError("");
               }}
             />

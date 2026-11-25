@@ -117,8 +117,15 @@ export function FrettaApp() {
       : store?.roles?.motorista && !store.roles.cliente
         ? "motorista"
         : null;
-  const roleRedirectPending =
-    onlyAvailableRole !== null && role !== onlyAvailableRole;
+  const startingDriverRegistration =
+    store !== null &&
+    role === "motorista" &&
+    (tab === "inicio" || tab === "cadastro-motorista") &&
+    !store.driverRegistration;
+  const redirectRole =
+    !startingDriverRegistration && onlyAvailableRole !== role
+      ? onlyAvailableRole
+      : null;
   const latest = useRef<Store | null>(null),
     saving = useRef(false),
     main = useRef<HTMLElement>(null);
@@ -336,9 +343,8 @@ export function FrettaApp() {
     }
   }, [role, chatId, store, acceptanceNotice]);
   useEffect(() => {
-    if (onlyAvailableRole && role !== onlyAvailableRole)
-      setRole(onlyAvailableRole, true);
-  }, [onlyAvailableRole, role, setRole]);
+    if (redirectRole) setRole(redirectRole, true);
+  }, [redirectRole, setRole]);
   useEffect(() => {
     setModal("");
     setUpdatingDriver(false);
@@ -641,26 +647,34 @@ export function FrettaApp() {
         )}
       </main>
     );
-  if (roleRedirectPending)
+  if (redirectRole)
     return (
       <main className="loading" role="status">
         Carregando seu perfil…
       </main>
     );
-  if (role === "motorista" && tab === "cadastro-motorista") {
+  if (
+    startingDriverRegistration ||
+    (role === "motorista" && tab === "cadastro-motorista")
+  ) {
     return (
       <div className="registration-route" ref={registrationPage}>
         {!store.driverRegistration || updatingDriver ? (
           <DriverOnboardingView
             store={store}
-            onBack={() => nav("perfil")}
+            onBack={
+              startingDriverRegistration ? undefined : () => nav("perfil")
+            }
             onClient={
               store.roles?.cliente ? () => setRole("cliente") : undefined
             }
             onLogout={() => void signOut()}
             onServices={() => nav("fretes")}
             onSubmit={async (draft) => {
-              const ok = await save(submitDriverRegistration(store, draft));
+              const ok = await save({
+                ...submitDriverRegistration(store, draft),
+                accountSetupComplete: true,
+              });
               if (ok) {
                 setUpdatingDriver(false);
                 nav("cadastro-motorista");
