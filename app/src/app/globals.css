@@ -5154,3 +5154,41 @@ button.company-brand-home {
   gap: 0.45rem;
 }
 .driver-rating-summary svg { color: #986112; }
+
+.profile-camera-trigger {
+  display: inline-flex;
+  gap: 8px;
+  background: transparent;
+}
+
+.profile-camera-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 20px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.profile-camera-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+.profile-camera-dialog video {
+  display: block;
+  width: 100%;
+  max-height: 55vh;
+  background: #171717;
+  border-radius: 12px;
+}
+
+.profile-camera-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}

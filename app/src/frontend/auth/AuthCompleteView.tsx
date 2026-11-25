@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Camera, Package, Truck } from "lucide-react";
+import { ProfileCamera } from "../components/ProfileCamera";
 import { api } from "../api/client";
 import { prepareOnboardingPhoto } from "../features/onboarding/images";
 import { formatCpf } from "../features/onboarding/rules";
@@ -28,10 +29,7 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
   const [readingPhoto, setReadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
 
-  async function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
+  async function choosePhoto(file: File) {
     setReadingPhoto(true);
     setPhotoError("");
     try {
@@ -174,9 +172,17 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 disabled={readingPhoto || saving}
-                onChange={(event) => void choosePhoto(event)}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void choosePhoto(file);
+                }}
               />
             </label>
+            <ProfileCamera
+              disabled={readingPhoto || saving}
+              onPhoto={choosePhoto}
+            />
             {photoError && (
               <p className="login-notice" role="alert">
                 {photoError}
