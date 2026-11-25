@@ -985,24 +985,10 @@ main {
   min-height: 48px;
   margin-top: 18px;
 }
-.login-provider-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 20px 0 14px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.login-provider-divider::before,
-.login-provider-divider::after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: var(--line);
-}
 .login-providers {
   display: grid;
   gap: 10px;
+  margin-top: 20px;
 }
 .login-provider {
   display: flex;
@@ -1068,8 +1054,7 @@ main {
   font-size: 13px;
   font-weight: 650;
 }
-.auth-complete-form input:not([type="file"]),
-.auth-complete-form select {
+.auth-complete-form input:not([type="file"]) {
   width: 100%;
   min-height: 48px;
 }
@@ -1550,8 +1535,9 @@ main {
 }
 .wizard-footer {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
+  gap: 10px;
   padding: 18px 32px;
   border-top: 1px solid var(--line);
   background: white;
@@ -3904,7 +3890,7 @@ a {
 
 /* Center the profile overview without changing the edit form layout. */
 .profile-page-heading {
-  text-align: left;
+  text-align: center;
 }
 .profile-overview {
   display: flex;
@@ -3938,11 +3924,15 @@ a {
   text-align: center;
 }
 .profile-page-heading ~ .mobile-switch-profile {
-  display: flex;
   justify-content: center;
   margin: 18px auto 0;
   max-width: 100%;
   text-align: center;
+}
+@media (max-width: 640px) {
+  .profile-page-heading ~ .mobile-switch-profile {
+    display: flex;
+  }
 }
 .profile-overview + dialog + .mobile-switch-profile {
   margin-left: auto;
@@ -4020,15 +4010,6 @@ a {
   font-size: 12px;
   line-height: 1.5;
 }
-.wizard-footer {
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 10px;
-}
-.wizard-footer > .secondary {
-  flex: 1 1 0;
-  min-width: 0;
-}
 .request-summary dd {
   overflow-wrap: anywhere;
 }
@@ -4043,9 +4024,6 @@ a {
   .freight-progress ol {
     grid-template-columns: 1fr 1fr;
     gap: 20px 12px;
-  }
-  .wizard-footer > .primary {
-    flex: 1 0 100%;
   }
   .freight-progress li {
     font-size: 11px;

@@ -181,9 +181,11 @@ export function ProfileView({
     );
   return (
     <>
-      <span className="eyebrow">DO SEU JEITO</span>
-      <h1>Meu perfil</h1>
-      <section className="panel profile">
+      <div className="profile-page-heading">
+        <span className="eyebrow">DO SEU JEITO</span>
+        <h1>Meu perfil</h1>
+      </div>
+      <section className="panel profile profile-overview">
         {photo ? (
           <img className="profile-photo" src={photo} alt={`Foto de ${name}`} />
         ) : (

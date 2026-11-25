@@ -55,9 +55,6 @@ export function LoginView({
           <Icon size={18} /> Você está entrando como{" "}
           <strong>{company ? "empresa" : driver ? "motorista" : "cliente"}</strong>
         </div>
-        <div className="login-provider-divider">
-          <span>ou entre com</span>
-        </div>
         <div className="login-providers">
           <button
             className="login-provider"

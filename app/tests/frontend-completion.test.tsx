@@ -60,6 +60,17 @@ test("cadastro pós-Google mostra nome, foto e documento conforme o perfil", () 
   assert.match(html, /Carteira de motorista \(CNH\)/);
   assert.match(html, /validado somente neste navegador/);
   assert.match(html, /Concluir cadastro/);
+
+  const clientHtml = renderToStaticMarkup(
+    <AuthCompleteView
+      name="Pessoa de Teste"
+      email="teste@example.com"
+      image={null}
+      role="cliente"
+    />,
+  );
+  assert.match(clientHtml, /<label>CPF<input[^>]*inputMode="numeric"/i);
+  assert.doesNotMatch(clientHtml, /<select\b/);
 });
 test("documentos são validados sem armazenar seus valores", () => {
   assert.equal(identityDocumentError("cliente", "cpf", "529.982.247-25"), "");

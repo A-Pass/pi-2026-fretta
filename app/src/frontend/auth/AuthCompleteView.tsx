@@ -6,7 +6,7 @@ import { api } from "../api/client";
 import { prepareOnboardingPhoto } from "../features/onboarding/images";
 import { formatCpf } from "../features/onboarding/rules";
 import { authClient } from "./client";
-import { identityDocumentError, type IdentityDocument } from "./registration";
+import { identityDocumentError } from "./registration";
 
 type Props = {
   name: string;
@@ -20,13 +20,10 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fullName, setFullName] = useState(name);
-  const [documentType, setDocumentType] = useState<IdentityDocument>(
-    role === "motorista" ? "cnh" : "cpf",
-  );
   const [documentValue, setDocumentValue] = useState("");
   const [cpfError, setCpfError] = useState("");
   const documentInput = useRef<HTMLInputElement>(null);
-  const isCpf = role === "cliente" && documentType === "cpf";
+  const isCpf = role === "cliente";
   const [profilePhoto, setProfilePhoto] = useState(image || "");
   const [readingPhoto, setReadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
@@ -62,7 +59,7 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
     }
     const documentValidation = identityDocumentError(
       role,
-      documentType,
+      isCpf ? "cpf" : "cnh",
       documentValue,
     );
     if (documentValidation) {
@@ -189,28 +186,14 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
           </div>
 
           <label>
-            {role === "motorista" ? "Carteira de motorista (CNH)" : "Documento"}
-            {role === "cliente" && (
-              <select
-                value={documentType}
-                onChange={(event) => {
-                  const nextType = event.target.value as IdentityDocument;
-                  setDocumentType(nextType);
-                  setCpfError("");
-                  if (nextType === "cpf") setDocumentValue(formatCpf);
-                }}
-              >
-                <option value="cpf">CPF</option>
-                <option value="rg">RG</option>
-              </select>
-            )}
+            {isCpf ? "CPF" : "Carteira de motorista (CNH)"}
             <input
               ref={documentInput}
               aria-invalid={cpfError ? true : undefined}
               aria-describedby={cpfError ? "auth-cpf-error" : undefined}
               autoComplete="off"
-              inputMode={documentType === "rg" ? "text" : "numeric"}
-              maxLength={isCpf ? undefined : documentType === "rg" ? 20 : 18}
+              inputMode="numeric"
+              maxLength={isCpf ? undefined : 18}
               required={!isCpf}
               aria-required={isCpf ? true : undefined}
               value={documentValue}
