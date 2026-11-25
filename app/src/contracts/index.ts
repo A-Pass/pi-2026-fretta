@@ -54,6 +54,11 @@ export interface Agreement {
   acceptedAt: string;
 }
 export interface Proposal {
+  conversation?: {
+    title: string;
+    clientName: string;
+    freightStatus: FreightStatus;
+  };
   companyId?: string;
   requestRevision?: number;
   providerName?: string;
@@ -172,11 +177,18 @@ export interface ApiError {
   code: string;
   message: string;
 }
+export interface DriverDocumentNumbers {
+  cpf: string;
+  cnpj?: string;
+  cnh: string;
+}
+
 export interface FrettaApi {
   load(): Promise<Store>;
   save(
     store: Store,
     accountSetupRole?: "cliente" | "motorista",
+    driverDocumentNumbers?: DriverDocumentNumbers,
   ): Promise<Store>;
 }
 

@@ -85,6 +85,7 @@ type Props = {
   onSaveChange?: (v: boolean) => void;
   privacyNotice?: boolean;
   editingSaved?: boolean;
+  mapFirst?: boolean;
 };
 export function AddressFields({
   value,
@@ -94,6 +95,7 @@ export function AddressFields({
   onSaveChange,
   privacyNotice = false,
   editingSaved = false,
+  mapFirst = false,
 }: Props) {
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
@@ -167,7 +169,10 @@ export function AddressFields({
         const city = data.localidade?.trim();
         const state = data.uf?.trim().toUpperCase();
         if (city && state && /^[A-Z]{2}$/.test(state)) {
-          onChangeRef.current({ ...filled, point: null });
+          onChangeRef.current({
+            ...filled,
+            point: mapFirst ? filled.point : null,
+          });
           locateCityOnMap(
             city,
             state,
@@ -194,7 +199,7 @@ export function AddressFields({
       });
 
     return () => controller.abort();
-  }, [value.postalCode]);
+  }, [value.postalCode, mapFirst]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -442,8 +447,27 @@ export function AddressFields({
   function field(key: keyof Omit<Address, "point">, v: string) {
     onChange({ ...value, [key]: v });
   }
+  const map = (
+    <div className="address-map-section">
+      {cityMapStatus && (
+        <p className="muted" role="status">
+          {cityMapStatus}
+        </p>
+      )}
+      <LocationPicker
+        value={value.point}
+        onChange={(point) => onChange({ ...value, point })}
+        mapCenter={mapFirst && value.point ? null : cityMapCenter}
+        mapZoom={suggestedMapPoint ? 17 : 12}
+        suggestedPoint={mapFirst && value.point ? null : suggestedMapPoint}
+        selectionResetKey={mapFirst ? 0 : (cityToLocate?.requestId ?? 0)}
+        showLocateButton={false}
+      />
+    </div>
+  );
   return (
     <div className="address-fields">
+      {mapFirst && map}
       {!!addresses.length && (
         <label>
           Usar um endereço salvo
@@ -517,7 +541,7 @@ export function AddressFields({
           value={value.city}
           options={cities}
           onChange={(city) => {
-            onChange({ ...value, city, point: null });
+            onChange({ ...value, city, point: mapFirst ? value.point : null });
             locateCityOnMap(city, value.state);
           }}
           maxLength={100}
@@ -571,25 +595,12 @@ export function AddressFields({
           {cityStatus}
         </p>
       )}
-      {cityMapStatus && (
-        <p className="muted" role="status">
-          {cityMapStatus}
-        </p>
-      )}
       {locationStatus && (
         <p className="muted" role="status">
           {locationStatus}
         </p>
       )}
-      <LocationPicker
-        value={value.point}
-        onChange={(point) => onChange({ ...value, point })}
-        mapCenter={cityMapCenter}
-        mapZoom={suggestedMapPoint ? 17 : 12}
-        suggestedPoint={suggestedMapPoint}
-        selectionResetKey={cityToLocate?.requestId ?? 0}
-        showLocateButton={false}
-      />
+      {!mapFirst && map}
       {onSaveChange && (
         <label className="checkbox-line">
           <input

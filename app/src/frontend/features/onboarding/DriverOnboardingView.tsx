@@ -31,6 +31,7 @@ type Props = {
   onClient?: () => void;
   onLogout: () => void;
   onServices: () => void;
+  onBack?: () => void;
 };
 export function DriverOnboardingView({
   store,
@@ -38,12 +39,15 @@ export function DriverOnboardingView({
   onClient,
   onLogout,
   onServices,
+  onBack,
 }: Props) {
   const [step, setStep] = useState(0),
     [busy, setBusy] = useState(false),
     [reading, setReading] = useState(false),
     [error, setError] = useState("");
-  const [leave, setLeave] = useState<"client" | "logout" | null>(null);
+  const [leave, setLeave] = useState<"client" | "logout" | "profile" | null>(
+    null,
+  );
   const [draft, setDraft] = useState<DriverOnboardingDraft>(() => ({
     fullName: store.driverRegistration?.fullName || store.profile?.name || "",
     personType: store.driverRegistration?.personType || "pf",
@@ -131,6 +135,16 @@ export function DriverOnboardingView({
         </button>
       </header>
       <main className="onboarding-main">
+        {onBack && (
+          <button
+            type="button"
+            className="back onboarding-back"
+            disabled={busy || reading}
+            onClick={() => (step ? setLeave("profile") : onBack())}
+          >
+            <ArrowLeft size={17} aria-hidden="true" /> Voltar ao meu perfil
+          </button>
+        )}
         <div className="onboarding-note">
           <ShieldCheck size={20} />
           <span>
@@ -457,24 +471,25 @@ export function DriverOnboardingView({
                       </div>
                     ) : (
                       <>
-                        <label>
-                          Tipo de veículo
-                          <select
-                            value={draft.vehicle.category}
-                            onChange={(e) =>
-                              update({
-                                vehicle: {
-                                  ...draft.vehicle,
-                                  category: e.target.value,
-                                },
-                              })
-                            }
-                          >
-                            {vehicleCategories.map((v) => (
-                              <option key={v}>{v}</option>
-                            ))}
-                          </select>
-                        </label>
+                        <fieldset className="plain-fieldset vehicle-category-options">
+                          <legend>Tipo de veículo</legend>
+                          {vehicleCategories.map((category) => (
+                            <label key={category}>
+                              <input
+                                type="radio"
+                                name="vehicle-category"
+                                value={category}
+                                checked={draft.vehicle.category === category}
+                                onChange={() =>
+                                  update({
+                                    vehicle: { ...draft.vehicle, category },
+                                  })
+                                }
+                              />
+                              <span>{category}</span>
+                            </label>
+                          ))}
+                        </fieldset>
                         <div className="form-grid">
                           <label>
                             Marca e modelo
@@ -691,11 +706,16 @@ export function DriverOnboardingView({
         title="Sair deste cadastro?"
         description="Os dados e imagens deste envio ainda não foram salvos. Você poderá iniciar o cadastro novamente quando voltar."
         confirmLabel={
-          leave === "logout" ? "Sair da conta" : "Continuar como cliente"
+          leave === "logout"
+            ? "Sair da conta"
+            : leave === "profile"
+              ? "Voltar ao meu perfil"
+              : "Continuar como cliente"
         }
         cancelLabel="Continuar cadastro"
         onConfirm={async () => {
           if (leave === "logout") onLogout();
+          else if (leave === "profile") onBack?.();
           else onClient?.();
           return true;
         }}

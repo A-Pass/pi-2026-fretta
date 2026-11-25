@@ -1,6 +1,20 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, MessageCircle } from "lucide-react";
-import type { Role, Store, ProposalOffer } from "@/contracts";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  MessageCircle,
+  Package,
+  Send,
+  Star,
+} from "lucide-react";
+import type { Role, Store, ProposalOffer, Proposal } from "@/contracts";
 import { acceptProposal, money } from "./freights/rules";
 import {
   proposalOffers,
@@ -14,6 +28,7 @@ import { ProposalFormDialog } from "../components/ProposalFormDialog";
 import { dateTime, time } from "../lib/dates";
 import { EmptyState } from "../components/EmptyState";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { isUnreadChat } from "./notifications/rules";
 type Props = {
   store: Store;
   role: Role;
@@ -24,6 +39,7 @@ type Props = {
   onManageVehicles: () => void;
   onProvider?: (id: string, conversationId?: string) => void;
   onFreight?: (id: string) => void;
+  onComplete?: (id: string, score: number) => Promise<boolean>;
   save: (store: Store) => Promise<boolean>;
 };
 export function ChatView({
@@ -37,6 +53,7 @@ export function ChatView({
   onManageVehicles,
   onProvider,
   onFreight,
+  onComplete,
 }: Props) {
   const conversation = store.proposals.find(
     (p) =>
@@ -49,6 +66,12 @@ export function ChatView({
     action: "accept" | "decline";
   } | null>(null);
   const [newOfferOpen, setNewOfferOpen] = useState(false);
+  const [activeOfferOpen, setActiveOfferOpen] = useState(false);
+  const [finishStep, setFinishStep] = useState<"confirm" | "rating" | null>(
+    null,
+  );
+  const [score, setScore] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const [draftText, setDraftText] = useState("");
   const [sending, setSending] = useState(false),
     [sendError, setSendError] = useState("");
@@ -57,7 +80,10 @@ export function ChatView({
       ? conversation
         ? providerName(conversation)
         : "Motorista"
-      : freight?.clientName || "Cliente";
+      : freight?.clientName ||
+        conversation?.conversation?.clientName ||
+        "Cliente";
+  const freightTitle = freight?.title || conversation?.conversation?.title;
   async function submitMessage(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (sending || !draftText.trim()) return;
@@ -90,15 +116,39 @@ export function ChatView({
       at: Date.parse(message.createdAt),
     })),
   ].sort((a, b) => a.at - b.at);
-  const canNegotiate = freight?.status === "ABERTO";
+  const freightStatus =
+    freight?.status ?? conversation?.conversation?.freightStatus;
+  const canNegotiate = freightStatus === "ABERTO";
+  const pendingOffer = offers.at(-1);
+  const activeOffer =
+    role === "cliente" &&
+    canNegotiate &&
+    conversation?.status === "PENDENTE" &&
+    pendingOffer?.status === "PENDENTE"
+      ? pendingOffer
+      : undefined;
+  const agreed =
+    (role === "cliente" || role === "motorista") &&
+    conversation?.status === "ACEITA" &&
+    freightStatus !== "CANCELADO" &&
+    freight?.agreement?.proposalId === conversation.id
+      ? freight.agreement
+      : undefined;
+  const serviceInProgress =
+    freightStatus === "AGENDADO" || freightStatus === "EM_TRANSPORTE";
+  const reviewed = Boolean(freight?.reviews[role]);
+  const pickupAt = agreed?.availableAt ? Date.parse(agreed.availableAt) : NaN;
+  const canFinish = Boolean(
+    onComplete && agreed && serviceInProgress && !reviewed && pickupAt <= now,
+  );
   const canRevise =
     role === "motorista" &&
     conversation &&
     ownProposal(conversation, store.profile?.id || "") &&
     canNegotiate &&
     driverCanPropose(store);
-  const bottom = useRef<HTMLDivElement>(null),
-    messagesViewport = useRef<HTMLDivElement>(null),
+  const messagesViewport = useRef<HTMLDivElement>(null),
+    scrollAnchor = useRef<{ height: number; top: number } | null>(null),
     nearBottom = useRef(true);
   const [hasNew, setHasNew] = useState(false),
     [visibleEvents, setVisibleEvents] = useState(50),
@@ -110,14 +160,42 @@ export function ChatView({
     nearBottom.current = true;
     setHasNew(false);
     setNewOfferOpen(false);
+    setActiveOfferOpen(false);
+    setFinishStep(null);
+    setScore(0);
     setDraftText("");
     setSendError("");
   }, [chatId]);
   useEffect(() => {
-    if (nearBottom.current)
-      bottom.current?.scrollIntoView({ block: "nearest" });
-    else setHasNew(true);
-  }, [chatId, messages.length, offers.length]);
+    if (
+      !serviceInProgress ||
+      reviewed ||
+      !Number.isFinite(pickupAt) ||
+      now >= pickupAt
+    )
+      return;
+    const delay = Math.min(pickupAt - now, 60000);
+    const timer = window.setTimeout(() => setNow(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [now, pickupAt, serviceInProgress, reviewed]);
+  const latestEvent = timeline.at(-1);
+  const latestEventId =
+    latestEvent?.kind === "offer"
+      ? latestEvent.offer.id
+      : latestEvent?.message.id;
+  useLayoutEffect(() => {
+    const viewport = messagesViewport.current;
+    if (!viewport) return;
+    if (scrollAnchor.current) {
+      const { height, top } = scrollAnchor.current;
+      viewport.scrollTop = top + viewport.scrollHeight - height;
+      scrollAnchor.current = null;
+    } else if (nearBottom.current) {
+      viewport.scrollTop = viewport.scrollHeight;
+    } else {
+      setHasNew(true);
+    }
+  }, [chatId, latestEventId, messages.length, offers.length, visibleEvents]);
   if (conversation)
     return (
       <section
@@ -132,37 +210,89 @@ export function ChatView({
           >
             <ArrowLeft />
           </button>
-          <span className="avatar">{contact.slice(0, 2)}</span>
-          <div>
-            <h1>{contact}</h1>
-            <p>
-              {
-                store.freights.find((f) => f.id === conversation.freightId)
-                  ?.title
-              }
-            </p>
+          <span className="avatar" aria-hidden="true">
+            {contact.slice(0, 2).toUpperCase()}
+          </span>
+          <div className="conversation-contact">
+            <h1>
+              {role === "cliente" && onProvider ? (
+                <button
+                  type="button"
+                  className="conversation-contact-name"
+                  aria-label={`Ver perfil de ${contact}`}
+                  onClick={() =>
+                    onProvider(providerId(conversation), conversation.id)
+                  }
+                >
+                  {contact}
+                </button>
+              ) : (
+                contact
+              )}
+            </h1>
+            {freightTitle && <p>{freightTitle}</p>}
           </div>
-          <div className="conversation-header-links">
-            {role === "cliente" && onProvider && (
-              <button
-                className="provider-link"
-                onClick={() =>
-                  onProvider(providerId(conversation), conversation.id)
-                }
-              >
-                Ver perfil
-              </button>
-            )}
-            {onFreight && (
-              <button
-                className="provider-link"
-                onClick={() => onFreight(conversation.freightId)}
-              >
-                Ver frete
-              </button>
-            )}
-          </div>
+          {(activeOffer || canRevise) && (
+            <div className="conversation-header-links">
+              {activeOffer && (
+                <button
+                  className="secondary chat-header-action"
+                  onClick={() => setActiveOfferOpen(true)}
+                >
+                  Proposta ativa
+                </button>
+              )}
+              {canRevise && (
+                <button
+                  className="primary chat-header-action"
+                  onClick={() => setNewOfferOpen(true)}
+                >
+                  Nova proposta
+                </button>
+              )}
+            </div>
+          )}
+          {onFreight && (
+            <button
+              type="button"
+              className="secondary chat-header-action chat-header-freight"
+              onClick={() => onFreight(conversation.freightId)}
+            >
+              <Package size={15} aria-hidden="true" />
+              Ver frete
+            </button>
+          )}
         </header>
+        {agreed && (
+          <div className="chat-service-completion" role="status">
+            <CheckCircle2 size={18} aria-hidden="true" />
+            <div>
+              <strong>
+                {freightStatus === "CONCLUIDO"
+                  ? "Serviço encerrado"
+                  : "Frete contratado"}
+              </strong>
+              {freightStatus !== "CONCLUIDO" && (
+                <p>
+                  {reviewed
+                    ? "Avaliação enviada. Aguardando a outra parte."
+                    : `Retirada em ${dateTime(agreed.availableAt)}`}
+                </p>
+              )}
+            </div>
+            {canFinish && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  setScore(0);
+                  setFinishStep("confirm");
+                }}
+              >
+                Serviço concluído
+              </button>
+            )}
+          </div>
+        )}
         <div
           className="conversation-messages"
           ref={messagesViewport}
@@ -180,7 +310,15 @@ export function ChatView({
               <div className="load-more">
                 <button
                   className="secondary"
-                  onClick={() => setVisibleEvents(visibleEvents + 50)}
+                  onClick={() => {
+                    const viewport = messagesViewport.current;
+                    if (viewport)
+                      scrollAnchor.current = {
+                        height: viewport.scrollHeight,
+                        top: viewport.scrollTop,
+                      };
+                    setVisibleEvents((count) => count + 50);
+                  }}
                 >
                   Carregar mensagens anteriores
                 </button>
@@ -267,7 +405,9 @@ export function ChatView({
               return (
                 <div
                   key={m.id}
-                  className={"bubble " + (m.role === role ? "mine" : "")}
+                  className={
+                    "bubble " + ((m.mine ?? m.role === role) ? "mine" : "")
+                  }
                 >
                   <small>
                     {m.senderName ||
@@ -278,7 +418,6 @@ export function ChatView({
                 </div>
               );
             })}
-            <div ref={bottom} />
           </div>
         </div>
         {hasNew && (
@@ -288,17 +427,11 @@ export function ChatView({
               onClick={() => {
                 nearBottom.current = true;
                 setHasNew(false);
-                bottom.current?.scrollIntoView({ block: "nearest" });
+                const viewport = messagesViewport.current;
+                if (viewport) viewport.scrollTop = viewport.scrollHeight;
               }}
             >
               Novas mensagens ↓
-            </button>
-          </div>
-        )}
-        {canRevise && (
-          <div className="chat-negotiation-action">
-            <button className="secondary" onClick={() => setNewOfferOpen(true)}>
-              Enviar nova proposta
             </button>
           </div>
         )}
@@ -308,15 +441,27 @@ export function ChatView({
           </p>
         )}
         <form className="conversation-composer" onSubmit={submitMessage}>
-          <input
+          <textarea
             value={draftText}
             onChange={(e) => setDraftText(e.target.value)}
+            onKeyDown={(e) => {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing
+              ) {
+                e.preventDefault();
+                if (draftText.trim() && !sending)
+                  e.currentTarget.form?.requestSubmit();
+              }
+            }}
             disabled={sending}
             name="text"
             aria-label="Mensagem"
             placeholder="Escreva sua mensagem…"
             required
             maxLength={2000}
+            rows={1}
           />
           <button
             className="primary"
@@ -329,9 +474,99 @@ export function ChatView({
                   : "Enviar mensagem"
             }
           >
-            {sending ? "…" : <ArrowRight />}
+            {sending ? "…" : <Send size={19} aria-hidden="true" />}
           </button>
         </form>
+        <ConfirmDialog
+          open={activeOfferOpen && Boolean(activeOffer)}
+          onClose={() => setActiveOfferOpen(false)}
+          title={`Proposta de ${contact}`}
+          description={
+            activeOffer
+              ? `${money(activeOffer.priceCents)} · ${activeOffer.vehicle} · Retirada em ${dateTime(activeOffer.availableAt)}`
+              : ""
+          }
+          cancelLabel="Voltar"
+          confirmLabel="Aceitar proposta"
+          destructive={false}
+          onConfirm={async () => {
+            if (!activeOffer) return false;
+            setActiveOfferOpen(false);
+            setDecision({ offer: activeOffer, action: "accept" });
+            return true;
+          }}
+        >
+          {activeOffer?.message && (
+            <p className="chat-offer-comment">{activeOffer.message}</p>
+          )}
+          {activeOffer && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setActiveOfferOpen(false);
+                setDecision({ offer: activeOffer, action: "decline" });
+              }}
+            >
+              Recusar proposta
+            </button>
+          )}
+        </ConfirmDialog>
+        <ConfirmDialog
+          open={finishStep !== null}
+          onClose={() => setFinishStep(null)}
+          title={
+            finishStep === "rating"
+              ? "Avalie o serviço"
+              : "O serviço foi concluído?"
+          }
+          description={
+            finishStep === "rating"
+              ? `Dê uma nota de 1 a 5 para ${contact}.`
+              : "Confirme somente depois que o frete for entregue. As duas partes precisam confirmar para encerrar o serviço."
+          }
+          cancelLabel="Voltar"
+          confirmLabel={
+            finishStep === "rating"
+              ? "Enviar avaliação"
+              : "Sim, concluir serviço"
+          }
+          destructive={false}
+          onConfirm={async () => {
+            if (finishStep === "confirm") {
+              setFinishStep("rating");
+              return true;
+            }
+            if (!score) throw new Error("Selecione uma nota de 1 a 5.");
+            if (!canFinish || !onComplete) return false;
+            const ok = await onComplete(conversation.freightId, score);
+            if (ok) setFinishStep(null);
+            return ok;
+          }}
+        >
+          {finishStep === "rating" && (
+            <fieldset className="chat-rating-stars">
+              <legend>Sua nota</legend>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <label key={value}>
+                  <input
+                    type="radio"
+                    name="chat-score"
+                    checked={score === value}
+                    onChange={() => setScore(value)}
+                  />
+                  <Star
+                    size={24}
+                    aria-hidden="true"
+                    fill={value <= score ? "currentColor" : "none"}
+                  />
+                  <span className="sr-only">
+                    {value} {value === 1 ? "estrela" : "estrelas"}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
+        </ConfirmDialog>
         <ConfirmDialog
           open={decision !== null}
           onClose={() => setDecision(null)}
@@ -392,13 +627,37 @@ export function ChatView({
         </button>
       </EmptyState>
     );
-  const conversations = store.proposals.filter(
-    (p) =>
-      (role === "cliente" || ownProposal(p, store.profile?.id || "")) &&
-      `${providerName(p)} ${store.freights.find((f) => f.id === p.freightId)?.title || ""}`
-        .toLocaleLowerCase()
-        .includes(search.toLocaleLowerCase()),
+  function describe(p: Proposal) {
+    const freight = store.freights.find((item) => item.id === p.freightId);
+    const title = freight?.title || p.conversation?.title || "Frete";
+    const name =
+      role === "cliente"
+        ? providerName(p)
+        : freight?.clientName || p.conversation?.clientName || "Cliente";
+    return { title, name };
+  }
+  const lastMessages = new Map(
+    store.messages.map((message) => [message.proposalId, message]),
   );
+  const conversations = store.proposals
+    .filter(
+      (p) => role === "cliente" || ownProposal(p, store.profile?.id || ""),
+    )
+    .map((p) => ({
+      id: p.id,
+      ...describe(p),
+      last: lastMessages.get(p.id),
+      activityAt:
+        lastMessages.get(p.id)?.createdAt ||
+        proposalOffers(p).at(-1)?.createdAt ||
+        "",
+    }))
+    .filter(({ title, name }) =>
+      `${name} ${title}`
+        .toLocaleLowerCase()
+        .includes(search.trim().toLocaleLowerCase()),
+    )
+    .sort((a, b) => b.activityAt.localeCompare(a.activityAt));
   return (
     <>
       <span className="eyebrow">VAMOS COMBINAR</span>
@@ -415,29 +674,29 @@ export function ChatView({
         />
       </label>
       <section className="panel conversation-list conversations-only">
-        {conversations.slice(0, visibleChats).map((p) => {
-          const last = store.messages
-            .filter((m) => m.proposalId === p.id)
-            .at(-1);
-          const contactName =
-            role === "cliente"
-              ? providerName(p)
-              : store.freights.find((f) => f.id === p.freightId)?.clientName ||
-                "Cliente";
-          return (
-            <button key={p.id} onClick={() => setChatId(p.id)}>
-              <span className="avatar">{contactName.slice(0, 2)}</span>
-              <span className="conversation-summary">
-                <b>{contactName}</b>
-                <small>
-                  {store.freights.find((f) => f.id === p.freightId)?.title}
-                </small>
-                <p>{last?.text || "Toque para conversar sobre o frete"}</p>
-              </span>
-              <ArrowRight size={18} />
-            </button>
-          );
-        })}
+        {conversations
+          .slice(0, visibleChats)
+          .map(({ id, name, title, last }) => {
+            const unread = store.notifications?.some((item) =>
+              isUnreadChat(item, role, id),
+            );
+            return (
+              <button key={id} onClick={() => setChatId(id)}>
+                <span className="avatar" aria-hidden="true">
+                  {name.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="conversation-summary">
+                  <b>{name}</b>
+                  <small>{title}</small>
+                  <p>{last?.text || "Toque para conversar sobre o frete"}</p>
+                </span>
+                {unread && (
+                  <span className="unread-dot" aria-label="Mensagem não lida" />
+                )}
+                <ArrowRight size={18} />
+              </button>
+            );
+          })}
         {!conversations.length && (
           <div className="empty">
             <MessageCircle />

@@ -218,6 +218,7 @@ nav .active {
 .content {
   margin-left: 232px;
   width: calc(100% - 232px);
+  overflow-x: clip;
 }
 /* Keep the application header visible while the page scrolls. */
 .content > header {
@@ -984,24 +985,10 @@ main {
   min-height: 48px;
   margin-top: 18px;
 }
-.login-provider-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 20px 0 14px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.login-provider-divider::before,
-.login-provider-divider::after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: var(--line);
-}
 .login-providers {
   display: grid;
   gap: 10px;
+  margin-top: 20px;
 }
 .login-provider {
   display: flex;
@@ -1067,8 +1054,7 @@ main {
   font-size: 13px;
   font-weight: 650;
 }
-.auth-complete-form input:not([type="file"]),
-.auth-complete-form select {
+.auth-complete-form input:not([type="file"]) {
   width: 100%;
   min-height: 48px;
 }
@@ -1180,15 +1166,17 @@ main {
   flex-direction: column;
 }
 .conversation-header {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   height: auto;
   min-height: 88px;
   flex-shrink: 0;
-  justify-content: flex-start;
   gap: 16px;
   padding: 18px max(24px, calc((100vw - 900px) / 2));
   background: white;
 }
 .conversation-header > .back {
+  grid-column: 1;
   margin: 0;
   padding: 8px;
 }
@@ -1447,6 +1435,23 @@ main {
   background: #28241d88;
   backdrop-filter: blur(4px);
 }
+.wizard-dialog[open]:not([data-closing]) {
+  animation: wizard-panel-enter 280ms cubic-bezier(.18, .7, .25, 1) both;
+}
+.wizard-dialog[open]::backdrop {
+  animation: wizard-backdrop-enter 280ms ease both;
+}
+.wizard-dialog[data-closing]::backdrop {
+  animation: wizard-backdrop-enter 240ms ease reverse both;
+}
+@keyframes wizard-panel-enter {
+  from { transform: translateY(100dvh); }
+  to { transform: translateY(0); }
+}
+@keyframes wizard-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .request-wizard {
   height: 100%;
   display: flex;
@@ -1530,8 +1535,9 @@ main {
 }
 .wizard-footer {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
+  gap: 10px;
   padding: 18px 32px;
   border-top: 1px solid var(--line);
   background: white;
@@ -2923,6 +2929,21 @@ main {
   line-height: 1.25;
   margin-top: 14px;
 }
+.registration-corrections {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+}
+.registration-corrections .alert {
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+}
+.registration-corrections svg {
+  flex-shrink: 0;
+}
 .registration-summary {
   background: #faf9f6;
   border: 1px solid var(--line);
@@ -3250,10 +3271,8 @@ main {
 }
 .conversation-header > .conversation-header-links {
   display: flex;
+  grid-column: 4;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-left: auto;
 }
 .conversation-header-links > button {
   white-space: nowrap;
@@ -3886,7 +3905,7 @@ a {
 
 /* Center the profile overview without changing the edit form layout. */
 .profile-page-heading {
-  text-align: left;
+  text-align: center;
 }
 .profile-overview {
   display: flex;
@@ -3920,11 +3939,15 @@ a {
   text-align: center;
 }
 .profile-page-heading ~ .mobile-switch-profile {
-  display: flex;
   justify-content: center;
   margin: 18px auto 0;
   max-width: 100%;
   text-align: center;
+}
+@media (max-width: 640px) {
+  .profile-page-heading ~ .mobile-switch-profile {
+    display: flex;
+  }
 }
 .profile-overview + dialog + .mobile-switch-profile {
   margin-left: auto;
@@ -4002,15 +4025,6 @@ a {
   font-size: 12px;
   line-height: 1.5;
 }
-.wizard-footer {
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 10px;
-}
-.wizard-footer > .secondary {
-  flex: 1 1 0;
-  min-width: 0;
-}
 .request-summary dd {
   overflow-wrap: anywhere;
 }
@@ -4025,9 +4039,6 @@ a {
   .freight-progress ol {
     grid-template-columns: 1fr 1fr;
     gap: 20px 12px;
-  }
-  .wizard-footer > .primary {
-    flex: 1 0 100%;
   }
   .freight-progress li {
     font-size: 11px;
@@ -4979,6 +4990,149 @@ button.company-brand-home {
   border-bottom: 1px solid var(--line);
   background: #faf7f3;
 }
+.shell nav button {
+  position: relative;
+}
+.nav-chat-unread {
+  position: absolute;
+  top: 9px;
+  left: 31px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #19764b;
+}
+.conversation-screen .chat-service-completion {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding-inline: max(16px, calc((100% - 850px) / 2));
+  background: #edf6ef;
+  color: #23533b;
+}
+.conversation-screen .chat-service-completion p {
+  font-size: 12px;
+}
+.conversation-screen .chat-service-completion button {
+  margin-left: auto;
+}
+.conversation-header .avatar {
+  grid-column: 2;
+}
+.conversation-header > .conversation-contact {
+  grid-column: 3;
+}
+.conversation-contact-name {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: #d7a69a;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.conversation-contact-name:hover,
+.conversation-contact-name:focus-visible {
+  color: #a13925;
+  text-decoration-color: currentColor;
+}
+.conversation-header .chat-header-action {
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.conversation-header .chat-header-freight {
+  grid-column: 5;
+  gap: 6px;
+  background: #fff4ed;
+  border-color: #edc9b9;
+  color: #9c3825;
+}
+.conversation-header .chat-header-freight:hover {
+  background: #fce6d8;
+  border-color: #d29780;
+}
+.registration-route {
+  overflow-x: clip;
+}
+.onboarding-main > .onboarding-back {
+  align-self: flex-start;
+  margin-bottom: 16px;
+}
+.conversation-screen .conversation-messages {
+  overscroll-behavior-y: contain;
+  background: #f6f3ed;
+}
+.conversation-screen .bubble p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.conversation-composer textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 120px;
+  resize: vertical;
+  font-size: 16px;
+}
+.conversation-composer > .primary {
+  align-self: flex-end;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+}
+@media (max-width: 640px) {
+  .nav-chat-unread {
+    top: 0;
+    left: calc(50% + 6px);
+  }
+  .conversation-header .avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+  .conversation-screen .conversation-messages {
+    padding: 14px;
+  }
+}
+@media (max-width: 520px) {
+  .conversation-header {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .conversation-header > .back {
+    padding: 4px;
+  }
+  .conversation-contact h1 {
+    font-size: 16px;
+  }
+  .conversation-contact h1,
+  .conversation-contact p,
+  .conversation-contact-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .conversation-header > .conversation-header-links {
+    grid-column: 3 / -1;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .conversation-header .chat-header-freight {
+    grid-column: 4;
+    grid-row: 1;
+  }
+}
 .chat-service-completion p { margin: 0; }
 .chat-rating-stars {
   display: flex;
@@ -5015,3 +5169,41 @@ button.company-brand-home {
   gap: 0.45rem;
 }
 .driver-rating-summary svg { color: #986112; }
+
+.profile-camera-trigger {
+  display: inline-flex;
+  gap: 8px;
+  background: transparent;
+}
+
+.profile-camera-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 20px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.profile-camera-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+.profile-camera-dialog video {
+  display: block;
+  width: 100%;
+  max-height: 55vh;
+  background: #171717;
+  border-radius: 12px;
+}
+
+.profile-camera-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}

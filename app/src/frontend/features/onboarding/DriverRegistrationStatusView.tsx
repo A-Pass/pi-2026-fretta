@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import {
+  ArrowLeft,
   ArrowRight,
   BadgeCheck,
   Clock3,
@@ -8,8 +9,10 @@ import {
   ShieldCheck,
   TriangleAlert,
   Truck,
+  X,
 } from "lucide-react";
 import type { Store } from "@/contracts";
+import { correctionLabels } from "@/contracts/driver-corrections";
 import { driverCanPropose, licenseDateValid } from "./rules";
 import { dateTime } from "../../lib/dates";
 type Props = {
@@ -21,6 +24,7 @@ type Props = {
   onVehicles: () => void;
   onServices: () => void;
   onConversations: () => void;
+  onBack: () => void;
   onClient?: () => void;
   onLogout: () => void;
 };
@@ -33,6 +37,7 @@ export function DriverRegistrationStatusView({
   onVehicles,
   onServices,
   onConversations,
+  onBack,
   onClient,
   onLogout,
 }: Props) {
@@ -63,6 +68,9 @@ export function DriverRegistrationStatusView({
         </button>
       </header>
       <main className="onboarding-main">
+        <button type="button" className="back onboarding-back" onClick={onBack}>
+          <ArrowLeft size={17} aria-hidden="true" /> Voltar ao meu perfil
+        </button>
         <section
           className={`panel onboarding-status ${approved ? "approved" : rejected || needsUpdate ? "attention" : "pending"}`}
         >
@@ -88,6 +96,16 @@ export function DriverRegistrationStatusView({
                   ? registration.feedback
                   : "Mantenha sua foto, a habilitação e pelo menos um veículo atualizados para enviar propostas."}
           </p>
+          {rejected && !!registration.correctionItems?.length && (
+            <ul className="registration-corrections" role="list" aria-label="Itens a corrigir">
+              {registration.correctionItems.map((item) => (
+                <li key={item} className="alert">
+                  <X size={18} aria-hidden="true" />
+                  {correctionLabels[item]}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="registration-summary">
             <div className="registration-profile">
               {store.profile?.photo && (

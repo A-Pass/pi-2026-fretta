@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
-import { Bell, CheckCheck } from "lucide-react";
+import { ArrowLeft, Bell, CheckCheck } from "lucide-react";
 import type { AppNotification, Role, Store } from "@/contracts";
 import { dateTime } from "../../lib/dates";
 export function NotificationsView({
   store,
   role,
-  save,
+  onRead,
   onOpen,
+  onBack,
 }: {
   store: Store;
   role: Role;
-  save: (s: Store) => Promise<boolean>;
+  onRead: (ids: string[]) => Promise<void>;
   onOpen: (n: AppNotification) => void;
+  onBack: () => void;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -24,14 +26,8 @@ export function NotificationsView({
     setBusy(true);
     setError("");
     try {
-      const ok = await save({
-        ...store,
-        notifications: (store.notifications || []).map((n) =>
-          n.role === role && (!id || n.id === id) ? { ...n, read: true } : n,
-        ),
-      });
-      if (!ok) setError("Não foi possível atualizar as notificações.");
-      return ok;
+      await onRead(all.filter((n) => !n.read && (!id || n.id === id)).map((n) => n.id));
+      return true;
     } catch {
       setError("Não foi possível atualizar as notificações. Tente novamente.");
       return false;
@@ -41,6 +37,9 @@ export function NotificationsView({
   }
   return (
     <>
+      <button type="button" className="back" onClick={onBack}>
+        <ArrowLeft size={18} aria-hidden="true" /> Voltar
+      </button>
       <div className="section-head">
         <div>
           <span className="eyebrow">ACOMPANHE AS NOVIDADES</span>

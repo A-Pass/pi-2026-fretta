@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Camera, Check, ImagePlus, Trash2 } from "lucide-react";
+import { ProfileCamera } from "../../components/ProfileCamera";
 import { prepareOnboardingPhoto } from "./images";
 import type { PreparedPhoto } from "./rules";
 export function OnboardingPhotoField({
@@ -17,6 +18,21 @@ export function OnboardingPhotoField({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  async function choosePhoto(file: File) {
+    setBusy(true);
+    setError("");
+    onReading(true);
+    try {
+      onChange(await prepareOnboardingPhoto(file));
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Não foi possível abrir a imagem.",
+      );
+    } finally {
+      setBusy(false);
+      onReading(false);
+    }
+  }
   return (
     <div className={`onboarding-photo-field ${kind}`}>
       {value ? (
@@ -54,28 +70,16 @@ export function OnboardingPhotoField({
           type="file"
           accept="image/jpeg,image/png,image/webp"
           disabled={busy}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            setBusy(true);
-            setError("");
-            onReading(true);
-            try {
-              onChange(await prepareOnboardingPhoto(file));
-            } catch (e) {
-              setError(
-                e instanceof Error
-                  ? e.message
-                  : "Não foi possível abrir a imagem.",
-              );
-            } finally {
-              setBusy(false);
-              onReading(false);
-            }
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void choosePhoto(file);
           }}
         />
       </label>
+      {kind === "profile" && (
+        <ProfileCamera disabled={busy} onPhoto={choosePhoto} />
+      )}
       <p className="muted">
         JPG, PNG ou WebP · até 5 MB · mínimo de 200 × 200 pixels
       </p>

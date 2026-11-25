@@ -13,20 +13,19 @@ export default async function AuthCompletePage({ searchParams }: PageProps) {
   if (!session) redirect("/");
 
   const params = await searchParams;
-  const role = params.perfil === "motorista" ? "motorista" : "cliente";
+  if (params.perfil === "motorista") redirect("/motorista/inicio");
   const account = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { accountSetupComplete: true },
   });
   if (account?.accountSetupComplete)
-    redirect(`/${role}/inicio`);
+    redirect("/cliente/inicio");
 
   return (
     <AuthCompleteView
       name={session.user.name}
       email={session.user.email}
       image={session.user.image ?? null}
-      role={role}
     />
   );
 }

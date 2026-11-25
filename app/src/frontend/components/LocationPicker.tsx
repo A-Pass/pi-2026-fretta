@@ -52,6 +52,7 @@ export function LocationPicker({
         const m = L.map(container.current, {
           scrollWheelZoom: false,
           zoomControl: false,
+          zoomAnimation: false,
         }).setView(
           value ? [value.lat, value.lng] : [-16.377, -39.58],
           value ? 16 : 13,
@@ -130,7 +131,7 @@ export function LocationPicker({
     return () => {
       disposed = true;
       alive.current = false;
-      map.current?.remove();
+      map.current?.stop().remove();
       map.current = null;
       marker.current = null;
       circle.current = null;

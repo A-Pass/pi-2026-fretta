@@ -1,36 +1,33 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
-import { Camera, Package, Truck } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
+import { Camera, Package } from "lucide-react";
+import { ProfileCamera } from "../components/ProfileCamera";
 import { api } from "../api/client";
 import { prepareOnboardingPhoto } from "../features/onboarding/images";
+import { formatCpf } from "../features/onboarding/rules";
 import { authClient } from "./client";
-import { identityDocumentError, type IdentityDocument } from "./registration";
+import { identityDocumentError } from "./registration";
 
 type Props = {
   name: string;
   email: string;
   image: string | null;
-  role: "cliente" | "motorista";
 };
 
-export function AuthCompleteView({ name, email, image, role }: Props) {
+export function AuthCompleteView({ name, email, image }: Props) {
   const [pending, setPending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fullName, setFullName] = useState(name);
-  const [documentType, setDocumentType] = useState<IdentityDocument>(
-    role === "motorista" ? "cnh" : "cpf",
-  );
   const [documentValue, setDocumentValue] = useState("");
+  const [cpfError, setCpfError] = useState("");
+  const documentInput = useRef<HTMLInputElement>(null);
   const [profilePhoto, setProfilePhoto] = useState(image || "");
   const [readingPhoto, setReadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
 
-  async function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
+  async function choosePhoto(file: File) {
     setReadingPhoto(true);
     setPhotoError("");
     try {
@@ -50,18 +47,20 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
   async function completeRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setCpfError("");
     const normalizedName = fullName.trim();
     if (!normalizedName || normalizedName.length > 120) {
       setError("Informe seu nome, com no máximo 120 caracteres.");
       return;
     }
     const documentValidation = identityDocumentError(
-      role,
-      documentType,
+      "cliente",
+      "cpf",
       documentValue,
     );
     if (documentValidation) {
-      setError(documentValidation);
+      setCpfError(documentValidation);
+      documentInput.current?.focus();
       return;
     }
 
@@ -78,10 +77,10 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
             photo: profilePhoto,
           },
         },
-        role,
+        "cliente",
       );
       setDocumentValue("");
-      window.location.assign(`/${role}/inicio`);
+      window.location.assign("/cliente/inicio");
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -123,8 +122,8 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
         <h1 id="auth-title">Complete seu cadastro</h1>
         <p className="auth-account-email">{email}</p>
         <div className="auth-role">
-          {role === "motorista" ? <Truck size={18} /> : <Package size={18} />}
-          Perfil de <strong>{role}</strong>
+          <Package size={18} />
+          Perfil de <strong>cliente</strong>
         </div>
         {error && (
           <p className="login-notice" role="alert">
@@ -167,9 +166,17 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 disabled={readingPhoto || saving}
-                onChange={(event) => void choosePhoto(event)}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void choosePhoto(file);
+                }}
               />
             </label>
+            <ProfileCamera
+              disabled={readingPhoto || saving}
+              onPhoto={choosePhoto}
+            />
             {photoError && (
               <p className="login-notice" role="alert">
                 {photoError}
@@ -179,27 +186,26 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
           </div>
 
           <label>
-            {role === "motorista" ? "Carteira de motorista (CNH)" : "Documento"}
-            {role === "cliente" && (
-              <select
-                value={documentType}
-                onChange={(event) =>
-                  setDocumentType(event.target.value as IdentityDocument)
-                }
-              >
-                <option value="cpf">CPF</option>
-                <option value="rg">RG</option>
-              </select>
-            )}
+            CPF
             <input
+              ref={documentInput}
+              aria-invalid={cpfError ? true : undefined}
+              aria-describedby={cpfError ? "auth-cpf-error" : undefined}
               autoComplete="off"
-              inputMode={documentType === "rg" ? "text" : "numeric"}
-              maxLength={documentType === "rg" ? 20 : 18}
-              required
+              inputMode="numeric"
+              aria-required="true"
               value={documentValue}
-              onChange={(event) => setDocumentValue(event.target.value)}
+              onChange={(event) => {
+                setDocumentValue(formatCpf(event.target.value));
+                setCpfError("");
+              }}
             />
           </label>
+          {cpfError && (
+            <p id="auth-cpf-error" className="login-notice" role="alert">
+              {cpfError}
+            </p>
+          )}
           <p className="auth-privacy-note">
             Para sua segurança, o documento é validado somente neste navegador e
             não é enviado nem salvo. O envio privado de documentos ainda não

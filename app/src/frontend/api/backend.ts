@@ -100,15 +100,18 @@ export function createBackendClient(
         filters,
       ),
     freight: (value: string, signal?: AbortSignal) =>
-      http.request<PrivateFreightDetail>(`/freights/${id(value)}`, { signal }),
+      http.request<FreightFeedItem & { photos?: string[] }>(
+        `/freights/${id(value)}`,
+        { signal },
+      ),
     createFreight: (payload: NewFreight) =>
       post<FreightCreateResult>("/freights", payload),
     cancelFreight: (value: string) =>
       post<PrivateFreightDetail>(`/freights/${id(value)}/cancel`),
     startFreight: (value: string) =>
       post<PrivateFreightDetail>(`/freights/${id(value)}/start`),
-    completeFreight: (value: string) =>
-      post<PrivateFreightDetail>(`/freights/${id(value)}/complete`),
+    completeFreight: (value: string, score: number) =>
+      post(`/freights/${id(value)}/complete`, { score }),
     proposals: (value: string, cursor?: string) =>
       http.page<Proposal>(`/freights/${id(value)}/proposals`, cursor),
     propose: (
@@ -158,6 +161,8 @@ export function createBackendClient(
       http.page<SavedAddress>("/addresses", cursor),
     notifications: (cursor?: string) =>
       http.page<AppNotification>("/notifications", cursor),
+    readNotifications: (ids: string[]) =>
+      http.request<void>("/notifications/read", { method: "PATCH", body: { ids } }),
     readNotification: (value: string) =>
       http.request<AppNotification>(`/notifications/${id(value)}`, {
         method: "PATCH",

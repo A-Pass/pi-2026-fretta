@@ -5,12 +5,13 @@ export const api: FrettaApi = {
   async load() {
     return createHttpTransport().request<Store>("/state");
   },
-  async save(store, accountSetupRole) {
+  async save(store, accountSetupRole, driverDocumentNumbers) {
     return createHttpTransport().request<Store>("/state", {
       method: "PUT",
       body: {
         ...store,
         ...(accountSetupRole ? { accountSetupRole } : {}),
+        ...(driverDocumentNumbers ? { driverDocumentNumbers } : {}),
       },
     });
   },
