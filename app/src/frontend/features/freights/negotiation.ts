@@ -57,21 +57,18 @@ export function reviseOffer(
   offer: ProposalOffer,
 ): Store {
   const p = store.proposals.find((x) => x.id === proposalId);
-  if (
-    !p ||
-    !store.freights.some((f) => f.id === p.freightId && f.status === "ABERTO")
-  )
+  const freight = store.freights.find((f) => f.id === p?.freightId);
+  if (!p || (freight?.status ?? p.conversation?.freightStatus) !== "ABERTO")
     throw new Error("Este frete não está mais aberto para propostas.");
   if (
     !Number.isSafeInteger(offer.priceCents) ||
     offer.priceCents <= 0 ||
     !Number.isFinite(Date.parse(offer.availableAt)) ||
     Date.parse(offer.availableAt) <= Date.now() ||
-    !offer.vehicle.trim() ||
-    !offer.message.trim()
+    !offer.vehicle.trim()
   )
     throw new Error(
-      "Preencha o veículo, o comentário, um valor positivo e uma disponibilidade futura.",
+      "Preencha o veículo, um valor positivo e uma disponibilidade futura.",
     );
   return {
     ...store,
@@ -79,8 +76,7 @@ export function reviseOffer(
       x.id === p.id
         ? {
             ...x,
-            requestRevision:
-              store.freights.find((f) => f.id === p.freightId)?.revision || 0,
+            requestRevision: freight?.revision || 0,
             vehicle: offer.vehicle,
             vehicleId: offer.vehicleId,
             priceCents: offer.priceCents,

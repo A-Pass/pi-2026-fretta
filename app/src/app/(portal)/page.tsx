@@ -1,4 +1,3 @@
-import { FrettaApp } from "@/frontend/features/FrettaApp";
 import {
   hasLegacyRouteParams,
   parseLegacyRoute,
@@ -21,5 +20,5 @@ export default async function Page({ searchParams }: PageProps) {
     redirect(routeUrl(parseLegacyRoute(query.toString())));
   }
 
-  return <FrettaApp />;
+  return null;
 }

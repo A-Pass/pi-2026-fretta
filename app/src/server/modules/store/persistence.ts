@@ -269,6 +269,11 @@ function proposalFromRow(proposal: {
   motorista_id: string;
   valor_proposto: Prisma.Decimal;
   status_proposta: string;
+  frete: {
+    titulo: string;
+    status_frete_enum: string;
+    cliente: { user: { name: string } };
+  };
   motorista: {
     avaliacao_media: Prisma.Decimal;
     user: {
@@ -305,6 +310,11 @@ function proposalFromRow(proposal: {
   return {
     id: proposal.id,
     freightId: proposal.frete_id,
+    conversation: {
+      title: proposal.frete.titulo,
+      clientName: proposal.frete.cliente.user.name,
+      freightStatus: freightStatus(proposal.frete.status_frete_enum),
+    },
     driverId: proposal.motorista_id,
     driver: proposal.motorista.user.name,
     rating: Number(proposal.motorista.avaliacao_media),
@@ -370,6 +380,13 @@ export async function loadAccountStore(
       include: {
         motorista: {
           include: { user: { include: { perfis_empresa: true } } },
+        },
+        frete: {
+          select: {
+            titulo: true,
+            status_frete_enum: true,
+            cliente: { select: { user: { select: { name: true } } } },
+          },
         },
         ofertas: { orderBy: { createdAt: "asc" } },
       },
@@ -533,6 +550,7 @@ export async function loadAccountStore(
     proposals,
     messages: messageRows.map((message) => ({
       id: message.id,
+      mine: message.remetente_id === userId,
       freightId: message.frete_id,
       proposalId: message.proposta_id ?? "",
       role: message.perfil_remetente as Role,
@@ -889,12 +907,11 @@ async function saveProposals(
         priceCents > 100_000_000 ||
         !Number.isFinite(availableAt.getTime()) ||
         availableAt.getTime() <= Date.now() ||
-        !vehicle ||
-        !message
+        !vehicle
       )
         throw new StorePersistenceError(
           "INVALID_PROPOSAL",
-          "Informe valor, veículo, disponibilidade e comentário válidos.",
+          "Informe valor, veículo e disponibilidade válidos.",
           422,
         );
       const offerId = string(latest.id, 120);
@@ -905,6 +922,10 @@ async function saveProposals(
           422,
         );
       const label = `${categoryFromPorte(vehicle.categoria_porte)} · ${vehicle.modelo}`;
+      await tx.ofertaProposta.updateMany({
+        where: { propostaId: proposal.id, status: "PENDENTE" },
+        data: { status: "SUBSTITUIDA" },
+      });
       await tx.ofertaProposta.create({
         data: {
           id: offerId,
@@ -932,11 +953,11 @@ async function saveProposals(
       input.status === "ENCERRADA" &&
       proposal.status_proposta === "PENDENTE"
     ) {
-      const declinedOfferId = Array.isArray(input.offers)
-        ? input.offers
-            .map((offer) => record(offer))
-            .find((offer) => offer?.status === "RECUSADA")?.id
-        : undefined;
+      const declinedOffer = Array.isArray(input.offers)
+        ? record(input.offers.at(-1))
+        : null;
+      const declinedOfferId =
+        declinedOffer?.status === "RECUSADA" ? declinedOffer.id : undefined;
       const latestOffer = proposal.ofertas.at(-1);
       if (
         !latestOffer ||

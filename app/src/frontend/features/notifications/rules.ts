@@ -176,3 +176,18 @@ export function unreadNotifications(
 ): AppNotification[] {
   return (store.notifications || []).filter((n) => n.role === role && !n.read);
 }
+
+export function isUnreadChat(
+  notification: AppNotification,
+  role: Role,
+  proposalId?: string,
+) {
+  return (
+    notification.role === role &&
+    !notification.read &&
+    (notification.id.startsWith("message:") ||
+      notification.event === "NOVA_MENSAGEM" ||
+      notification.title === "Nova mensagem") &&
+    (proposalId === undefined || notification.proposalId === proposalId)
+  );
+}

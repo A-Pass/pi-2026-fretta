@@ -148,13 +148,12 @@ export function ProposalFormDialog({
               />
             </label>
             <label>
-              Comentário
+              Comentário (opcional)
               <textarea
                 name="message"
                 placeholder="Explique o que está incluído e os detalhes combinados…"
                 maxLength={2000}
                 defaultValue={proposal?.message}
-                required
               />
             </label>
           </fieldset>

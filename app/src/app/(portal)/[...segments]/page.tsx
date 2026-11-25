@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { FrettaApp } from "@/frontend/features/FrettaApp";
 import { isAppRoute } from "@/frontend/features/navigation/routes";
 
 type PageProps = {
@@ -11,5 +10,5 @@ export default async function RoutedPage({ params }: PageProps) {
   const pathname = `/${segments.map(encodeURIComponent).join("/")}`;
   if (!isAppRoute(pathname)) notFound();
 
-  return <FrettaApp />;
+  return null;
 }
