@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, Camera, LogOut, Pencil, User, X } from "lucide-react";
+import { ProfileCamera } from "../components/ProfileCamera";
 import type { Role, DriverRegistration } from "@/contracts";
 import { prepareOnboardingPhoto } from "./onboarding/images";
 import { useDiscardChanges } from "../components/useDiscardChanges";
@@ -45,6 +46,27 @@ export function ProfileView({
   const discard = useDiscardChanges(
     editing && (draftName !== name || draftPhoto !== photo),
   );
+  async function choosePhoto(file: File) {
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      file.size > 2000000
+    ) {
+      setError("Escolha uma foto JPG, PNG ou WebP de até 2 MB.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const image = await prepareOnboardingPhoto(file);
+      setDraftPhoto(image.dataUrl);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Não foi possível abrir a foto.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
   if (editing)
     return (
       <>
@@ -91,41 +113,19 @@ export function ProfileView({
               )}
             </div>
             <label className="photo-upload">
-              <Camera size={18} /> Alterar foto de perfil
+              <Camera size={18} /> Escolher foto de perfil
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 disabled={loading || saving}
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (!file) return;
-                  if (
-                    !["image/jpeg", "image/png", "image/webp"].includes(
-                      file.type,
-                    ) ||
-                    file.size > 2000000
-                  ) {
-                    setError("Escolha uma foto JPG, PNG ou WebP de até 2 MB.");
-                    return;
-                  }
-                  setLoading(true);
-                  setError("");
-                  try {
-                    const image = await prepareOnboardingPhoto(file);
-                    setDraftPhoto(image.dataUrl);
-                  } catch (e) {
-                    setError(
-                      e instanceof Error
-                        ? e.message
-                        : "Não foi possível abrir a foto.",
-                    );
-                  } finally {
-                    setLoading(false);
-                  }
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void choosePhoto(file);
                 }}
               />
             </label>
+            <ProfileCamera disabled={loading || saving} onPhoto={choosePhoto} />
             <p className="muted photo-help">JPG, PNG ou WebP · até 2 MB</p>
             {draftPhoto && !photoRequired && (
               <button
@@ -181,18 +181,18 @@ export function ProfileView({
     );
   return (
     <>
-      <span className="eyebrow">DO SEU JEITO</span>
-      <h1>Meu perfil</h1>
-      <section className="panel profile">
+      <div className="profile-page-heading">
+        <span className="eyebrow">DO SEU JEITO</span>
+        <h1>Meu perfil</h1>
+      </div>
+      <section className="panel profile profile-overview">
         {photo ? (
           <img className="profile-photo" src={photo} alt={`Foto de ${name}`} />
         ) : (
           <div className="avatar large">{name.slice(0, 2).toUpperCase()}</div>
         )}
         <h2>{name}</h2>
-        <p>
-          {role === "cliente" ? "Cliente" : "Motorista"} · Conta FRETTA
-        </p>
+        <p>{role === "cliente" ? "Cliente" : "Motorista"} · Conta FRETTA</p>
         <button
           className="primary"
           onClick={() => {

@@ -1,11 +1,14 @@
+import { registerDuePickups } from "@/server/modules/freights/pickups";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { getAuthConfigurationError } from "@/server/auth/env";
 import {
   activateAdminDriverSubscription,
   loadAccountStore,
+  loadAdminDocumentNumbers,
   loadAdminDocuments,
   loadAdminRegistrations,
+  markAccountNotificationsRead,
   reviewDriverRegistration,
   saveAccountStore,
   saveDriverOperatingArea,
@@ -132,7 +135,10 @@ async function stateStore(request: NextRequest, method: "GET" | "PUT") {
     const failure = await saveAccountStore(prisma, userId, body);
     if (failure) return failure;
   }
-  return Response.json(await loadAccountStore(prisma, userId));
+  if (method === "GET") await registerDuePickups(prisma, userId);
+  return Response.json(await loadAccountStore(prisma, userId), {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }
 
 async function driverOperatingAreaStore(request: NextRequest) {
@@ -193,6 +199,15 @@ async function adminPrivateDocuments(request: NextRequest, userId: string) {
     return error("UNAUTHORIZED", "Faça login como administrador.", 401);
   const { prisma } = await import("@/server/db");
   return Response.json(await loadAdminDocuments(prisma, userId));
+}
+
+async function adminDocumentNumbers(request: NextRequest, userId: string) {
+  if (!adminTokenUsername(readAdminCookie(request.headers.get("cookie"))))
+    return error("UNAUTHORIZED", "Faça login como administrador.", 401);
+  const { prisma } = await import("@/server/db");
+  return Response.json(await loadAdminDocumentNumbers(prisma, userId), {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }
 
 async function reviewAdminRegistration(
@@ -820,6 +835,8 @@ export async function GET(
     );
     if (documentPath)
       return await adminPrivateDocuments(request, path[2]);
+    const numbersPath = /^admin\/registrations\/([^/]+)\/numbers$/.exec(path.join("/"));
+    if (numbersPath) return await adminDocumentNumbers(request, path[2]);
     if (path.join("/") === "state") return await stateStore(request, "GET");
     if (path.join("/") === "freights") return await freightFeed(request);
     if (path.join("/") === "me") {
@@ -939,7 +956,27 @@ export async function PATCH(
   request: NextRequest,
   context: RouteContext = routeContextFromRequest(request),
 ) {
-  return PUT(request, context);
+  const { path } = await context.params;
+  if (path.join("/") !== "notifications/read") return PUT(request, context);
+
+  try {
+    const { user } = await getSession(request);
+    const origin = request.headers.get("origin");
+    if (origin && origin !== new URL(process.env.APP_URL || request.url).origin)
+      return error("INVALID_ORIGIN", "Origem inválida.", 403);
+    const body = await request.json().catch(() => null);
+    const ids: unknown = body?.ids;
+    if (!Array.isArray(ids) || !ids.length ||
+        !ids.every((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 180))
+      return error("INVALID_NOTIFICATIONS", "Selecione notificações válidas.", 422);
+    const { prisma } = await import("@/server/db");
+    await prisma.$transaction((tx) => markAccountNotificationsRead(tx, user.id, ids));
+    return new Response(null, { status: 204 });
+  } catch (failure) {
+    if (failure instanceof Response) return failure;
+    console.error("Notification read failed", failure);
+    return error("SERVER_ERROR", "Não foi possível atualizar as notificações.", 500);
+  }
 }
 
 export async function DELETE(

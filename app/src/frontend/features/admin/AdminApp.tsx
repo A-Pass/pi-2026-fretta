@@ -3,14 +3,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Camera,
+  IdCard,
+  Truck,
+  UserRound,
   CheckCircle2,
   ClipboardList,
+  Eye,
+  EyeOff,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import type { AdminCase, AdminReview } from "@/contracts";
+import type { AdminCase, AdminReview, DriverDocumentNumbers } from "@/contracts";
 import { createHttpTransport } from "../../api/http";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { adminReviewChecks, correctionLabels } from "@/contracts/driver-corrections";
+import { SuccessDialog } from "../../components/SuccessDialog";
+import { useDiscardChanges } from "../../components/useDiscardChanges";
+import { licenseDateValid } from "../onboarding/rules";
 import { dateTime } from "../../lib/dates";
 import { reviewVersion } from "./rules";
 const labels = {
@@ -18,6 +28,13 @@ const labels = {
   APROVADO: "Aprovado",
   AJUSTES_SOLICITADOS: "Ajustes solicitados",
 };
+const checkDetails = {
+  dados: { description: "Confira nome e informações do cadastro.", Icon: UserRound },
+  foto: { description: "Verifique se o rosto está visível e nítido.", Icon: Camera },
+  cnh: { description: "Confira os dados e o vencimento da CNH.", Icon: IdCard },
+  veiculo: { description: "Revise o veículo e a categoria informada.", Icon: Truck },
+};
+
 export function AdminApp() {
   const [authenticated, setAuthenticated] = useState(false);
   const [loginUsername, setLoginUsername] = useState("");
@@ -36,9 +53,13 @@ export function AdminApp() {
   const [filter, setFilter] = useState("EM_ANALISE"),
     [query, setQuery] = useState(""),
     [selected, setSelected] = useState<string | null>(null),
+    [selectedVersion, setSelectedVersion] = useState(""),
     [limit, setLimit] = useState(12);
   const [reason, setReason] = useState(""),
+    [showDocumentNumbers, setShowDocumentNumbers] = useState(false),
+    [documentNumbers, setDocumentNumbers] = useState<DriverDocumentNumbers | null>(),
     [checks, setChecks] = useState<string[]>([]),
+    [stale, setStale] = useState(false),
     [decision, setDecision] = useState<AdminReview["decision"] | null>(null),
     [activateOnApproval, setActivateOnApproval] = useState(false),
     [subscriptionLoading, setSubscriptionLoading] = useState(false),
@@ -54,6 +75,7 @@ export function AdminApp() {
       setCases(result.cases);
       setReviews(result.reviews);
       setLoaded(true);
+      setStale(false);
       return true;
     } catch (e) {
       setError(
@@ -75,9 +97,30 @@ export function AdminApp() {
     if (!authenticated) return;
     void load();
   }, [authenticated]);
+  const current = cases.find((c) => c.id === selected);
+  const dirty =
+    current?.registration.status === "EM_ANALISE" &&
+    (Boolean(reason.trim()) ||
+      checks.length > 0 ||
+      activateOnApproval);
+  const discard = useDiscardChanges(dirty);
+  useEffect(() => {
+    if (!authenticated) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [authenticated, dirty]);
   useEffect(() => {
     if (!authenticated) return;
     const refresh = () => {
+      if (dirty) {
+        setStale(true);
+        return;
+      }
       void load();
     };
     window.addEventListener("focus", refresh);
@@ -86,8 +129,7 @@ export function AdminApp() {
       window.removeEventListener("focus", refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, [authenticated]);
-  const current = cases.find((c) => c.id === selected);
+  }, [authenticated, dirty]);
   useEffect(() => {
     if (!authenticated || !current) {
       setPrivateDocuments(null);
@@ -119,17 +161,47 @@ export function AdminApp() {
       active = false;
     };
   }, [authenticated, current?.id]);
+  const currentId = current?.id;
+  useEffect(() => {
+    if (!authenticated || !showDocumentNumbers || !currentId) return;
+    const controller = new AbortController();
+    createHttpTransport()
+      .request<DriverDocumentNumbers | null>(
+        `/admin/registrations/${encodeURIComponent(currentId)}/numbers`,
+        { signal: controller.signal },
+      )
+      .then((numbers) => {
+        if (!controller.signal.aborted) setDocumentNumbers(numbers);
+      })
+      .catch((failure) => {
+        if (controller.signal.aborted) return;
+        setShowDocumentNumbers(false);
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : "Não foi possível carregar os números dos documentos.",
+        );
+      });
+    return () => controller.abort();
+  }, [authenticated, currentId, showDocumentNumbers]);
+  const visibleNumbers = showDocumentNumbers ? documentNumbers : null;
   const filtered = cases.filter(
     (c) =>
-      (filter === "TODOS" || c.registration.status === filter) &&
+      c.registration.status === filter &&
       `${c.registration.fullName} ${c.registration.companyName || ""}`
         .toLocaleLowerCase("pt-BR")
         .includes(query.toLocaleLowerCase("pt-BR")),
   );
   function open(c: AdminCase) {
     setSelected(c.id);
+    setSelectedVersion(reviewVersion(c));
+    setShowDocumentNumbers(false);
+    setDocumentNumbers(undefined);
+    setPrivateDocuments(null);
+    setPrivateDocumentsLoading(true);
     setReason("");
     setChecks([]);
+    setStale(false);
     setActivateOnApproval(false);
     setSuccess("");
     setError("");
@@ -207,17 +279,41 @@ export function AdminApp() {
       setSubscriptionLoading(false);
     }
   }
+  const pendingItems = adminReviewChecks
+    .filter(({ label }) => !checks.includes(label))
+    .map(({ id }) => correctionLabels[id]);
+  const checkCount = adminReviewChecks.length;
+  const warnings: string[] = [];
+  if (current) {
+    if (!privateDocuments?.profilePhoto) warnings.push("Foto do motorista ausente.");
+    if (!current.registration.documentsSubmitted || !privateDocuments?.licensePhoto)
+      warnings.push("Documentação da CNH indisponível.");
+    if (!licenseDateValid(current.registration.license.expiresOn))
+      warnings.push("CNH vencida ou com validade inválida.");
+    if (!current.vehicles.length) warnings.push("Nenhum veículo cadastrado.");
+    else if (
+      current.vehicles.some(
+        (vehicle) =>
+          !vehicle.model.trim() || !vehicle.plate.trim() || !vehicle.category.trim(),
+      )
+    )
+      warnings.push("Há um veículo com dados incompletos.");
+  }
   return (
     <div className="admin-shell">
       <header className="admin-header">
-        <Link className="brand" href="/">
+        <Link className="brand" href="/" onClick={(event) => {
+          if (!dirty) return;
+          event.preventDefault();
+          discard.leave(() => { location.href = "/"; });
+        }}>
           FRETTA<span>•</span>
         </Link>
         <span>
           <ShieldCheck size={19} /> Administração
         </span>
         {authenticated ? (
-          <button className="admin-logout" type="button" onClick={() => void logout()}>
+          <button className="admin-logout" type="button" onClick={() => discard.leave(() => void logout())}>
             Sair
           </button>
         ) : (
@@ -300,11 +396,11 @@ export function AdminApp() {
                   key={status}
                   className="panel"
                   aria-pressed={filter === status}
-                  onClick={() => {
+                  onClick={() => discard.leave(() => {
                     setFilter(status);
                     setLimit(12);
                     setSelected(null);
-                  }}
+                  })}
                 >
                   <b>
                     {
@@ -329,23 +425,6 @@ export function AdminApp() {
                       }}
                       placeholder="Nome ou empresa"
                     />
-                  </label>
-                  <label>
-                    Situação
-                    <select
-                      value={filter}
-                      onChange={(e) => {
-                        setFilter(e.target.value);
-                        setLimit(12);
-                      }}
-                    >
-                      <option value="TODOS">Todas</option>
-                      {Object.entries(labels).map(([v, l]) => (
-                        <option key={v} value={v}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
                   </label>
                   <button className="secondary" onClick={() => void load()}>
                     <RefreshCw size={17} />
@@ -390,11 +469,11 @@ export function AdminApp() {
               <>
                 <button
                   className="back"
-                  onClick={() => {
+                  onClick={() => discard.leave(() => {
                     setSelected(null);
                     setError("");
                     setSuccess("");
-                  }}
+                  })}
                 >
                   <ArrowLeft size={18} />
                   Voltar aos cadastros
@@ -411,12 +490,39 @@ export function AdminApp() {
                       {labels[current.registration.status]}
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    aria-pressed={showDocumentNumbers}
+                    onClick={() => {
+                      setDocumentNumbers(undefined);
+                      setShowDocumentNumbers((show) => !show);
+                    }}
+                  >
+                    {showDocumentNumbers ? (
+                      <EyeOff size={18} aria-hidden="true" />
+                    ) : (
+                      <Eye size={18} aria-hidden="true" />
+                    )}
+                    {showDocumentNumbers
+                      ? "Voltar à máscara"
+                      : "Exibir números completos"}
+                  </button>
+                  {showDocumentNumbers && !documentNumbers && (
+                    <p role="status">
+                      {documentNumbers === undefined
+                        ? "Carregando números dos documentos…"
+                        : "Os números completos não estão disponíveis neste cadastro."}
+                    </p>
+                  )}
                   <div className="admin-detail-grid">
                     <div>
                       <h3>Identificação</h3>
-                      <p>CPF: {current.registration.cpfMasked}</p>
+                      <p>
+                        CPF: {visibleNumbers?.cpf || current.registration.cpfMasked || "Não informado"}
+                      </p>
                       {current.registration.cnpjMasked && (
-                        <p>CNPJ: {current.registration.cnpjMasked}</p>
+                        <p>CNPJ: {visibleNumbers?.cnpj || current.registration.cnpjMasked}</p>
                       )}
                       <p>
                         Enviado em {dateTime(current.registration.submittedAt)}
@@ -435,9 +541,7 @@ export function AdminApp() {
                     </div>
                     <div>
                       <h3>Habilitação</h3>
-                      <p>
-                        Registro: {current.registration.license.numberMasked}
-                      </p>
+                      <p>Registro: {visibleNumbers?.cnh || current.registration.license.numberMasked}</p>
                       <p>Categoria: {current.registration.license.category}</p>
                       <p>
                         Validade:{" "}
@@ -515,34 +619,68 @@ export function AdminApp() {
                   )}
                 </section>
                 {current.registration.status === "EM_ANALISE" && (
-                  <section className="panel">
-                    <h2>Conferência do cadastro</h2>
+                  <section className="panel admin-review-panel">
+                    <div className="admin-review-heading">
+                      <div>
+                        <span className="eyebrow">REVISÃO DO PRESTADOR</span>
+                        <h2>Conferência do cadastro</h2>
+                      </div>
+                      <span
+                        className={`admin-review-count ${!pendingItems.length ? "complete" : ""}`}
+                        role="status"
+                      >
+                        <CheckCircle2 size={17} />
+                        {checks.length} de {checkCount} conferidos
+                      </span>
+                    </div>
+                    {(stale || selectedVersion !== reviewVersion(current)) && (
+                      <p role="status" className="alert">
+                        O cadastro pode ter mudado. A versão será conferida ao registrar a decisão.
+                      </p>
+                    )}
+                    <div className="admin-review-progress" aria-hidden="true">
+                      <span style={{ width: `${(checks.length / checkCount) * 100}%` }} />
+                    </div>
                     <p>
-                      Marque os itens conferidos. A aprovação não substitui a
-                      verificação de autenticidade documental.
+                      Marque os itens conferidos. Os itens desmarcados serão enviados
+                      ao motorista ao solicitar correções.
                     </p>
+                    {!privateDocumentsLoading && warnings.length > 0 && (
+                      <ul className="alert">
+                        {warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    )}
                     <div className="admin-checks">
-                      {[
-                        "Identificação e dados conferidos",
-                        "Foto do motorista conferida",
-                        "Habilitação e validade conferidas",
-                        "Veículo e habilitação compatíveis",
-                      ].map((label) => (
-                        <label key={label}>
-                          <input
-                            type="checkbox"
-                            checked={checks.includes(label)}
-                            onChange={(e) =>
-                              setChecks((old) =>
-                                e.target.checked
-                                  ? [...old, label]
-                                  : old.filter((x) => x !== label),
-                              )
-                            }
-                          />
-                          {label}
-                        </label>
-                      ))}
+                      {adminReviewChecks.map(({ id, label }) => {
+                        const { description, Icon } = checkDetails[id];
+                        return (
+                          <label
+                            key={label}
+                            className={`admin-check-card ${checks.includes(label) ? "is-checked" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checks.includes(label)}
+                              onChange={(e) =>
+                                setChecks((old) =>
+                                  e.target.checked
+                                    ? [...old, label]
+                                    : old.filter((x) => x !== label),
+                                )
+                              }
+                            />
+                            <span className="admin-check-icon" aria-hidden="true">
+                              <Icon size={22} />
+                            </span>
+                            <span className="admin-check-copy">
+                              <strong>{label}</strong>
+                              <small>{description}</small>
+                            </span>
+                          </label>
+                        );
+                      })}
                     </div>
                     {current.subscription?.active ? (
                       <p>
@@ -579,7 +717,9 @@ export function AdminApp() {
                     <div className="actions">
                       <button
                         className="secondary"
-                        disabled={reason.trim().length < 10}
+                        disabled={
+                          reason.trim().length < 10 || !pendingItems.length || loading
+                        }
                         onClick={() => setDecision("AJUSTES_SOLICITADOS")}
                       >
                         Solicitar correções
@@ -587,9 +727,10 @@ export function AdminApp() {
                       <button
                         className="primary"
                         disabled={
-                          checks.length !== 4 ||
-                          !privateDocuments?.licensePhoto ||
-                          privateDocumentsLoading
+                          pendingItems.length > 0 ||
+                          warnings.length > 0 ||
+                          privateDocumentsLoading ||
+                          loading
                         }
                         onClick={() => setDecision("APROVADO")}
                       >
@@ -598,11 +739,6 @@ export function AdminApp() {
                       </button>
                     </div>
                   </section>
-                )}
-                {success && (
-                  <p role="status" className="admin-success">
-                    {success}
-                  </p>
                 )}
                 <section className="panel">
                   <h2>Histórico de análises</h2>
@@ -620,6 +756,9 @@ export function AdminApp() {
                           <p>
                             {r.actor} · {dateTime(r.at)}
                           </p>
+                          {!!r.correctionItems?.length && (
+                            <p>Itens: {r.correctionItems.map((item) => correctionLabels[item]).join(" · ")}</p>
+                          )}
                           {r.reason && <p>{r.reason}</p>}
                         </li>
                       ))}
@@ -645,7 +784,7 @@ export function AdminApp() {
             ? activateOnApproval
               ? "O cadastro será aprovado e uma assinatura administrativa de 30 dias será ativada, sem cobrança."
               : "A decisão será registrada apenas após autorização no servidor."
-            : `O prestador verá este motivo ao consultar o cadastro: ${reason.trim()}`
+            : `Itens: ${pendingItems.join(", ")}. O prestador verá este motivo ao consultar o cadastro: ${reason.trim()}`
         }
         confirmLabel={
           decision === "APROVADO"
@@ -658,43 +797,43 @@ export function AdminApp() {
         destructive={false}
         onConfirm={async () => {
           if (!current || !decision) return false;
-          try {
-            await createHttpTransport().request(
-              `/admin/registrations/${encodeURIComponent(current.id)}/review`,
-              {
-                method: "POST",
-                body: {
-                  expectedVersion: reviewVersion(current),
-                  decision,
-                  activateSubscription:
-                    decision === "APROVADO" && activateOnApproval,
-                  reason,
-                  checks,
-                },
+          await createHttpTransport().request(
+            `/admin/registrations/${encodeURIComponent(current.id)}/review`,
+            {
+              method: "POST",
+              body: {
+                expectedVersion: selectedVersion,
+                decision,
+                activateSubscription:
+                  decision === "APROVADO" && activateOnApproval,
+                reason,
+                checks,
               },
-            );
-            const refreshed = await load();
-            setSuccess(
-              refreshed
-                ? decision === "APROVADO"
-                  ? activateOnApproval
-                    ? "Cadastro aprovado e assinatura ativada por 30 dias."
-                    : "Cadastro aprovado."
-                  : "Correções solicitadas. O motivo está disponível no cadastro do prestador."
-                : "Decisão registrada no banco de dados. Atualize o painel para carregar os dados mais recentes.",
-            );
-            setActivateOnApproval(false);
-            setDecision(null);
-            return true;
-          } catch (failure) {
-            setError(
-              failure instanceof Error
-                ? failure.message
-                : "Não foi possível registrar a decisão.",
-            );
-            return false;
-          }
+            },
+          );
+          const refreshed = await load();
+          setSuccess(
+            refreshed
+              ? decision === "APROVADO"
+                ? activateOnApproval
+                  ? "Cadastro aprovado e assinatura ativada por 30 dias."
+                  : "Cadastro aprovado."
+                : "Correções solicitadas. O motivo está disponível no cadastro do prestador."
+              : "Decisão registrada no banco de dados. Atualize o painel para carregar os dados mais recentes.",
+          );
+          setActivateOnApproval(false);
+          setChecks([]);
+          setReason("");
+          setDecision(null);
+          return true;
         }}
+      />
+      {discard.dialog}
+      <SuccessDialog
+        open={!!success}
+        title="Decisão registrada"
+        description={success}
+        onClose={() => setSuccess("")}
       />
     </div>
   );

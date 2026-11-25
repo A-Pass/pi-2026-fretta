@@ -50,6 +50,7 @@ export async function registerDuePickups(
     select: {
       freteId: true,
       propostaId: true,
+      ofertaId: true,
       frete: { select: { titulo: true } },
     },
   });
@@ -57,8 +58,8 @@ export async function registerDuePickups(
 
   await tx.notificacao.createMany({
     skipDuplicates: true,
-    data: agreements.map(({ freteId, propostaId, frete }) => ({
-      id: `pickup-due:${freteId}`,
+    data: agreements.map(({ freteId, propostaId, ofertaId, frete }) => ({
+      id: `pickup-due:${ofertaId}`,
       destinatario_id: userId,
       papel_destinatario: "motorista",
       evento: "HORARIO_RETIRADA",

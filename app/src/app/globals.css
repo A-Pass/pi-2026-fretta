@@ -985,24 +985,10 @@ main {
   min-height: 48px;
   margin-top: 18px;
 }
-.login-provider-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 20px 0 14px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.login-provider-divider::before,
-.login-provider-divider::after {
-  content: "";
-  height: 1px;
-  flex: 1;
-  background: var(--line);
-}
 .login-providers {
   display: grid;
   gap: 10px;
+  margin-top: 20px;
 }
 .login-provider {
   display: flex;
@@ -1068,8 +1054,7 @@ main {
   font-size: 13px;
   font-weight: 650;
 }
-.auth-complete-form input:not([type="file"]),
-.auth-complete-form select {
+.auth-complete-form input:not([type="file"]) {
   width: 100%;
   min-height: 48px;
 }
@@ -1550,8 +1535,9 @@ main {
 }
 .wizard-footer {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
+  gap: 10px;
   padding: 18px 32px;
   border-top: 1px solid var(--line);
   background: white;
@@ -2943,6 +2929,21 @@ main {
   line-height: 1.25;
   margin-top: 14px;
 }
+.registration-corrections {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+}
+.registration-corrections .alert {
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0;
+}
+.registration-corrections svg {
+  flex-shrink: 0;
+}
 .registration-summary {
   background: #faf9f6;
   border: 1px solid var(--line);
@@ -3904,7 +3905,7 @@ a {
 
 /* Center the profile overview without changing the edit form layout. */
 .profile-page-heading {
-  text-align: left;
+  text-align: center;
 }
 .profile-overview {
   display: flex;
@@ -3938,11 +3939,15 @@ a {
   text-align: center;
 }
 .profile-page-heading ~ .mobile-switch-profile {
-  display: flex;
   justify-content: center;
   margin: 18px auto 0;
   max-width: 100%;
   text-align: center;
+}
+@media (max-width: 640px) {
+  .profile-page-heading ~ .mobile-switch-profile {
+    display: flex;
+  }
 }
 .profile-overview + dialog + .mobile-switch-profile {
   margin-left: auto;
@@ -4020,15 +4025,6 @@ a {
   font-size: 12px;
   line-height: 1.5;
 }
-.wizard-footer {
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 10px;
-}
-.wizard-footer > .secondary {
-  flex: 1 1 0;
-  min-width: 0;
-}
 .request-summary dd {
   overflow-wrap: anywhere;
 }
@@ -4043,9 +4039,6 @@ a {
   .freight-progress ol {
     grid-template-columns: 1fr 1fr;
     gap: 20px 12px;
-  }
-  .wizard-footer > .primary {
-    flex: 1 0 100%;
   }
   .freight-progress li {
     font-size: 11px;
@@ -5176,3 +5169,41 @@ button.company-brand-home {
   gap: 0.45rem;
 }
 .driver-rating-summary svg { color: #986112; }
+
+.profile-camera-trigger {
+  display: inline-flex;
+  gap: 8px;
+  background: transparent;
+}
+
+.profile-camera-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 20px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.profile-camera-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+.profile-camera-dialog video {
+  display: block;
+  width: 100%;
+  max-height: 55vh;
+  background: #171717;
+  border-radius: 12px;
+}
+
+.profile-camera-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}

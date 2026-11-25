@@ -15,6 +15,7 @@ function databaseForSelectedDriver(availableAt: Date, userId = "driver-1") {
   };
   const changes: string[] = [];
   const savedMessages: { conteudo: string }[] = [];
+  const savedNotifications: { user_id: string; role: string; title: string }[] = [];
   const proposal = {
     id: "p1",
     frete_id: "f1",
@@ -92,13 +93,17 @@ function databaseForSelectedDriver(availableAt: Date, userId = "driver-1") {
         savedMessages.push(data);
       },
     },
-    appNotification: { upsert: async () => undefined },
+    appNotification: {
+      upsert: async ({ create }: { create: (typeof savedNotifications)[number] }) => {
+        savedNotifications.push(create);
+      },
+    },
   };
   const database = {
     $transaction: async (callback: (tx: typeof transaction) => Promise<void>) =>
       callback(transaction),
   } as unknown as Parameters<typeof saveAccountStore>[0];
-  return { database, state, changes, savedMessages };
+  return { database, state, changes, savedMessages, savedNotifications };
 }
 
 function lifecycleStore(availableAt: string): Store {
@@ -137,6 +142,9 @@ test("servidor permite iniciar na data acordada e bloqueia antes dela", async ()
     null,
   );
   assert.equal(due.state.statusFrete, "EM_TRANSPORTE");
+  assert.equal(due.savedNotifications.length, 1);
+  assert.equal(due.savedNotifications[0].user_id, "client-1");
+  assert.equal(due.savedNotifications[0].role, "cliente");
 });
 
 test("servidor libera o frete e persiste o motivo no chat ao cancelar pelo motorista", async () => {

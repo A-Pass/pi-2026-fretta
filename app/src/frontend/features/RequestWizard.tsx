@@ -382,7 +382,7 @@ export function RequestWizard({
                 addresses={addresses}
                 save={draft.saveDelivery}
                 onSaveChange={(saveDelivery) => update({ saveDelivery })}
-                mapFirst
+                privacyNotice
               />
             )}
             {step === 3 && (

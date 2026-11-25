@@ -5,13 +5,13 @@ import { dateTime } from "../../lib/dates";
 export function NotificationsView({
   store,
   role,
-  save,
+  onRead,
   onOpen,
   onBack,
 }: {
   store: Store;
   role: Role;
-  save: (s: Store) => Promise<boolean>;
+  onRead: (ids: string[]) => Promise<void>;
   onOpen: (n: AppNotification) => void;
   onBack: () => void;
 }) {
@@ -26,14 +26,8 @@ export function NotificationsView({
     setBusy(true);
     setError("");
     try {
-      const ok = await save({
-        ...store,
-        notifications: (store.notifications || []).map((n) =>
-          n.role === role && (!id || n.id === id) ? { ...n, read: true } : n,
-        ),
-      });
-      if (!ok) setError("Não foi possível atualizar as notificações.");
-      return ok;
+      await onRead(all.filter((n) => !n.read && (!id || n.id === id)).map((n) => n.id));
+      return true;
     } catch {
       setError("Não foi possível atualizar as notificações. Tente novamente.");
       return false;
