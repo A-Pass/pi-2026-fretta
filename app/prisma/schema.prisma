@@ -176,6 +176,7 @@ model AdminReview {
   at         DateTime
   decision   String
   reason     String
+  itens_ajuste String[] @default([])
   caseUser   User     @relation(fields: [caseUserId], references: [id], onDelete: Cascade)
 
   @@index([caseUserId, at])
@@ -457,9 +458,11 @@ model motorista {
   cnh_numero_mascarado String?
   cnpj_mascarado       String?
   documento_mascarado  String?
+  numeros_documentos   Json?
   documentos_enviados  Boolean              @default(false)
   enviado_em           DateTime?
   feedback             String?
+  itens_ajuste         String[]             @default([])
   nome_completo        String?
   nome_empresa         String?
   revisado_em          DateTime?

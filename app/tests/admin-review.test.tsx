@@ -45,6 +45,15 @@ test("admin registration records and reviews require the authenticated admin coo
     },
   );
   assert.equal(documentResponse.status, 401);
+  const numbersResponse = await GET(
+    new NextRequest("http://localhost/api/v1/admin/registrations/user-1/numbers"),
+    {
+      params: Promise.resolve({
+        path: ["admin", "registrations", "user-1", "numbers"],
+      }),
+    },
+  );
+  assert.equal(numbersResponse.status, 401);
 
   const postResponse = await POST(
     new NextRequest(

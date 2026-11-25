@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { correctionItems } from "@/contracts/driver-corrections";
+import { adminReviewChecks, isCorrectionItem } from "@/contracts/driver-corrections";
 import type {
   Address,
   AdminCase,
@@ -223,6 +223,7 @@ function registrationFromRow(
     enviado_em: Date | null;
     revisado_em: Date | null;
     feedback: string | null;
+    itens_ajuste: string[];
   }): DriverRegistration | undefined {
   if (
     !driver.cadastro_status ||
@@ -260,6 +261,9 @@ function registrationFromRow(
       ? { reviewedAt: driver.revisado_em.toISOString() }
       : {}),
     ...(driver.feedback ? { feedback: driver.feedback } : {}),
+    ...(driver.cadastro_status === "AJUSTES_SOLICITADOS"
+      ? { correctionItems: driver.itens_ajuste.filter(isCorrectionItem) }
+      : {}),
   };
 }
 
@@ -683,6 +687,7 @@ function parseRegistration(value: unknown) {
     enviado_em: submittedDate,
     revisado_em: null,
     feedback: null,
+    itens_ajuste: [],
   };
 }
 
@@ -838,6 +843,7 @@ async function saveDriverRegistration(
   tx: Transaction,
   userId: string,
   incoming: unknown,
+  documentNumbers: unknown,
 ) {
   if (incoming === undefined) return;
   const submitted = parseRegistration(incoming);
@@ -847,6 +853,33 @@ async function saveDriverRegistration(
   });
   if (existing?.enviado_em?.getTime() === submitted.enviado_em.getTime())
     return;
+  const numbers = record(documentNumbers);
+  const cpf = numbers?.cpf;
+  const cnh = numbers?.cnh;
+  const cnpj = numbers?.cnpj;
+  if (
+    documentNumbers !== undefined &&
+    (typeof cpf !== "string" ||
+      !/^\d{11}$/.test(cpf) ||
+      !submitted.documento_mascarado.endsWith(cpf.slice(-2)) ||
+      typeof cnh !== "string" ||
+      !/^\d{11}$/.test(cnh) ||
+      !submitted.cnh_numero_mascarado.endsWith(cnh.slice(-2)) ||
+      (submitted.tipo_pessoa === "pj"
+        ? typeof cnpj !== "string" ||
+          !/^\d{14}$/.test(cnpj) ||
+          !submitted.cnpj_mascarado?.endsWith(cnpj.slice(-2))
+        : cnpj !== undefined))
+  )
+    throw new StorePersistenceError(
+      "INVALID_REGISTRATION",
+      "Confira os números dos documentos informados.",
+      422,
+    );
+  const privateNumbers =
+    typeof cpf === "string" && typeof cnh === "string"
+      ? { cpf, cnh, ...(typeof cnpj === "string" ? { cnpj } : {}) }
+      : Prisma.DbNull;
   await tx.motorista.upsert({
     where: { user_id: userId },
     create: {
@@ -854,8 +887,9 @@ async function saveDriverRegistration(
       codigo_publico: randomUUID(),
       atualizado_em: new Date(),
       ...submitted,
+      numeros_documentos: privateNumbers,
     },
-    update: submitted,
+    update: { ...submitted, numeros_documentos: privateNumbers },
   });
 }
 
@@ -1583,7 +1617,12 @@ export async function saveAccountStore(
               create: { user_id: userId },
               update: {},
           });
-        await saveDriverRegistration(tx, userId, input.driverRegistration);
+        await saveDriverRegistration(
+          tx,
+          userId,
+          input.driverRegistration,
+          input.driverDocumentNumbers,
+        );
 
         const driverExists = await tx.motorista.findUnique({
           where: { user_id: userId },
@@ -1704,6 +1743,7 @@ function registrationFromDriver(driver: {
   enviado_em: Date | null;
   revisado_em: Date | null;
   feedback: string | null;
+  itens_ajuste: string[];
 }): DriverRegistration | undefined {
   return registrationFromRow(driver);
 }
@@ -1778,8 +1818,25 @@ export async function loadAdminRegistrations(database: PrismaClient) {
     at: review.at.toISOString(),
     decision: review.decision as AdminReview["decision"],
     reason: review.reason,
+    correctionItems: review.itens_ajuste.filter(isCorrectionItem),
   }));
   return { cases, reviews: adminReviews };
+}
+
+function safeAdminImage(value: string | null | undefined) {
+  return typeof value === "string" &&
+    value.length <= 7_000_000 &&
+    /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(value)
+    ? value
+    : null;
+}
+
+export async function loadAdminDocumentNumbers(database: PrismaClient, userId: string) {
+  const driver = await database.motorista.findUnique({
+    where: { user_id: userId },
+    select: { cadastro_status: true, numeros_documentos: true },
+  });
+  return driver?.cadastro_status ? driver.numeros_documentos : null;
 }
 
 export async function loadAdminDocuments(
@@ -1793,15 +1850,9 @@ export async function loadAdminDocuments(
       select: { cnh_foto_data_url: true },
     }),
   ]);
-  const safeImage = (value: string | null | undefined) =>
-    typeof value === "string" &&
-    value.length <= 7_000_000 &&
-    /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(value)
-      ? value
-      : null;
   return {
-    profilePhoto: safeImage(user?.image),
-    licensePhoto: safeImage(driver?.cnh_foto_data_url),
+    profilePhoto: safeAdminImage(user?.image),
+    licensePhoto: safeAdminImage(driver?.cnh_foto_data_url),
   };
 }
 
@@ -1912,25 +1963,24 @@ export async function reviewDriverRegistration(
   const activateSubscription = input.activateSubscription === true;
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
   const checks = input.checks;
-  const requiredChecks = [
-    "Identificação e dados conferidos",
-    "Foto do motorista conferida",
-    "Habilitação e validade conferidas",
-    "Veículo e habilitação compatíveis",
-  ];
-  const validChecks =
-    Array.isArray(checks) &&
-    checks.length === requiredChecks.length &&
-    requiredChecks.every((check) => checks.includes(check));
+  const checked = new Set(Array.isArray(checks) ? checks : []);
+  const confirmedItems = adminReviewChecks
+    .filter(({ label }) => checked.has(label))
+    .map(({ id }) => id);
+  const items = adminReviewChecks
+    .filter(({ label }) => !checked.has(label))
+    .map(({ id }) => id);
   if (
     (decision !== "APROVADO" && decision !== "AJUSTES_SOLICITADOS") ||
     (input.activateSubscription !== undefined &&
       typeof input.activateSubscription !== "boolean") ||
     (activateSubscription && decision !== "APROVADO") ||
     typeof input.expectedVersion !== "string" ||
+    !Array.isArray(checks) ||
+    checks.length !== confirmedItems.length ||
     reason.length > 1000 ||
-    (decision === "AJUSTES_SOLICITADOS" && reason.length < 10) ||
-    (decision === "APROVADO" && !validChecks)
+    (decision === "AJUSTES_SOLICITADOS" && (reason.length < 10 || !items.length)) ||
+    (decision === "APROVADO" && items.length > 0)
   )
     return {
       error: Response.json(
@@ -1970,8 +2020,12 @@ export async function reviewDriverRegistration(
         (!registration.documentsSubmitted ||
           expiresOn < todayInBahia ||
           driver.veiculo.length === 0 ||
-          !driver.user.image ||
-          !registration.licensePhotoDataUrl)
+          driver.veiculo.some(
+            (vehicle) =>
+              !vehicle.modelo.trim() || !vehicle.placa.trim() || !vehicle.categoria_porte,
+          ) ||
+          !safeAdminImage(driver.user.image) ||
+          !safeAdminImage(registration.licensePhotoDataUrl))
       )
         return { invalid: true as const };
 
@@ -1982,6 +2036,7 @@ export async function reviewDriverRegistration(
           cadastro_status: decision,
           revisado_em: at,
           feedback: decision === "AJUSTES_SOLICITADOS" ? reason : null,
+          itens_ajuste: items,
         },
         include: {
           user: true,
@@ -1989,14 +2044,14 @@ export async function reviewDriverRegistration(
           cadastro_motorista: true,
         },
       });
-      if (decision === "APROVADO" && driver.cadastro_motorista)
+      if (driver.cadastro_motorista)
         await tx.cadastro_motorista.update({
           where: { motorista_id: userId },
           data: {
-            status: "APROVADO",
-            motivo_ajuste: null,
-            itens_ajuste: [],
-            itens_conferidos: correctionItems.map((item) => item.id),
+            status: decision,
+            motivo_ajuste: decision === "AJUSTES_SOLICITADOS" ? reason : null,
+            itens_ajuste: items,
+            itens_conferidos: confirmedItems,
             analisado_em: at,
             atualizado_em: at,
           },
@@ -2013,6 +2068,7 @@ export async function reviewDriverRegistration(
           at,
           decision,
           reason,
+          itens_ajuste: items,
         },
       });
       const updatedRegistration = registrationFromDriver(updatedDriver);
@@ -2056,6 +2112,7 @@ export async function reviewDriverRegistration(
     at: outcome.review.at.toISOString(),
     decision: outcome.review.decision as AdminReview["decision"],
     reason: outcome.review.reason,
+    correctionItems: outcome.review.itens_ajuste.filter(isCorrectionItem),
   };
   const { licensePhotoDataUrl: _privatePhoto, ...safeRegistration } =
     outcome.registration;

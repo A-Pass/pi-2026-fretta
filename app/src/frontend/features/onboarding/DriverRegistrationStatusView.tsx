@@ -9,8 +9,10 @@ import {
   ShieldCheck,
   TriangleAlert,
   Truck,
+  X,
 } from "lucide-react";
 import type { Store } from "@/contracts";
+import { correctionLabels } from "@/contracts/driver-corrections";
 import { driverCanPropose, licenseDateValid } from "./rules";
 import { dateTime } from "../../lib/dates";
 type Props = {
@@ -94,6 +96,16 @@ export function DriverRegistrationStatusView({
                   ? registration.feedback
                   : "Mantenha sua foto, a habilitação e pelo menos um veículo atualizados para enviar propostas."}
           </p>
+          {rejected && !!registration.correctionItems?.length && (
+            <ul className="registration-corrections" role="list" aria-label="Itens a corrigir">
+              {registration.correctionItems.map((item) => (
+                <li key={item} className="alert">
+                  <X size={18} aria-hidden="true" />
+                  {correctionLabels[item]}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="registration-summary">
             <div className="registration-profile">
               {store.profile?.photo && (

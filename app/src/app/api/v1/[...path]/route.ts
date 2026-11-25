@@ -4,6 +4,7 @@ import { getAuthConfigurationError } from "@/server/auth/env";
 import {
   activateAdminDriverSubscription,
   loadAccountStore,
+  loadAdminDocumentNumbers,
   loadAdminDocuments,
   loadAdminRegistrations,
   reviewDriverRegistration,
@@ -193,6 +194,15 @@ async function adminPrivateDocuments(request: NextRequest, userId: string) {
     return error("UNAUTHORIZED", "Faça login como administrador.", 401);
   const { prisma } = await import("@/server/db");
   return Response.json(await loadAdminDocuments(prisma, userId));
+}
+
+async function adminDocumentNumbers(request: NextRequest, userId: string) {
+  if (!adminTokenUsername(readAdminCookie(request.headers.get("cookie"))))
+    return error("UNAUTHORIZED", "Faça login como administrador.", 401);
+  const { prisma } = await import("@/server/db");
+  return Response.json(await loadAdminDocumentNumbers(prisma, userId), {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }
 
 async function reviewAdminRegistration(
@@ -820,6 +830,8 @@ export async function GET(
     );
     if (documentPath)
       return await adminPrivateDocuments(request, path[2]);
+    const numbersPath = /^admin\/registrations\/([^/]+)\/numbers$/.exec(path.join("/"));
+    if (numbersPath) return await adminDocumentNumbers(request, path[2]);
     if (path.join("/") === "state") return await stateStore(request, "GET");
     if (path.join("/") === "freights") return await freightFeed(request);
     if (path.join("/") === "me") {

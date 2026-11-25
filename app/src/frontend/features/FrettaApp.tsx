@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type {
   AppNotification,
+  DriverDocumentNumbers,
   FreightRequestDraft,
   Freight,
   OperatingArea,
@@ -354,6 +355,7 @@ export function FrettaApp() {
   async function save(
     next: Store,
     deriveNotifications = true,
+    driverDocumentNumbers?: DriverDocumentNumbers,
   ): Promise<boolean> {
     if (saving.current) return false;
     saving.current = true;
@@ -361,7 +363,7 @@ export function FrettaApp() {
       const enriched = deriveNotifications
         ? withNotifications(latest.current || next, next)
         : next;
-      const persisted = await api.save(enriched);
+      const persisted = await api.save(enriched, undefined, driverDocumentNumbers);
       latest.current = persisted;
       setStore(persisted);
       setError("");
@@ -671,10 +673,20 @@ export function FrettaApp() {
             onLogout={() => void signOut()}
             onServices={() => nav("fretes")}
             onSubmit={async (draft) => {
-              const ok = await save({
-                ...submitDriverRegistration(store, draft),
-                accountSetupComplete: true,
-              });
+              const ok = await save(
+                {
+                  ...submitDriverRegistration(store, draft),
+                  accountSetupComplete: true,
+                },
+                true,
+                {
+                  cpf: draft.cpf.replace(/\D/g, ""),
+                  cnh: draft.licenseNumber,
+                  ...(draft.personType === "pj"
+                    ? { cnpj: draft.cnpj.replace(/\D/g, "") }
+                    : {}),
+                },
+              );
               if (ok) {
                 setUpdatingDriver(false);
                 nav("cadastro-motorista");

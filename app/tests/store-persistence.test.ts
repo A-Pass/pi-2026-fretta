@@ -1,13 +1,59 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { correctionItems } from "../src/contracts/driver-corrections";
+import { adminReviewChecks } from "../src/contracts/driver-corrections";
 import {
   activateAdminDriverSubscription,
   loadAccountStore,
+  loadAdminDocumentNumbers,
   reviewDriverRegistration,
   saveAccountStore,
   saveDriverOperatingArea,
 } from "../src/server/modules/store/persistence";
+
+test("números completos são gravados no cadastro apenas se corresponderem às máscaras", async () => {
+  const numbers = { cpf: "00000000009", cnh: "00000000001" };
+  let saved: Record<string, unknown> | undefined;
+  const driver = {
+    findUnique: async () => saved ?? null,
+    upsert: async ({ create }: { create: Record<string, unknown> }) => {
+      saved = create;
+    },
+  };
+  const transaction = {
+    user: { findUnique: async () => ({ id: "driver-test" }), update: async () => undefined },
+    motorista: driver,
+  };
+  const database = {
+    motorista: driver,
+    $transaction: async (callback: (tx: typeof transaction) => Promise<void>) =>
+      callback(transaction),
+  } as unknown as Parameters<typeof saveAccountStore>[0];
+  const payload = {
+    profile: { name: "Motorista Teste", photo: "" },
+    freights: [],
+    proposals: [],
+    messages: [],
+    driverRegistration: {
+      fullName: "Motorista Teste",
+      personType: "pf",
+      cpfMasked: "***.***.***-09",
+      license: { numberMasked: "*********01", category: "B", expiresOn: "2099-01-01" },
+      submittedAt: "2026-11-25T12:00:00Z",
+    },
+  };
+  const invalid = await saveAccountStore(database, "driver-test", {
+    ...payload,
+    driverDocumentNumbers: { ...numbers, cnh: "00000000002" },
+  });
+  assert.equal(invalid?.status, 422);
+  assert.equal(saved, undefined);
+
+  assert.equal(await saveAccountStore(database, "driver-test", {
+    ...payload,
+    driverDocumentNumbers: numbers,
+  }), null);
+  assert.deepEqual(await loadAdminDocumentNumbers(database, "driver-test"), numbers);
+});
 
 test("perfis disponíveis vêm das relações persistidas da conta", async () => {
   for (const [cliente, motorista, expected] of [
@@ -77,7 +123,7 @@ test("área de operação é restaurada no formato do contrato da aplicação", 
   });
 });
 
-test("aprovar cadastro confirma os itens e pode ativar assinatura de 30 dias", async () => {
+test("revisão persiste categorias de correção e permite ativar assinatura na aprovação", async () => {
   const submittedAt = new Date("2026-01-10T12:00:00.000Z");
   const driver = {
     user_id: "driver-1",
@@ -94,7 +140,8 @@ test("aprovar cadastro confirma os itens e pode ativar assinatura de 30 dias", a
     documentos_enviados: true,
     enviado_em: submittedAt,
     revisado_em: null as Date | null,
-    feedback: null,
+    feedback: null as string | null,
+    itens_ajuste: [] as string[],
     user: { image: "data:image/png;base64,abc", name: "Motorista Teste" },
     veiculo: [
       {
@@ -114,15 +161,13 @@ test("aprovar cadastro confirma os itens e pode ativar assinatura de 30 dias", a
   const transaction = {
     motorista: {
       findUnique: async () => currentDriver,
-      update: async () => {
+      update: async ({ data }: {
+        data: Pick<typeof driver, "cadastro_status" | "revisado_em" | "feedback" | "itens_ajuste">;
+      }) => {
         currentDriver = {
           ...driver,
-          cadastro_status: "APROVADO",
-          revisado_em: new Date(),
-          cadastro_motorista: {
-            ...driver.cadastro_motorista,
-            status: "APROVADO",
-          },
+          ...data,
+          cadastro_motorista: { ...driver.cadastro_motorista },
         };
         return currentDriver;
       },
@@ -130,7 +175,7 @@ test("aprovar cadastro confirma os itens e pode ativar assinatura de 30 dias", a
     cadastro_motorista: {
       update: async (args: { data: Record<string, unknown> }) => {
         registrationUpdate = args;
-        currentDriver.cadastro_motorista.status = "APROVADO";
+        currentDriver.cadastro_motorista.status = String(args.data.status);
       },
     },
     vinculo_assinatura: {
@@ -168,7 +213,7 @@ test("aprovar cadastro confirma os itens e pode ativar assinatura de 30 dias", a
   assert.deepEqual(registrationUpdate.data.itens_ajuste, []);
   assert.deepEqual(
     registrationUpdate.data.itens_conferidos,
-    correctionItems.map((item) => item.id),
+    adminReviewChecks.map((item) => item.id),
   );
   assert.ok(registrationUpdate.data.analisado_em instanceof Date);
   assert.ok(registrationUpdate.data.atualizado_em instanceof Date);
@@ -180,6 +225,44 @@ test("aprovar cadastro confirma os itens e pode ativar assinatura de 30 dias", a
       (subscriptionCreate.data.inicio_em as Date).getTime(),
     30 * 24 * 60 * 60 * 1000,
   );
+
+  currentDriver = driver;
+  const correction = {
+    decision: "AJUSTES_SOLICITADOS",
+    expectedVersion: [submittedAt.toISOString(), "", "EM_ANALISE", "1"].join("|"),
+    reason: "Atualize a foto e confira os dados pessoais.",
+  };
+  const confirmed = adminReviewChecks.slice(2).map(({ label }) => label);
+  for (const invalid of [
+    undefined,
+    adminReviewChecks.map(({ label }) => label),
+    [confirmed[0], confirmed[0]],
+    ["desconhecido"],
+  ]) {
+    const rejected = await reviewDriverRegistration(database, "driver-1", "admin-1", {
+      ...correction,
+      checks: invalid,
+    });
+    assert.ok("error" in rejected);
+    assert.equal(rejected.error.status, 422);
+  }
+  const requested = await reviewDriverRegistration(database, "driver-1", "admin-1", {
+    ...correction,
+    checks: confirmed,
+  });
+  assert.ok("case" in requested);
+  assert.deepEqual(requested.case.registration.correctionItems, ["dados", "foto"]);
+  assert.deepEqual(requested.review.correctionItems, ["dados", "foto"]);
+  assert.deepEqual(registrationUpdate.data.itens_ajuste, ["dados", "foto"]);
+  assert.deepEqual(registrationUpdate.data.itens_conferidos, ["cnh", "veiculo"]);
+
+  currentDriver = driver;
+  const allPending = await reviewDriverRegistration(database, "driver-1", "admin-1", {
+    ...correction,
+    checks: [],
+  });
+  assert.ok("case" in allPending);
+  assert.deepEqual(allPending.review.correctionItems, adminReviewChecks.map(({ id }) => id));
 });
 
 test("ativar assinatura separadamente exige cadastro aprovado", async () => {
