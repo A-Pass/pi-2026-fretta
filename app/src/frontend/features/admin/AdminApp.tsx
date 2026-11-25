@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   ClipboardList,
+  Eye,
+  EyeOff,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
@@ -38,6 +40,7 @@ export function AdminApp() {
     [selected, setSelected] = useState<string | null>(null),
     [limit, setLimit] = useState(12);
   const [reason, setReason] = useState(""),
+    [showMaskedDocuments, setShowMaskedDocuments] = useState(false),
     [checks, setChecks] = useState<string[]>([]),
     [decision, setDecision] = useState<AdminReview["decision"] | null>(null),
     [activateOnApproval, setActivateOnApproval] = useState(false),
@@ -121,13 +124,14 @@ export function AdminApp() {
   }, [authenticated, current?.id]);
   const filtered = cases.filter(
     (c) =>
-      (filter === "TODOS" || c.registration.status === filter) &&
+      c.registration.status === filter &&
       `${c.registration.fullName} ${c.registration.companyName || ""}`
         .toLocaleLowerCase("pt-BR")
         .includes(query.toLocaleLowerCase("pt-BR")),
   );
   function open(c: AdminCase) {
     setSelected(c.id);
+    setShowMaskedDocuments(false);
     setReason("");
     setChecks([]);
     setActivateOnApproval(false);
@@ -330,23 +334,6 @@ export function AdminApp() {
                       placeholder="Nome ou empresa"
                     />
                   </label>
-                  <label>
-                    Situação
-                    <select
-                      value={filter}
-                      onChange={(e) => {
-                        setFilter(e.target.value);
-                        setLimit(12);
-                      }}
-                    >
-                      <option value="TODOS">Todas</option>
-                      {Object.entries(labels).map(([v, l]) => (
-                        <option key={v} value={v}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   <button className="secondary" onClick={() => void load()}>
                     <RefreshCw size={17} />
                     Atualizar
@@ -411,13 +398,35 @@ export function AdminApp() {
                       {labels[current.registration.status]}
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    aria-expanded={showMaskedDocuments}
+                    onClick={() => setShowMaskedDocuments((show) => !show)}
+                  >
+                    {showMaskedDocuments ? (
+                      <EyeOff size={18} aria-hidden="true" />
+                    ) : (
+                      <Eye size={18} aria-hidden="true" />
+                    )}
+                    {showMaskedDocuments
+                      ? "Ocultar números dos documentos"
+                      : "Exibir números mascarados"}
+                  </button>
                   <div className="admin-detail-grid">
                     <div>
                       <h3>Identificação</h3>
-                      <p>CPF: {current.registration.cpfMasked}</p>
-                      {current.registration.cnpjMasked && (
-                        <p>CNPJ: {current.registration.cnpjMasked}</p>
+                      {showMaskedDocuments && (
+                        <p>
+                          CPF:{" "}
+                          {current.registration.cpfMasked ||
+                            "Não informado"}
+                        </p>
                       )}
+                      {showMaskedDocuments &&
+                        current.registration.cnpjMasked && (
+                          <p>CNPJ: {current.registration.cnpjMasked}</p>
+                        )}
                       <p>
                         Enviado em {dateTime(current.registration.submittedAt)}
                       </p>
@@ -435,9 +444,9 @@ export function AdminApp() {
                     </div>
                     <div>
                       <h3>Habilitação</h3>
-                      <p>
-                        Registro: {current.registration.license.numberMasked}
-                      </p>
+                      {showMaskedDocuments && (
+                        <p>Registro: {current.registration.license.numberMasked}</p>
+                      )}
                       <p>Categoria: {current.registration.license.category}</p>
                       <p>
                         Validade:{" "}
