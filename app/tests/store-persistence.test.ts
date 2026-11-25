@@ -5,6 +5,7 @@ import {
   activateAdminDriverSubscription,
   loadAccountStore,
   loadAdminDocumentNumbers,
+  markAccountNotificationsRead,
   reviewDriverRegistration,
   saveAccountStore,
   saveDriverOperatingArea,
@@ -77,6 +78,7 @@ test("perfis disponíveis vêm das relações persistidas da conta", async () =>
           areas_atuacao: null,
           endereco_salvos: [],
           notificacoes: [],
+          notificacao: [],
         }),
       },
       frete: { findMany: async () => [] },
@@ -107,7 +109,17 @@ test("área de operação é restaurada no formato do contrato da aplicação", 
           label: "Base",
         },
         endereco_salvos: [],
-        notificacoes: [],
+        notificacoes: [{
+          id: "message-1", role: "motorista", title: "Nova mensagem", body: "Olá",
+          createdAt: new Date("2026-11-25T12:00:00Z"), read: true,
+          freightId: "freight-1", proposalId: "proposal-1",
+        }],
+        notificacao: [{
+          id: "event-1", papel_destinatario: "motorista", evento: "HORARIO_RETIRADA",
+          titulo: "Já é hora da retirada", corpo: "Frete de teste",
+          criado_em: new Date("2026-11-25T13:00:00Z"), lida: false,
+          frete_id: "freight-1", proposta_id: "proposal-1", conversa_id: null,
+        }],
       }),
     },
     frete: { findMany: async () => [] },
@@ -116,6 +128,11 @@ test("área de operação é restaurada no formato do contrato da aplicação", 
   } as unknown as Parameters<typeof loadAccountStore>[0];
 
   const store = await loadAccountStore(database, "driver-1");
+  assert.deepEqual(store.notifications?.map(({ id, read }) => ({ id, read })), [
+    { id: "event-1", read: false },
+    { id: "message-1", read: true },
+  ]);
+  assert.equal(store.notifications?.[0].event, "HORARIO_RETIRADA");
   assert.deepEqual(store.operatingArea, {
     center: { lat: -16.377, lng: -39.58 },
     radiusKm: 30,
@@ -184,6 +201,7 @@ test("revisão persiste categorias de correção e permite ativar assinatura na 
         subscriptionCreate = args;
       },
     },
+    notificacao: { create: async () => undefined },
     adminReview: {
       create: async ({ data }: { data: Record<string, unknown> }) => data,
     },
@@ -603,4 +621,24 @@ test("não permite incluir mensagem existente de uma conversa alheia", async () 
   );
 
   assert.equal(result?.status, 403);
+});
+
+
+test("marca notificações lidas nas duas tabelas somente para a conta destinatária", async () => {
+  const legacy: unknown[] = [];
+  const events: unknown[] = [];
+  const tx = {
+    appNotification: { updateMany: async (args: unknown) => legacy.push(args) },
+    notificacao: { updateMany: async (args: unknown) => events.push(args) },
+  } as unknown as Parameters<typeof markAccountNotificationsRead>[0];
+
+  await markAccountNotificationsRead(tx, "driver-1", ["event-1"]);
+  assert.deepEqual(legacy, [{
+    where: { user_id: "driver-1", id: { in: ["event-1"] }, read: false },
+    data: { read: true },
+  }]);
+  assert.deepEqual(events, [{
+    where: { destinatario_id: "driver-1", id: { in: ["event-1"] }, lida: false },
+    data: { lida: true },
+  }]);
 });

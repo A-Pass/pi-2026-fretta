@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { adminReviewChecks, isCorrectionItem } from "@/contracts/driver-corrections";
 import type {
   Address,
+  AppNotification,
   AdminCase,
   AdminReview,
   DriverRegistration,
@@ -360,7 +361,8 @@ export async function loadAccountStore(
         perfis_empresa: true,
         areas_atuacao: true,
         endereco_salvos: { orderBy: { criado_em: "asc" } },
-        notificacoes: { orderBy: { createdAt: "desc" } },
+        notificacoes: true,
+        notificacao: true,
       },
     }),
     database.frete.findMany({
@@ -537,18 +539,30 @@ export async function loadAccountStore(
         }
       : {}),
     addresses: user.endereco_salvos.map(savedAddressFromRow),
-    notifications: user.notificacoes.map((notification) => ({
-      id: notification.id,
-      role: notification.role as Role,
-      title: notification.title,
-      body: notification.body,
-      createdAt: notification.createdAt.toISOString(),
-      read: notification.read,
-      freightId: notification.freightId,
-      ...(notification.proposalId
-        ? { proposalId: notification.proposalId }
-        : {}),
-    })),
+    notifications: [
+      ...user.notificacoes.map((notification): AppNotification => ({
+        id: notification.id,
+        title: notification.title,
+        body: notification.body,
+        read: notification.read,
+        freightId: notification.freightId,
+        role: notification.role as Role,
+        createdAt: notification.createdAt.toISOString(),
+        proposalId: notification.proposalId ?? undefined,
+      })),
+      ...user.notificacao.map((notification): AppNotification => ({
+        id: notification.id,
+        role: notification.papel_destinatario as Role,
+        event: notification.evento,
+        title: notification.titulo,
+        body: notification.corpo,
+        createdAt: notification.criado_em.toISOString(),
+        read: notification.lida,
+        freightId: notification.frete_id ?? "",
+        proposalId: notification.proposta_id ?? undefined,
+        conversationId: notification.conversa_id,
+      })),
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)),
     freightAddresses,
     freights,
     proposals,
@@ -893,6 +907,19 @@ async function saveDriverRegistration(
   });
 }
 
+async function saveAccountNotification(
+  tx: Transaction,
+  notification: Prisma.AppNotificationCreateManyInput,
+) {
+  await tx.appNotification.upsert({
+    where: {
+      user_id_id: { user_id: notification.user_id, id: notification.id },
+    },
+    create: notification,
+    update: {},
+  });
+}
+
 async function saveProposals(
   tx: Transaction,
   userId: string,
@@ -979,6 +1006,16 @@ async function saveProposals(
           status_proposta: "PENDENTE",
         },
       });
+      await saveAccountNotification(tx, {
+        id: `proposal:${offerId}`,
+        user_id: proposal.frete.cliente_id,
+        role: "cliente",
+        title: "Nova oferta recebida",
+        body: proposal.frete.titulo,
+        createdAt: new Date(),
+        freightId: proposal.frete_id,
+        proposalId: proposal.id,
+      });
       continue;
     }
 
@@ -1010,6 +1047,16 @@ async function saveProposals(
       await tx.ofertaProposta.update({
         where: { id: latestOffer.id },
         data: { status: "RECUSADA" },
+      });
+      await saveAccountNotification(tx, {
+        id: `declined:${latestOffer.id}`,
+        user_id: proposal.motorista_id,
+        role: "motorista",
+        title: "Proposta recusada",
+        body: proposal.frete.titulo,
+        createdAt: new Date(),
+        freightId: proposal.frete_id,
+        proposalId: proposal.id,
       });
     }
   }
@@ -1095,6 +1142,7 @@ async function acceptFreight(
     data: {
       status_frete_enum: "ACEITO",
       motorista_selecionado_id: proposal.motorista_id,
+      proposta_aceita_id: proposalId,
     },
   });
   await tx.proposta.updateMany({
@@ -1261,6 +1309,15 @@ async function saveFreights(
           where: { id: freight.id },
           data: { status_frete_enum: "EM_TRANSPORTE" },
         });
+        await saveAccountNotification(tx, {
+          id: `started:${freight.acordo.ofertaId}`,
+          user_id: freight.cliente_id,
+          role: "cliente",
+          title: "Seu frete está em transporte",
+          body: freight.titulo,
+          createdAt: new Date(),
+          freightId: freight.id,
+        });
       } else if (
         requestedStatus === "ABERTO" &&
         (freight.status_frete_enum === "ACEITO" ||
@@ -1278,6 +1335,7 @@ async function saveFreights(
           data: {
             status_frete_enum: "ABERTO",
             motorista_selecionado_id: null,
+            proposta_aceita_id: null,
           },
         });
         await tx.proposta.update({
@@ -1467,57 +1525,20 @@ async function saveMessages(
   }
 }
 
-async function saveNotifications(
+export async function markAccountNotificationsRead(
   tx: Transaction,
   userId: string,
-  values: unknown[],
+  ids: string[],
 ) {
-  if (values.length > 500)
-    throw new StorePersistenceError(
-      "INVALID_NOTIFICATION",
-      "A lista de notificações excede o limite permitido.",
-      422,
-    );
-  const ids = new Set<string>();
-  for (const value of values) {
-    const notification = record(value);
-    if (!notification) continue;
-    const id = string(notification.id, 180);
-    const role = notification.role;
-    const createdAt = new Date(String(notification.createdAt ?? ""));
-    if (
-      !id ||
-      (role !== "cliente" && role !== "motorista") ||
-      !Number.isFinite(createdAt.getTime())
-    )
-      throw new StorePersistenceError(
-        "INVALID_NOTIFICATION",
-        "Uma das notificações é inválida.",
-        422,
-      );
-    if (ids.has(id))
-      throw new StorePersistenceError(
-        "INVALID_NOTIFICATION",
-        "Há notificações repetidas na solicitação.",
-        422,
-      );
-    ids.add(id);
-    await tx.appNotification.upsert({
-      where: { user_id_id: { user_id: userId, id } },
-      create: {
-        id,
-        user_id: userId,
-        role,
-        title: string(notification.title, 160),
-        body: string(notification.body, 1000),
-        createdAt,
-        read: notification.read === true,
-        freightId: string(notification.freightId, 120),
-        proposalId: string(notification.proposalId, 120) || null,
-      },
-      update: notification.read === true ? { read: true } : {},
-    });
-  }
+  if (!ids.length) return;
+  await tx.appNotification.updateMany({
+    where: { user_id: userId, id: { in: ids }, read: false },
+    data: { read: true },
+  });
+  await tx.notificacao.updateMany({
+    where: { destinatario_id: userId, id: { in: ids }, lida: false },
+    data: { lida: true },
+  });
 }
 
 export async function saveDriverOperatingArea(
@@ -1698,8 +1719,15 @@ export async function saveAccountStore(
         await saveFreights(tx, userId, freights, messages);
         await saveProposals(tx, userId, proposals);
         await saveMessages(tx, userId, messages);
-        if (Array.isArray(input.notifications))
-          await saveNotifications(tx, userId, input.notifications);
+        if (Array.isArray(input.notifications)) {
+          const readIds = input.notifications.flatMap((value) => {
+            const notification = record(value);
+            return notification?.read === true && typeof notification.id === "string"
+              ? [notification.id]
+              : [];
+          });
+          await markAccountNotificationsRead(tx, userId, readIds);
+        }
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -2069,6 +2097,18 @@ export async function reviewDriverRegistration(
           decision,
           reason,
           itens_ajuste: items,
+        },
+      });
+      await tx.notificacao.create({
+        data: {
+          id: randomUUID(),
+          destinatario_id: userId,
+          papel_destinatario: "motorista",
+          evento: "REVISAO_CADASTRO",
+          titulo: decision === "APROVADO" ? "Cadastro aprovado" : "Ajustes solicitados no cadastro",
+          corpo: decision === "APROVADO"
+            ? "Seu cadastro de motorista foi aprovado."
+            : "Confira os itens pendentes no cadastro de motorista.",
         },
       });
       const updatedRegistration = registrationFromDriver(updatedDriver);

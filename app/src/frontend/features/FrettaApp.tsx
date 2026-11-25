@@ -48,7 +48,6 @@ import { VehicleBookView } from "./vehicles/VehicleBookView";
 import { NotificationsView } from "./notifications/NotificationsView";
 import {
   isUnreadChat,
-  withNotifications,
   unreadNotifications,
 } from "./notifications/rules";
 import { SubscriptionView } from "./subscription/SubscriptionView";
@@ -278,6 +277,7 @@ export function FrettaApp() {
             proposals: snapshot.proposals,
             messages: snapshot.messages,
             notifications: snapshot.notifications,
+            driverRegistration: snapshot.driverRegistration,
           };
           latest.current = updated;
           setStore(updated);
@@ -303,16 +303,10 @@ export function FrettaApp() {
   useEffect(() => {
     if (!chatId || !store || document.hidden) return;
     const notifications = store.notifications || [];
-    if (!notifications.some((item) => isUnreadChat(item, role, chatId))) return;
-    void save(
-      {
-        ...store,
-        notifications: notifications.map((item) =>
-          isUnreadChat(item, role, chatId) ? { ...item, read: true } : item,
-        ),
-      },
-      false,
-    );
+    const ids = notifications
+      .filter((item) => isUnreadChat(item, role, chatId))
+      .map((item) => item.id);
+    void markNotificationsRead(ids).catch(() => {});
   }, [chatId, role, store]);
   useEffect(() => {
     if (role !== "motorista" || !store?.profile || acceptanceNotice) return;
@@ -321,7 +315,7 @@ export function FrettaApp() {
       if (
         item.read ||
         item.role !== "motorista" ||
-        !item.id.startsWith("accepted:") ||
+        (item.event !== "ACEITE" && !item.id.startsWith("accepted:")) ||
         !item.proposalId
       )
         return false;
@@ -352,18 +346,31 @@ export function FrettaApp() {
     setError("");
     if (authenticated && !chatId) main.current?.focus({ preventScroll: true });
   }, [role, tab, selected, chatId, providerId, authenticated]);
+  async function markNotificationsRead(ids: string[]) {
+    if (!ids.length) return;
+    const accountId = latest.current?.profile?.id;
+    await createBackendClient().readNotifications(ids);
+    const current = latest.current;
+    if (!current || current.profile?.id !== accountId) return;
+    const readIds = new Set(ids);
+    const updated = {
+      ...current,
+      notifications: current.notifications?.map((item) =>
+        readIds.has(item.id) ? { ...item, read: true } : item,
+      ),
+    };
+    latest.current = updated;
+    setStore(updated);
+  }
+
   async function save(
     next: Store,
-    deriveNotifications = true,
     driverDocumentNumbers?: DriverDocumentNumbers,
   ): Promise<boolean> {
     if (saving.current) return false;
     saving.current = true;
     try {
-      const enriched = deriveNotifications
-        ? withNotifications(latest.current || next, next)
-        : next;
-      const persisted = await api.save(enriched, undefined, driverDocumentNumbers);
+      const persisted = await api.save(next, undefined, driverDocumentNumbers);
       latest.current = persisted;
       setStore(persisted);
       setError("");
@@ -494,29 +501,31 @@ export function FrettaApp() {
     const existing = store.proposals.find(
       (p) => p.freightId === f.id && ownProposal(p, store.profile?.id || ""),
     );
-    let next: Store;
-    if (existing) next = reviseOffer(store, existing.id, offer);
-    else {
+    if (!existing) {
       if (!f.updatedAt)
         throw new Error("Atualize a solicitação antes de enviar uma proposta.");
-      const p = await createBackendClient().propose(f.id, {
-        priceCents: offer.priceCents,
-        vehicleId: offer.vehicleId || "",
-        availableAt: offer.availableAt,
-        message: offer.message,
-        expectedUpdatedAt: f.updatedAt,
-      });
-      next = { ...store, proposals: [...store.proposals, p] };
+      saving.current = true;
+      try {
+        await createBackendClient().propose(f.id, {
+          priceCents: offer.priceCents,
+          vehicleId: offer.vehicleId || "",
+          availableAt: offer.availableAt,
+          message: offer.message,
+          expectedUpdatedAt: f.updatedAt,
+        });
+        const snapshot = await api.load().catch(() => null);
+        if (snapshot) {
+          latest.current = snapshot;
+          setStore(snapshot);
+        }
+        setModal("");
+        setSuccess("proposal");
+        return true;
+      } finally {
+        saving.current = false;
+      }
     }
-    if (!existing) {
-      const enriched = withNotifications(latest.current || next, next);
-      latest.current = enriched;
-      setStore(enriched);
-      setModal("");
-      setSuccess("proposal");
-      return true;
-    }
-    const ok = await save(next);
+    const ok = await save(reviseOffer(store, existing.id, offer));
     if (ok) {
       setModal("");
       setSuccess("proposal");
@@ -549,7 +558,6 @@ export function FrettaApp() {
           },
         ],
       },
-      false,
     );
   }
   async function completeChatFreight(freightId: string, score: number) {
@@ -566,8 +574,14 @@ export function FrettaApp() {
     }
   }
   function openNotification(n: AppNotification) {
-    if (n.proposalId) setChatId(n.proposalId);
-    else setSelected(n.freightId);
+    if (n.event === "REVISAO_CADASTRO") nav("cadastro-motorista");
+    else if (n.event === "CONVITE_EMPRESA" || n.event === "ATRIBUICAO_EMPRESA")
+      window.location.assign(n.event === "CONVITE_EMPRESA"
+        ? "/empresa?visao=motorista"
+        : "/empresa?visao=motorista&aba=servicos");
+    else if (n.proposalId && store?.proposals.some(({ id }) => id === n.proposalId))
+      setChatId(n.proposalId);
+    else if (n.freightId) setSelected(n.freightId);
   }
   async function signInWithGoogle() {
     setGoogleSignInError("");
@@ -678,7 +692,6 @@ export function FrettaApp() {
                   ...submitDriverRegistration(store, draft),
                   accountSetupComplete: true,
                 },
-                true,
                 {
                   cpf: draft.cpf.replace(/\D/g, ""),
                   cnh: draft.licenseNumber,
@@ -1048,7 +1061,7 @@ export function FrettaApp() {
             <NotificationsView
               store={store}
               role={role}
-              save={save}
+              onRead={markNotificationsRead}
               onOpen={openNotification}
               onBack={() => navigation.back("inicio")}
             />

@@ -161,6 +161,8 @@ export function createBackendClient(
       http.page<SavedAddress>("/addresses", cursor),
     notifications: (cursor?: string) =>
       http.page<AppNotification>("/notifications", cursor),
+    readNotifications: (ids: string[]) =>
+      http.request<void>("/notifications/read", { method: "PATCH", body: { ids } }),
     readNotification: (value: string) =>
       http.request<AppNotification>(`/notifications/${id(value)}`, {
         method: "PATCH",

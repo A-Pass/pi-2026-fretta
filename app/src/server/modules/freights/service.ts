@@ -99,6 +99,7 @@ export async function driverCanOffer(
 const include = {
   cliente: { include: { user: { select: { name: true } } } },
   avaliacao: { select: { avaliador_id: true } },
+  acordo: { select: { propostaId: true } },
   frete_foto: { orderBy: { ordem: "asc" } },
   endereco_frete_endereco_origem_idToendereco: true,
   endereco_frete_endereco_destino_idToendereco: true,
@@ -141,10 +142,11 @@ async function detail(
   userId: string,
 ) {
   const owner = f.cliente_id === userId;
+  const acceptedProposalId = f.acordo?.propostaId ?? f.proposta_aceita_id;
   const hired = f.proposta.some(
-    (p) => p.id === f.proposta_aceita_id && p.motorista_id === userId,
+    (p) => p.id === acceptedProposalId && p.motorista_id === userId,
   );
-  const contracted = f.proposta.find((p) => p.id === f.proposta_aceita_id);
+  const contracted = f.proposta.find((p) => p.id === acceptedProposalId);
   const pickupAt = contracted?.ofertas.find(
     (offer) => offer.status === "ACEITA",
   )?.disponivelEm;
@@ -427,10 +429,10 @@ export async function freightOperation(
         ["ACEITO", "EM_TRANSPORTE", "CONCLUIDO"].includes(
           f.status_frete_enum,
         ) &&
-        f.proposta_aceita_id
+        (f.acordo?.propostaId ?? f.proposta_aceita_id)
           ? (() => {
               const proposal = f.proposta.find(
-                (p) => p.id === f.proposta_aceita_id,
+                (p) => p.id === (f.acordo?.propostaId ?? f.proposta_aceita_id),
               );
               const offer = proposal?.ofertas.find(
                 (o) => o.status === "ACEITA",
@@ -696,8 +698,9 @@ export async function freightOperation(
   const f = await tx.frete.findUnique({ where: { id }, include });
   requireValue(f, "Frete indisponível.", 404);
   const owner = f.cliente_id === userId;
+  const acceptedProposalId = f.acordo?.propostaId ?? f.proposta_aceita_id;
   const own = f.proposta.find((p) => p.motorista_id === userId);
-  const hired = Boolean(own && own.id === f.proposta_aceita_id);
+  const hired = Boolean(own && own.id === acceptedProposalId);
   const managed = f.proposta.some((p) => p.empresa?.gestor_id === userId);
   const assigned =
     method === "GET" &&
@@ -920,7 +923,7 @@ export async function freightOperation(
     requireValue(proposal, "Proposta indisponível.", 404);
     if (
       action === "accept" &&
-      f.proposta_aceita_id === proposalId &&
+      acceptedProposalId === proposalId &&
       proposal.ofertas.some(
         (o) => o.id === body.offerId && o.status === "ACEITA",
       )
@@ -1059,7 +1062,7 @@ export async function freightOperation(
     }
   } else if (!proposalId && (action === "reviews" || action === "complete")) {
     requireValue(owner || hired, "Somente participantes podem avaliar.", 403);
-    const contracted = f.proposta.find((p) => p.id === f.proposta_aceita_id);
+    const contracted = f.proposta.find((p) => p.id === acceptedProposalId);
     const reviewed = f.avaliacao.some((r) => r.avaliador_id === userId);
     const closing = action === "complete";
     if (
@@ -1147,6 +1150,7 @@ export async function freightOperation(
               : "Confirme a conclusão do frete",
             corpo: f.titulo,
             frete_id: id,
+            proposta_id: contracted?.id,
           },
         });
       }
@@ -1183,7 +1187,7 @@ export async function freightOperation(
         data: { status: "SUBSTITUIDA" },
       });
     }
-    const contracted = f.proposta.find((p) => p.id === f.proposta_aceita_id);
+    const contracted = f.proposta.find((p) => p.id === acceptedProposalId);
     const recipients = [
       ...new Set(
         (action === "start"
