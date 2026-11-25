@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Camera, Package, Truck } from "lucide-react";
 import { api } from "../api/client";
 import { prepareOnboardingPhoto } from "../features/onboarding/images";
+import { formatCpf } from "../features/onboarding/rules";
 import { authClient } from "./client";
 import { identityDocumentError, type IdentityDocument } from "./registration";
 
@@ -23,6 +24,9 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
     role === "motorista" ? "cnh" : "cpf",
   );
   const [documentValue, setDocumentValue] = useState("");
+  const [cpfError, setCpfError] = useState("");
+  const documentInput = useRef<HTMLInputElement>(null);
+  const isCpf = role === "cliente" && documentType === "cpf";
   const [profilePhoto, setProfilePhoto] = useState(image || "");
   const [readingPhoto, setReadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
@@ -50,6 +54,7 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
   async function completeRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setCpfError("");
     const normalizedName = fullName.trim();
     if (!normalizedName || normalizedName.length > 120) {
       setError("Informe seu nome, com no máximo 120 caracteres.");
@@ -61,7 +66,12 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
       documentValue,
     );
     if (documentValidation) {
-      setError(documentValidation);
+      if (isCpf) {
+        setCpfError(documentValidation);
+        documentInput.current?.focus();
+      } else {
+        setError(documentValidation);
+      }
       return;
     }
 
@@ -183,23 +193,39 @@ export function AuthCompleteView({ name, email, image, role }: Props) {
             {role === "cliente" && (
               <select
                 value={documentType}
-                onChange={(event) =>
-                  setDocumentType(event.target.value as IdentityDocument)
-                }
+                onChange={(event) => {
+                  const nextType = event.target.value as IdentityDocument;
+                  setDocumentType(nextType);
+                  setCpfError("");
+                  if (nextType === "cpf") setDocumentValue(formatCpf);
+                }}
               >
                 <option value="cpf">CPF</option>
                 <option value="rg">RG</option>
               </select>
             )}
             <input
+              ref={documentInput}
+              aria-invalid={cpfError ? true : undefined}
+              aria-describedby={cpfError ? "auth-cpf-error" : undefined}
               autoComplete="off"
               inputMode={documentType === "rg" ? "text" : "numeric"}
-              maxLength={documentType === "rg" ? 20 : 18}
-              required
+              maxLength={isCpf ? undefined : documentType === "rg" ? 20 : 18}
+              required={!isCpf}
+              aria-required={isCpf ? true : undefined}
               value={documentValue}
-              onChange={(event) => setDocumentValue(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setDocumentValue(isCpf ? formatCpf(value) : value);
+                setCpfError("");
+              }}
             />
           </label>
+          {cpfError && (
+            <p id="auth-cpf-error" className="login-notice" role="alert">
+              {cpfError}
+            </p>
+          )}
           <p className="auth-privacy-note">
             Para sua segurança, o documento é validado somente neste navegador e
             não é enviado nem salvo. O envio privado de documentos ainda não
